@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 — Procedural Handpan Algorithm (Real-Time Grammar-Guided Sampling)</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #111;
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      min-height: 100vh;
+    }
+
+    aside.instrument-dock {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid #ddd;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    main.doc {
+      padding: 32px 44px 72px;
+      max-width: 900px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      aside.instrument-dock {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+      main.doc { padding: 24px 18px 56px; }
+    }
+
+    h1, h2, h3 { margin-top: 0; line-height: 1.25; }
+    h1 { margin-bottom: 6px; }
+    h2 {
+      margin-top: 38px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+    }
+    h3 { margin-top: 20px; margin-bottom: 6px; font-size: 1rem; }
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 14px; padding-left: 20px; }
+    li { margin-bottom: 5px; }
+
+    .subtitle { color: #555; margin-bottom: 18px; }
+
+    code, pre, .mono, .telemetry, .clause-header, .step-cell, .param-val, .prob-bar {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    code { font-size: 0.9em; }
+
+    pre.spec {
+      font-size: 0.83rem;
+      line-height: 1.5;
+      border-left: 2px solid #ccc;
+      padding: 4px 0 4px 14px;
+      overflow-x: auto;
+      margin: 10px 0 16px;
+    }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      margin: 0 0 22px;
+      font-size: 0.9rem;
+    }
+    nav.toc a { color: #111; }
+
+    /* Dock Controls */
+    .dock-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .dock-title { font-weight: 700; margin: 0; }
+
+    .transport-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 0.82rem;
+    }
+    select, input[type="range"] { width: 100%; }
+
+    button { cursor: pointer; }
+    button.active { font-weight: 700; outline: 2px solid #111; }
+
+    /* Minimal Line-Art SVG Handpan */
+    .pan-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    svg#handpan-svg {
+      width: 100%;
+      max-width: 290px;
+      height: auto;
+      user-select: none;
+    }
+    .tone-field { cursor: pointer; }
+    .tone-field:hover ellipse, .tone-field:hover circle { stroke-width: 2.2; }
+    .tone-field.active-R ellipse, .tone-field.active-R circle { fill: #222 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-R text { fill: #fff !important; }
+    .tone-field.active-L ellipse, .tone-field.active-L circle { fill: #d8d8d8 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-H ellipse, .tone-field.active-H circle { fill: #eee !important; stroke: #111 !important; stroke-width: 2.5 !important; stroke-dasharray: 4 2; }
+    .rim-ring.active-perc { stroke: #111 !important; stroke-width: 5 !important; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      justify-content: center;
+      font-size: 0.74rem;
+      color: #555;
+    }
+
+    .telemetry {
+      font-size: 0.76rem;
+      line-height: 1.5;
+      color: #333;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+    .telemetry div {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .telemetry span.k { color: #666; }
+
+    /* 4-Horizon Parameter Matrix */
+    .preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 0;
+      margin-bottom: 14px;
+      border-top: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 0.85rem;
+    }
+    .preset-row .label { color: #555; margin-right: auto; }
+
+    .horizon-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 18px 28px;
+      margin-bottom: 16px;
+    }
+
+    .horizon-group {
+      padding-top: 8px;
+      border-top: 1px solid #ccc;
+    }
+    .horizon-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .horizon-title { font-weight: 700; font-size: 0.94rem; }
+    .horizon-scale { font-size: 0.78rem; color: #666; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .param-item { margin-bottom: 12px; }
+    .param-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.86rem;
+      margin-bottom: 2px;
+    }
+    .param-name { font-weight: 600; }
+    .param-val { font-size: 0.8rem; color: #333; }
+    .param-desc { font-size: 0.78rem; color: #555; margin-top: 2px; }
+
+    /* Live Real-Time Sampler Inspector & Incremental Sentence Tape */
+    .prob-bar {
+      font-size: 0.77rem;
+      color: #333;
+      padding: 8px 0;
+      border-top: 1px solid #ccc;
+      border-bottom: 1px solid #e5e5e5;
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+    }
+    .prob-bar .k { color: #666; }
+
+    .clause-block {
+      padding: 9px 0;
+      border-top: 1px solid #e0e0e0;
+    }
+    .clause-header {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 0.78rem;
+      margin-bottom: 6px;
+    }
+    .clause-name { font-weight: 700; }
+    .clause-meta { color: #555; }
+
+    .step-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+      gap: 4px;
+    }
+    .step-cell {
+      border-top: 1px solid #ddd;
+      padding: 4px 2px;
+      text-align: center;
+      font-size: 0.72rem;
+      line-height: 1.3;
+    }
+    .step-cell.pending { color: #bbb; border-top-style: dotted; }
+    .step-cell.accented { border-top: 2px solid #111; }
+    .step-cell.now-playing { background: #111; color: #fff; }
+    .step-cell.now-playing .step-note,
+    .step-cell.now-playing span { color: #fff !important; }
+    .step-note { font-weight: 700; }
+    .step-note.ghost { color: #777; font-weight: 400; }
+    .step-vel { height: 2px; background: #e5e5e5; margin-top: 3px; }
+    .step-vel-fill { height: 100%; background: #444; }
+    .step-cell.now-playing .step-vel-fill { background: #fff; }
+
+    .history-log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.76rem;
+      color: #444;
+      border-top: 1px solid #e0e0e0;
+      padding-top: 8px;
+      margin-top: 10px;
+      max-height: 130px;
+      overflow-y: auto;
+    }
+    .history-log div { padding: 2px 0; border-bottom: 1px dotted #eee; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      margin: 12px 0 18px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px 8px 0;
+      border-bottom: 1px solid #e0e0e0;
+      vertical-align: top;
+    }
+    th { border-bottom: 2px solid #bbb; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- ==================== STICKY INSTRUMENT & TELEMETRY DOCK ==================== -->
+    <aside class="instrument-dock">
+      <div class="dock-header">
+        <p class="dock-title">Infinite Handpan Engine</p>
+        <span class="mono" style="font-size:0.78rem" id="state-badge">STOPPED</span>
+      </div>
+
+      <div class="transport-row">
+        <button id="btn-toggle" type="button">Start Real-Time Stream</button>
+        <button id="btn-reseed" type="button" title="Clear motif memory and start a new theme">New Seed</button>
+      </div>
+
+      <div class="control-grid">
+        <div class="field">
+          <label for="scale-select">Scale / Mode</label>
+          <select id="scale-select"></select>
+        </div>
+        <div class="field">
+          <label for="profile-select">Timbre Profile</label>
+          <select id="profile-select">
+            <option value="stainless" selected>Stainless (Lush)</option>
+            <option value="nitrided">Nitrided (Dry)</option>
+            <option value="ember">Ember (Bright)</option>
+            <option value="ceramic">Raw / Ceramic</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="bpm-range">Base Tempo: <strong id="bpm-out">84 BPM</strong></label>
+        <input id="bpm-range" type="range" min="54" max="126" step="2" value="84">
+      </div>
+
+      <div class="pan-wrap">
+        <svg id="handpan-svg" viewBox="0 0 340 340" aria-label="Interactive Handpan"></svg>
+        <div class="legend-row">
+          <span>Solid = R / Ding</span>
+          <span>Shaded = L</span>
+          <span>Dashed = 2f₀</span>
+          <span>Rim = Tak/Gu</span>
+        </div>
+      </div>
+
+      <div class="telemetry">
+        <div><span class="k">Macro Section</span><span id="tel-section">—</span></div>
+        <div><span class="k">Sentence # / Bar</span><span id="tel-bar">0 / 0</span></div>
+        <div><span class="k">Active Form</span><span id="tel-form">—</span></div>
+        <div><span class="k">Harmony / Grid</span><span id="tel-harm">—</span></div>
+        <div><span class="k">Eff. Temp (τ)</span><span id="tel-temp">—</span></div>
+        <div><span class="k">Motif Lineage</span><span id="tel-motif">—</span></div>
+      </div>
+    </aside>
+
+    <!-- ==================== CONTROLS, LIVE DECODER & ARCHITECTURE DOC ==================== -->
+    <main class="doc">
+      <h1>Procedural Handpan Algorithm</h1>
+      <p class="subtitle">Real-time, note-by-note grammar-enforced probabilistic synthesis. Every eighth-note step is sampled live from a dynamically constrained feasible space so parameter changes take effect immediately while preserving sentence-level cohesion.</p>
+
+      <nav class="toc">
+        <a href="#sec-controls">I. 4-Horizon Continuous Controls</a>
+        <a href="#sec-monitor">II. Real-Time Note-by-Note Decoder</a>
+        <a href="#sec-model">III. Mathematical &amp; Algorithmic Model</a>
+      </nav>
+
+      <!-- SECTION I: 4-HORIZON PARAMETER MATRIX -->
+      <section id="sec-controls">
+        <h2>I. Multi-Scale Probabilistic Control Surface</h2>
+        <p>Every slider tunes a single continuous variable <code>u ∈ [0, 1]</code> read <strong>at every step</strong> (zero batch pre-baking). Immediate and short-range sliders reshape the very next note; mid- and long-range sliders steer clause harmony, motif evolution, and macro-form drift.</p>
+
+        <div class="preset-row">
+          <span class="label"><strong>Presets:</strong></span>
+          <button type="button" data-preset="meditative">Meditative Drone</button>
+          <button type="button" data-preset="tresillo">Hypnotic Tresillo</button>
+          <button type="button" data-preset="journey">Evolving Journey</button>
+          <button type="button" data-preset="kinetic">High-Entropy Kinetic</button>
+        </div>
+
+        <div class="horizon-grid">
+          <!-- HORIZON 1: IMMEDIATE -->
+          <div class="horizon-group">
+            <div class="horizon-head">
+              <span class="horizon-title">1. Immediate Horizon</span>
+              <span class="horizon-scale">Next note (~100 ms)</span>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-touch">Touch &amp; Ornament</label>
+                <span class="param-val" id="v-touch">0.45</span>
+              </div>
+              <input id="p-touch" type="range" min="0" max="1" step="0.01" value="0.45">
+              <div class="param-desc">Live rubato jitter (σ<sub>t</sub>), velocity expression, rolled dyads (<code>~</code>), and <code>2f₀</code> harmonics (<code>H</code>).</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-perc">Percussive Groove</label>
+                <span class="param-val" id="v-perc">0.40</span>
+              </div>
+              <input id="p-perc" type="range" min="0" max="1" step="0.01" value="0.40">
+              <div class="param-desc">Real-time emission bias for ghost notes (<code>g</code>), Tak rim backbeats (<code>T</code>), and Gu cavity bass (<code>G</code>).</div>
+            </div>
+          </div>
+
+          <!-- HORIZON 2: SHORT-RANGE -->
+          <div class="horizon-group">
+            <div class="horizon-head">
+              <span class="horizon-title">2. Short-Range Horizon</span>
+              <span class="horizon-scale">Next step – 1 bar</span>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-density">Rhythmic Density</label>
+                <span class="param-val" id="v-density">0.50</span>
+              </div>
+              <input id="p-density" type="range" min="0" max="1" step="0.01" value="0.50">
+              <div class="param-desc">Live Euclidean accent mask <code>E(k, n)</code> evaluated per step + subdivision fill probability.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-entropy">Melodic Entropy (τ)</label>
+                <span class="param-val" id="v-entropy">0.35</span>
+              </div>
+              <input id="p-entropy" type="range" min="0" max="1" step="0.01" value="0.35">
+              <div class="param-desc">Live Boltzmann temperature <code>τ</code> over pitch energy &amp; grammar tolerance (canonical vs. adventurous).</div>
+            </div>
+          </div>
+
+          <!-- HORIZON 3: MID-RANGE -->
+          <div class="horizon-group">
+            <div class="horizon-head">
+              <span class="horizon-title">3. Mid-Range Horizon</span>
+              <span class="horizon-scale">Clause / 4-bar Sentence</span>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-tension">Harmonic Gravity</label>
+                <span class="param-val" id="v-tension">0.45</span>
+              </div>
+              <input id="p-tension" type="range" min="0" max="1" step="0.01" value="0.45">
+              <div class="param-desc">Evaluated at each bar boundary: biases Meso-Markov chord departures from tonic <code>i</code> into modal tension.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-mutation">Motivic Mutation</label>
+                <span class="param-val" id="v-mutation">0.35</span>
+              </div>
+              <input id="p-mutation" type="range" min="0" max="1" step="0.01" value="0.35">
+              <div class="param-desc">Evaluated per clause &amp; step: softens motif-DNA pull and applies inversion, retrograde, or pitch shift.</div>
+            </div>
+          </div>
+
+          <!-- HORIZON 4: LONG-RANGE -->
+          <div class="horizon-group">
+            <div class="horizon-head">
+              <span class="horizon-title">4. Long-Range Horizon</span>
+              <span class="horizon-scale">16 – 64+ bars (Macro)</span>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-arc">Form Drift / Arc</label>
+                <span class="param-val" id="v-arc">0.55</span>
+              </div>
+              <input id="p-arc" type="range" min="0" max="1" step="0.01" value="0.55">
+              <div class="param-desc">Macro Semi-Markov transition rate &amp; modulation depth across Intro → Theme → Lift → Apex → Breakdown.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-memory">Thematic Memory</label>
+                <span class="param-val" id="v-memory">0.70</span>
+              </div>
+              <input id="p-memory" type="range" min="0" max="1" step="0.01" value="0.70">
+              <div class="param-desc">Controls long-term retention of the seed motif DNA across sections vs. evolving new thematic material.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION II: REAL-TIME NOTE-BY-NOTE DECODER -->
+      <section id="sec-monitor">
+        <h2>II. Real-Time Note-by-Note Grammar Decoder</h2>
+        <p>Unplayed slots appear as <code>?</code> and collapse into concrete events <strong>only at the moment each step is scheduled</strong> (~100 ms ahead of audio), respecting the active clause grammar and live slider distributions.</p>
+
+        <div class="prob-bar" id="prob-bar">
+          <span><span class="k">Grammar Rule:</span> <strong id="pb-rule">—</strong></span>
+          <span><span class="k">Feasible Space:</span> <span id="pb-dist">Start stream to inspect live sampling distribution</span></span>
+        </div>
+
+        <div id="live-sentence"></div>
+
+        <h3>Completed Sentence Log</h3>
+        <div class="history-log" id="history-log">
+          <div>Press <strong>Start Real-Time Stream</strong> to begin note-by-note probabilistic decoding.</div>
+        </div>
+      </section>
+
+      <!-- SECTION III: MATHEMATICAL & ALGORITHMIC ARCHITECTURE -->
+      <section id="sec-model">
+        <h2>III. Real-Time Constrained Decoding Model</h2>
+        <p>Rather than batch-generating 4-bar arrays, the engine runs an <strong>Incremental Grammar-Guided Probabilistic Decoder</strong>: a hierarchical context stack constrains the feasible event and pitch space at every single eighth-note tick, while the user's sliders continuously warp the sampling distribution in real time.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Horizon</th>
+              <th>Evaluation Cadence</th>
+              <th>Formal Mechanism</th>
+              <th>Real-Time Responsiveness</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Immediate</strong></td>
+              <td>Every step (~100 ms)</td>
+              <td>Stochastic Surface Realizer + Lookahead Clock</td>
+              <td><code>touch</code> &amp; <code>perc</code> immediately alter rubato, dyads, harmonics, ghost notes, and Tak/Gu on the very next step.</td>
+            </tr>
+            <tr>
+              <td><strong>Short-Range</strong></td>
+              <td>Every step (~100 ms)</td>
+              <td>Live Euclidean <code>E(k,n)[s]</code> + Boltzmann Pitch Energy</td>
+              <td><code>density</code> &amp; <code>entropy</code> immediately recompute the accent mask and flatten/sharpen candidate pitch probabilities <code>P(j|i)</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Mid-Range</strong></td>
+              <td>Every bar &amp; clause</td>
+              <td>Online GTTM/PCFG Clause Stack + Meso Harmonic Markov</td>
+              <td><code>tension</code> &amp; <code>mutation</code> steer the next bar's chord transition and clause-level motif transformation without restarting the phrase.</td>
+            </tr>
+            <tr>
+              <td><strong>Long-Range</strong></td>
+              <td>Every 4-bar sentence</td>
+              <td>Macro Semi-Markov Automaton + Episodic Motif DNA</td>
+              <td><code>arc</code> &amp; <code>memory</code> shape section transitions (Stillness → Theme → Lift → Apex → Space) and long-term leitmotif recall.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Step-Level Grammar Enforcement with Probability Tolerance</h3>
+        <p>At step <code>(bar, s)</code>, the grammar assigns a soft constraint state <code>G(bar, s)</code> with a tolerance inversely tied to <code>entropy</code>. All candidate pitches <code>j ∈ {0..8}</code> remain in the feasible space, but grammatical obligations add strong negative energy (attraction) or positive energy (repulsion):</p>
+        <pre class="spec">E_total(j) = E_harmony(j; C)            // chord-tone membership for active bar chord C
+           + E_ergonomics(j; prev, hand) // favors L↔R zigzag alternation &amp; conjunct/triadic intervals
+           + E_contour(j; clause_dir)    // guides ascending antecedent vs descending consequent
+           + E_motif(j; dna[s], mut)     // pulls toward live-recorded motif DNA (weakened by mutation)
+           + E_grammar(j; bar, s, role)  // soft cadential gravity (Ding ^1 on close, rim on half-cadence)
+
+P(j | context, sliders) = exp( -E_total(j) / τ ) / Σ_k exp( -E_total(k) / τ )
+τ = 0.14 + 2.2 · entropy_eff</pre>
+        <p>Because the motif DNA is <strong>recorded online from what Bar 1 actually plays</strong>, sliding parameters mid-sentence naturally shapes the motif that subsequent clauses echo and resolve.</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. Scales, Pitch Theory & Physical Handpan Geometry
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (Aeolian)',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      },
+      'd-amara': {
+        name: 'D Amara (Celtic Minor)',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        chords: {
+          i:    [0, 1, 3, 5, 7],
+          III:  [1, 2, 5, 7, 8],
+          iv:   [0, 3, 6, 8],
+          v:    [1, 2, 4, 7],
+          bVI:  [2, 5, 7],
+          bVII: [2, 4, 6, 8]
+        }
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (Dorian Pent.)',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        chords: {
+          i:    [0, 2, 3, 5, 7],
+          III:  [2, 3, 4, 7, 8],
+          iv:   [0, 1, 5, 6],
+          v:    [1, 3, 4, 6, 8],
+          bVI:  [2, 4, 5, 7],
+          bVII: [1, 4, 6, 8]
+        }
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (Phrygian Dom.)',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        chords: {
+          i:    [0, 1, 4, 6, 7],
+          III:  [1, 3, 6, 7],
+          iv:   [0, 2, 4, 8],
+          v:    [1, 3, 5, 7],
+          bVI:  [2, 4, 6, 8],
+          bVII: [3, 5, 7]
+        }
+      },
+      'e-sabye': {
+        name: 'E Sabye (Major / Ionian)',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      }
+    };
+
+    const PAN_GEOMETRY = [
+      { cx: 170, cy: 170, rx: 38, ry: 38, rot: 0,   hand: 'R' },
+      { cx: 218, cy: 266, rx: 28, ry: 22, rot: -25, hand: 'R' },
+      { cx: 122, cy: 266, rx: 28, ry: 22, rot: 25,  hand: 'L' },
+      { cx: 274, cy: 208, rx: 25, ry: 20, rot: -68, hand: 'R' },
+      { cx: 66,  cy: 208, rx: 25, ry: 20, rot: 68,  hand: 'L' },
+      { cx: 274, cy: 132, rx: 23, ry: 18, rot: 68,  hand: 'R' },
+      { cx: 66,  cy: 132, rx: 23, ry: 18, rot: -68, hand: 'L' },
+      { cx: 218, cy: 74,  rx: 21, ry: 17, rot: 25,  hand: 'R' },
+      { cx: 122, cy: 74,  rx: 21, ry: 17, rot: -25, hand: 'L' }
+    ];
+
+    // =========================================================================
+    // 2. Modal Web Audio Synthesis Engine (Sample-Accurate Scheduling)
+    // =========================================================================
+    const PROFILES = {
+      stainless: { sustain: 4.8, attack: 0.010, oct: 0.42, fifth: 0.22, shimmer: 0.07, slap: 0.12, body: 0.20, detune: 0.50, brightness: 4200 },
+      nitrided:  { sustain: 2.3, attack: 0.004, oct: 0.34, fifth: 0.15, shimmer: 0.05, slap: 0.24, body: 0.28, detune: 0.22, brightness: 3100 },
+      ember:     { sustain: 3.9, attack: 0.005, oct: 0.46, fifth: 0.30, shimmer: 0.13, slap: 0.17, body: 0.15, detune: 0.35, brightness: 6000 },
+      ceramic:   { sustain: 1.9, attack: 0.007, oct: 0.20, fifth: 0.08, shimmer: 0.02, slap: 0.28, body: 0.40, detune: 0.15, brightness: 1950 }
+    };
+
+    let audioCtx = null;
+    let dryGain = null;
+    let reverbSend = null;
+    let noiseBuffer = null;
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11;
+        comp.ratio.value = 4;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.78;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createIR(audioCtx, 2.3, 2.7);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.30;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        noiseBuffer = createNoise(audioCtx, 0.4);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const w = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+          lp = lp * 0.72 + w * 0.28;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    function scheduleTone(idx, when, opts = {}) {
+      const scale = SCALES[activeScaleKey];
+      const note = scale.notes[idx];
+      if (!note) return;
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey];
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+
+      const vel = clamp(opts.vel ?? 0.8, 0.08, 1.0);
+      const type = opts.type ?? 'N';
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.34);
+
+      let sustain = p.sustain * pitchScale * (isDing ? 1.2 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { sustain *= 0.42; octMul = 0.45; fifthMul = 0.3; }
+      else if (type === 'H') { f0Mul = 0.08; octMul = 1.75; fifthMul = 0.9; sustain *= 0.85; }
+      else if (type === 'M') { sustain *= 0.18; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.54, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(11000, p.brightness * (0.62 + 0.55 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(700, cut * 0.48), t0 + sustain);
+
+      vg.connect(lp);
+      lp.connect(dryGain);
+      lp.connect(reverbSend);
+
+      function addMode(hz, amp, dec, attExtra = 0) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.006 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.04);
+        const att = p.attack + attExtra;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + att);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + att + Math.max(0.05, dec));
+        osc.connect(g); g.connect(vg);
+        osc.start(t0);
+        osc.stop(t0 + att + Math.max(0.05, dec) + 0.04);
+      }
+
+      addMode(freq, 0.62 * f0Mul, sustain);
+      if (p.detune > 0 && f0Mul > 0.2) addMode(freq + p.detune, 0.28 * f0Mul, sustain * 0.9, 0.006);
+      addMode(freq * 2.0, p.oct * octMul * (0.65 + 0.45 * vel), sustain * 0.68, 0.002);
+      addMode(freq * 3.0, p.fifth * fifthMul * (0.55 + 0.55 * vel), sustain * 0.46, 0.003);
+      addMode(freq * 4.03, p.shimmer * vel, Math.min(0.32, sustain * 0.14));
+
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = isDing ? 1400 : 2100; bp.Q.value = 1.5;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.slap * vel * (type === 'g' ? 1.4 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.02);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(t0); noise.stop(t0 + 0.03);
+
+      if (isDing || type === 'D') {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(132, t0);
+        bo.frequency.exponentialRampToValueAtTime(88, t0 + 0.07);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * 1.15, t0 + 0.005);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.22);
+      }
+    }
+
+    function scheduleTak(when, vel = 0.8) {
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.6, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 3000; bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.95, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.032);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.04);
+
+      [940, 1780].forEach((hz, i) => {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.86, t0 + 0.035);
+        g.gain.setValueAtTime(0.3 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.04);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.045);
+      });
+    }
+
+    function scheduleGu(when, vel = 0.85) {
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.72, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(132, t0);
+      o.frequency.exponentialRampToValueAtTime(84, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.95, t0 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // =========================================================================
+    // 3. Probabilistic Primitives
+    // =========================================================================
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+    function randn() {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+
+    function euclideanRhythm(pulses, steps) {
+      const k = clamp(Math.round(pulses), 1, steps);
+      if (k === steps) return Array(steps).fill(1);
+      let pattern = [], counts = [], remainders = [];
+      let divisor = steps - k;
+      remainders.push(k);
+      let level = 0;
+      while (true) {
+        counts.push(Math.floor(divisor / remainders[level]));
+        remainders.push(divisor % remainders[level]);
+        divisor = remainders[level];
+        level++;
+        if (remainders[level] <= 1) break;
+      }
+      counts.push(divisor);
+      function build(lvl) {
+        if (lvl === -1) pattern.push(0);
+        else if (lvl === -2) pattern.push(1);
+        else {
+          for (let i = 0; i < counts[lvl]; i++) build(lvl - 1);
+          if (remainders[lvl] !== 0) build(lvl - 2);
+        }
+      }
+      build(level);
+      const firstOne = pattern.indexOf(1);
+      if (firstOne > 0) pattern = pattern.slice(firstOne).concat(pattern.slice(0, firstOne));
+      return pattern;
+    }
+
+    // Returns { chosen, dist: [{item, prob}] sorted descending }
+    function sampleBoltzmannWithDist(candidates, temp) {
+      const tau = Math.max(0.08, temp);
+      let minE = Infinity;
+      for (const c of candidates) if (c.energy < minE) minE = c.energy;
+      let sum = 0;
+      const raw = candidates.map(c => {
+        const w = Math.exp(-(c.energy - minE) / tau);
+        sum += w;
+        return { item: c.item, w };
+      });
+      const dist = raw.map(r => ({ item: r.item, prob: r.w / sum }));
+      let r = Math.random();
+      let chosen = dist[dist.length - 1].item;
+      for (const d of dist) {
+        r -= d.prob;
+        if (r <= 0) { chosen = d.item; break; }
+      }
+      dist.sort((a, b) => b.prob - a.prob);
+      return { chosen, dist };
+    }
+
+    function sampleWeighted(entries) {
+      const total = entries.reduce((s, e) => s + e.w, 0);
+      let r = Math.random() * total;
+      for (const e of entries) {
+        r -= e.w;
+        if (r <= 0) return e.v;
+      }
+      return entries[entries.length - 1].v;
+    }
+
+    // =========================================================================
+    // 4. Real-Time Note-by-Note Grammar-Guided Decoder
+    // =========================================================================
+    const params = {
+      touch: 0.45,
+      perc: 0.40,
+      density: 0.50,
+      entropy: 0.35,
+      tension: 0.45,
+      mutation: 0.35,
+      arc: 0.55,
+      memory: 0.70
+    };
+
+    const MACRO_SECTIONS = {
+      INTRO:       { label: 'Intro (Stillness)',    dDens: -0.26, dPerc: -0.28, dEnt: -0.15, dTens: -0.25, next: [{ v: 'THEME', w: 0.8 }, { v: 'DEVELOPMENT', w: 0.2 }] },
+      THEME:       { label: 'Theme A (Groove)',     dDens:  0.00, dPerc:  0.00, dEnt:  0.00, dTens:  0.00, next: [{ v: 'THEME', w: 0.35 }, { v: 'DEVELOPMENT', w: 0.50 }, { v: 'BREAKDOWN', w: 0.15 }] },
+      DEVELOPMENT: { label: 'Development (Lift)',   dDens: +0.12, dPerc: +0.10, dEnt: +0.10, dTens: +0.22, next: [{ v: 'APEX', w: 0.55 }, { v: 'THEME', w: 0.30 }, { v: 'BREAKDOWN', w: 0.15 }] },
+      APEX:        { label: 'Apex (Flow / Climax)', dDens: +0.24, dPerc: +0.22, dEnt: +0.18, dTens: +0.18, next: [{ v: 'BREAKDOWN', w: 0.65 }, { v: 'THEME', w: 0.35 }] },
+      BREAKDOWN:   { label: 'Breakdown (Space)',    dDens: -0.28, dPerc: -0.32, dEnt: -0.10, dTens: -0.15, next: [{ v: 'THEME', w: 0.85 }, { v: 'DEVELOPMENT', w: 0.15 }] }
+    };
+
+    const HARMONY_NEXT = {
+      i:    [{ v: 'i', w: 0.25 }, { v: 'bVI', w: 0.30 }, { v: 'III', w: 0.20 }, { v: 'iv', w: 0.15 }, { v: 'bVII', w: 0.10 }],
+      III:  [{ v: 'bVII', w: 0.40 }, { v: 'i', w: 0.25 }, { v: 'bVI', w: 0.20 }, { v: 'v', w: 0.15 }],
+      iv:   [{ v: 'i', w: 0.40 }, { v: 'v', w: 0.30 }, { v: 'bVII', w: 0.20 }, { v: 'bVI', w: 0.10 }],
+      bVI:  [{ v: 'bVII', w: 0.42 }, { v: 'iv', w: 0.28 }, { v: 'III', w: 0.18 }, { v: 'i', w: 0.12 }],
+      bVII: [{ v: 'i', w: 0.55 }, { v: 'III', w: 0.20 }, { v: 'v', w: 0.15 }, { v: 'bVI', w: 0.10 }],
+      v:    [{ v: 'i', w: 0.60 }, { v: 'bVI', w: 0.25 }, { v: 'bVII', w: 0.15 }]
+    };
+
+    // Live incremental state (NO pre-baked notes!)
+    const state = {
+      macro: 'INTRO',
+      sentenceId: 0,
+      form: 'Sentence',
+      stepsPerBar: 8,
+      clauseDefs: [],
+      barChords: [],        // filled incrementally at the start of each bar
+      currentChord: 'i',
+      seedMotif: null,      // long-term episodic DNA (recorded from real performance)
+      liveBar0Motif: [],    // recorded online as bar 0 plays
+      barMotifRef: [],      // transformed motif guiding the active bar
+      motifOp: 'Live Seed',
+      lastPitch: 4,
+      lastHand: 'R',
+      history: []
+    };
+
+    function getEffectiveParams() {
+      const m = MACRO_SECTIONS[state.macro];
+      const a = params.arc;
+      return {
+        touch:    params.touch,
+        perc:     clamp(params.perc    + m.dPerc * a, 0, 1),
+        density:  clamp(params.density + m.dDens * a, 0, 1),
+        entropy:  clamp(params.entropy + m.dEnt  * a, 0, 1),
+        tension:  clamp(params.tension + m.dTens * a, 0, 1),
+        mutation: params.mutation,
+        memory:   params.memory
+      };
+    }
+
+    function transformMotif(src, mut) {
+      if (!src || src.length === 0) return { notes: [], op: 'Free' };
+      if (Math.random() > mut) return { notes: [...src], op: 'Recall' };
+      const r = Math.random();
+      if (r < 0.30) return { notes: src.map(x => x == null ? null : clamp(Math.round(9 - x), 1, 8)), op: 'Inversion' };
+      if (r < 0.56) return { notes: [...src].reverse(), op: 'Retrograde' };
+      if (r < 0.80) {
+        const sh = Math.random() < 0.5 ? 1 : -1;
+        return { notes: src.map(x => x == null ? null : clamp(x + sh, 1, 8)), op: sh > 0 ? 'Shift(+1)' : 'Shift(-1)' };
+      }
+      return { notes: src.map(x => (x != null && Math.random() < 0.45) ? clamp(x + (Math.random() < 0.5 ? 1 : -1), 1, 8) : x), op: 'Perturb' };
+    }
+
+    // Called ONLY at the start of a new 4-bar sentence: initializes logical scaffold (NO notes generated yet)
+    function initNewSentenceScaffold(renderNow = true) {
+      // Log previous completed sentence if any
+      if (state.sentenceId > 0 && state.barChords.length > 0) {
+        const line = `#${String(state.sentenceId).padStart(2, '0')} [${state.macro}] ${state.form} | ${state.barChords.join('→')} | ${state.stepsPerBar}-step | ${state.motifOp}`;
+        state.history.unshift(line);
+        if (state.history.length > 14) state.history.pop();
+        document.getElementById('history-log').innerHTML = state.history.map(l => `<div>${l}</div>`).join('');
+      }
+
+      // Macro Semi-Markov transition
+      if (state.sentenceId === 0) {
+        state.macro = params.arc > 0.25 ? 'INTRO' : 'THEME';
+      } else if (Math.random() < 0.25 + params.arc * 0.65) {
+        state.macro = sampleWeighted(MACRO_SECTIONS[state.macro].next);
+      }
+
+      state.sentenceId++;
+      const eff = getEffectiveParams();
+      state.form = Math.random() < 0.55 ? 'Sentence' : 'Parallel Period';
+      state.stepsPerBar = (eff.entropy > 0.65 && eff.density > 0.45 && Math.random() < 0.28) ? 7 : 8;
+      state.barChords = [];
+      state.liveBar0Motif = Array(state.stepsPerBar).fill(null);
+
+      // Episodic long-term motif memory decision
+      if (state.seedMotif && state.seedMotif.length === state.stepsPerBar) {
+        const useMem = (state.macro === 'THEME' || state.macro === 'INTRO')
+          ? Math.random() < eff.memory
+          : Math.random() < eff.memory * 0.45;
+        if (useMem) {
+          const ev = transformMotif(state.seedMotif, eff.mutation);
+          state.barMotifRef = ev.notes;
+          state.motifOp = `Memory → ${ev.op}`;
+        } else if (Math.random() < 0.30 * (1 - eff.memory)) {
+          state.seedMotif = null;
+          state.barMotifRef = [];
+          state.motifOp = 'New Live Seed';
+        } else {
+          state.motifOp = 'Evolving';
+        }
+      } else {
+        state.barMotifRef = [];
+        state.motifOp = 'Live Seed';
+      }
+
+      state.clauseDefs = state.form === 'Sentence'
+        ? [
+            { name: 'Clause 1 — Basic Idea',     role: 'idea',     dir: +1 },
+            { name: 'Clause 2 — Varied Idea',    role: 'var',      dir: +1 },
+            { name: 'Clause 3 — Continuation',   role: 'cont',     dir:  0 },
+            { name: 'Clause 4 — Cadential Close',role: 'cadence',  dir: -1 }
+          ]
+        : [
+            { name: 'Clause 1a — Antecedent',    role: 'idea',     dir: +1 },
+            { name: 'Clause 1b — Open Cadence',  role: 'half-cad', dir: +1 },
+            { name: 'Clause 2a — Consequent',    role: 'return',   dir:  0 },
+            { name: 'Clause 2b — Closed Cadence',role: 'cadence',  dir: -1 }
+          ];
+
+      if (renderNow) renderEmptyScaffold(state.clauseDefs, state.stepsPerBar);
+    }
+
+    // Called at step 0 of each bar: samples THIS bar's chord & clause motif live from current sliders
+    function enterBar(barIdx) {
+      const eff = getEffectiveParams();
+      const cd = state.clauseDefs[barIdx];
+
+      if (barIdx === 0) {
+        state.currentChord = 'i';
+      } else if (barIdx === 3 && Math.random() < (0.88 - 0.35 * eff.tension)) {
+        state.currentChord = 'i';
+      } else if (Math.random() > eff.tension * 1.15) {
+        state.currentChord = 'i';
+      } else {
+        const cands = HARMONY_NEXT[state.currentChord].map(e => ({
+          v: e.v,
+          w: e.v === 'i' ? e.w * (1.2 - eff.tension * 0.7) : e.w * (0.6 + eff.tension)
+        }));
+        state.currentChord = sampleWeighted(cands);
+      }
+      state.barChords[barIdx] = state.currentChord;
+
+      // Update clause motif reference from what Bar 0 actually played (real-time coherence!)
+      if (barIdx === 1 && state.liveBar0Motif.some(x => x !== null)) {
+        if (!state.seedMotif) state.seedMotif = [...state.liveBar0Motif];
+        const ev = transformMotif(state.liveBar0Motif, eff.mutation);
+        state.barMotifRef = ev.notes;
+        state.motifOp = `Bar0 → ${ev.op}`;
+      } else if (barIdx === 2 && state.liveBar0Motif.some(x => x !== null)) {
+        const ev = transformMotif(state.liveBar0Motif, cd.role === 'return' ? eff.mutation * 0.45 : eff.mutation);
+        state.barMotifRef = ev.notes;
+        state.motifOp = `${cd.role === 'return' ? 'Return' : 'Cont'} → ${ev.op}`;
+      } else if (barIdx === 3 && state.liveBar0Motif.some(x => x !== null)) {
+        const ev = transformMotif(state.liveBar0Motif, Math.min(1, eff.mutation + 0.2));
+        state.barMotifRef = ev.notes;
+      }
+
+      const metaEl = document.getElementById(`clause-meta-${barIdx}`);
+      if (metaEl) metaEl.textContent = `Harmony: ${state.currentChord} | Role: ${cd.role}`;
+    }
+
+    // =========================================================================
+    // CORE REAL-TIME NOTE-BY-NOTE SAMPLER (Evaluated ~100ms before every step!)
+    // =========================================================================
+    function sampleStepRealtime(barIdx, stepIdx) {
+      const sc = SCALES[activeScaleKey];
+      const eff = getEffectiveParams();
+      const tau = 0.14 + 2.2 * eff.entropy;
+      const cd = state.clauseDefs[barIdx];
+      const pool = sc.chords[state.currentChord] || [0, 4, 6];
+
+      // Live Euclidean accent grid evaluated RIGHT NOW from live density slider
+      const pulses = clamp(Math.round(2 + eff.density * (state.stepsPerBar - 3)), 2, state.stepsPerBar - 1);
+      const euclid = euclideanRhythm(pulses, state.stepsPerBar);
+      const isAccent = euclid[stepIdx] === 1;
+      const isLast = stepIdx === state.stepsPerBar - 1;
+      const isPenult = stepIdx === state.stepsPerBar - 2;
+      const prefHand = state.lastHand === 'R' ? 'L' : 'R';
+      const motifHint = state.barMotifRef[stepIdx];
+
+      // Helper: Real-time Boltzmann pitch sampler across ALL feasible tone fields {0..8}
+      // with soft grammar energy terms (allowing tolerance when entropy is high)
+      function samplePitch(grammarMode) {
+        const cands = [];
+        for (let j = 0; j <= 8; j++) {
+          let E = 0;
+          // 1. Harmonic stability
+          if (!pool.includes(j)) E += 1.45;
+          // 2. Ergonomic zigzag sticking & interval smoothness
+          const dist = Math.abs(j - state.lastPitch);
+          E += 0.38 * Math.abs(dist - 1.5);
+          if (j > 0 && PAN_GEOMETRY[j].hand !== prefHand) E += 0.55;
+          if (j === state.lastPitch) E += 0.90;
+          // 3. Phrase contour direction
+          if (cd.dir !== 0 && Math.sign(j - state.lastPitch) !== cd.dir) E += 0.42;
+          // 4. Motif DNA pull (weakened by live mutation slider)
+          if (motifHint != null) {
+            const motifWeight = 0.55 * (1 - eff.mutation * 0.75);
+            E += motifWeight * Math.abs(j - motifHint);
+          }
+          // 5. Soft Grammar Constraints (with probability tolerance via tau!)
+          if (grammarMode === 'downbeat') {
+            const rootIdx = state.currentChord === 'i' ? 0 : pool[0];
+            E += (j === rootIdx) ? -2.4 : 0.8;
+          } else if (grammarMode === 'close-cadence') {
+            E += (j === 0) ? -3.0 : (j === 4 ? -0.6 : 1.2);
+          } else if (grammarMode === 'open-cadence') {
+            E += (j === 5 || j === 7 || j === 8) ? -1.8 : 0.9;
+          } else {
+            // Avoid Ding on non-downbeat inner melody unless entropy is high
+            if (j === 0) E += 1.8;
+          }
+          cands.push({ item: j, energy: E });
+        }
+        return sampleBoltzmannWithDist(cands, tau);
+      }
+
+      // ---- GRAMMAR CASE A: Bar 4 Final Step — Breathing Caesura (with tolerance) ----
+      if (cd.role === 'cadence' && isLast) {
+        const restProb = clamp(0.92 - eff.entropy * 0.30 - eff.density * 0.15, 0.45, 0.96);
+        if (Math.random() < restProb) {
+          return {
+            step: { type: '·', label: '·', hand: '-', vel: 0, accented: false, deg: '' },
+            rule: `Cadential Caesura (P_rest=${Math.round(restProb * 100)}%)`,
+            distText: `Rest ${Math.round(restProb * 100)}% | Soft Tail ${Math.round((1 - restProb) * 100)}%`,
+            pulses, tau
+          };
+        }
+        // Tolerance branch: soft ethereal harmonic tail
+        const res = samplePitch('open-cadence');
+        const idx = res.chosen;
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        return {
+          step: { type: 'H', idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.55, accented: false },
+          rule: 'Cadential Caesura (Tolerance → Harmonic Tail)',
+          distText: formatDist(res.dist, sc),
+          pulses, tau
+        };
+      }
+
+      // ---- GRAMMAR CASE B: Bar 4 Penultimate Step — Cadential Resolution ----
+      if (cd.role === 'cadence' && isPenult) {
+        const res = samplePitch('close-cadence');
+        const idx = res.chosen;
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        return {
+          step: { type: idx === 0 ? 'D' : 'N', idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.94, accented: true },
+          rule: 'Closed Cadence (Ding ^1 Gravity)',
+          distText: formatDist(res.dist, sc),
+          pulses, tau
+        };
+      }
+
+      // ---- GRAMMAR CASE C: Antecedent End — Open / Half Cadence ----
+      if (cd.role === 'half-cad' && isLast) {
+        const res = samplePitch('open-cadence');
+        const idx = res.chosen;
+        const evType = Math.random() < eff.touch * 0.48 ? 'H' : 'N';
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        return {
+          step: { type: evType, idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.85, accented: true },
+          rule: 'Antecedent Open Cadence (Outer Rim)',
+          distText: formatDist(res.dist, sc),
+          pulses, tau
+        };
+      }
+
+      // ---- GRAMMAR CASE D: Downbeat Anchor (Step 0) ----
+      if (stepIdx === 0) {
+        const res = samplePitch('downbeat');
+        const idx = res.chosen;
+        if (barIdx === 0) state.liveBar0Motif[0] = idx;
+
+        if (Math.random() < eff.touch * 0.50 && pool.length >= 2) {
+          const top = pool[pool.length - 1];
+          state.lastPitch = top; state.lastHand = 'R';
+          return {
+            step: {
+              type: '~', notes: [idx, top],
+              label: `${sc.notes[idx]}~${sc.notes[top]}`,
+              deg: `^${sc.degrees[idx]}+^${sc.degrees[top]}`,
+              hand: 'L+R', vel: 0.89, accented: true
+            },
+            rule: `Downbeat Rolled Dyad (${state.currentChord})`,
+            distText: formatDist(res.dist, sc),
+            pulses, tau
+          };
+        }
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        return {
+          step: { type: idx === 0 ? 'D' : 'N', idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.91, accented: true },
+          rule: `Downbeat Anchor (${state.currentChord})`,
+          distText: formatDist(res.dist, sc),
+          pulses, tau
+        };
+      }
+
+      // ---- GRAMMAR CASE E: Live Euclidean Accent -> Melodic Tone ----
+      if (isAccent) {
+        const res = samplePitch('melody');
+        const idx = res.chosen;
+        if (barIdx === 0) state.liveBar0Motif[stepIdx] = idx;
+
+        let evType = 'N';
+        if (idx >= 5 && Math.random() < eff.touch * 0.28) evType = 'H';
+        else if (Math.random() < eff.perc * 0.16) evType = 'M';
+
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        return {
+          step: {
+            type: evType, idx, label: sc.notes[idx],
+            deg: '^' + sc.degrees[idx], hand: state.lastHand,
+            vel: 0.78 + Math.random() * 0.14, accented: true
+          },
+          rule: `Euclidean Accent E(${pulses},${state.stepsPerBar})[${stepIdx}]`,
+          distText: formatDist(res.dist, sc),
+          pulses, tau
+        };
+      }
+
+      // ---- GRAMMAR CASE F: Unaccented Subdivision -> Live Event-Space Sampling ----
+      // Directly biased by live perc & density sliders!
+      const pTak   = (stepIdx === 4 ? 0.85 : 0.12) * eff.perc;
+      const pGu    = (stepIdx === 2 || stepIdx === 5 ? 0.34 : 0.06) * eff.perc;
+      const pGhost = 0.65 * eff.perc + 0.35 * eff.density;
+      const pRest  = Math.max(0.08, 1.15 - eff.perc * 0.85 - eff.density * 0.65);
+
+      const evChoice = sampleWeighted([
+        { v: 'T', w: pTak },
+        { v: 'G', w: pGu },
+        { v: 'g', w: pGhost },
+        { v: '·', w: pRest }
+      ]);
+      const sumW = pTak + pGu + pGhost + pRest;
+      const evDistTxt = `Ghost ${Math.round(pGhost/sumW*100)}% | Rest ${Math.round(pRest/sumW*100)}% | Tak ${Math.round(pTak/sumW*100)}% | Gu ${Math.round(pGu/sumW*100)}%`;
+
+      if (evChoice === 'T') {
+        return {
+          step: { type: 'T', label: 'Tak', deg: 'rim', hand: prefHand, vel: 0.72 + eff.perc * 0.18, accented: false },
+          rule: 'Subdivision → Tak Backbeat',
+          distText: evDistTxt,
+          pulses, tau
+        };
+      }
+      if (evChoice === 'G') {
+        return {
+          step: { type: 'G', label: 'Gu', deg: 'cav', hand: 'L', vel: 0.78, accented: false },
+          rule: 'Subdivision → Gu Cavity',
+          distText: evDistTxt,
+          pulses, tau
+        };
+      }
+      if (evChoice === 'g') {
+        const gIdx = pool[stepIdx % Math.min(3, pool.length)];
+        state.lastHand = prefHand;
+        return {
+          step: { type: 'g', idx: gIdx, label: sc.notes[gIdx], deg: 'g', hand: prefHand, vel: 0.20 + Math.random() * 0.10, accented: false },
+          rule: 'Subdivision → Ghost Pulse',
+          distText: evDistTxt,
+          pulses, tau
+        };
+      }
+      return {
+        step: { type: '·', label: '·', hand: '-', vel: 0, accented: false, deg: '' },
+        rule: 'Subdivision → Breathing Space',
+        distText: evDistTxt,
+        pulses, tau
+      };
+    }
+
+    function formatDist(dist, sc) {
+      return dist.slice(0, 4).map(d => `${sc.notes[d.item]} ${Math.round(d.prob * 100)}%`).join(' | ');
+    }
+
+    // =========================================================================
+    // 5. Two-Clock Web Audio Lookahead Scheduler (Zero-Batch Real-Time!)
+    // =========================================================================
+    let isRunning = false;
+    let schedulerTimer = null;
+    let nextStepTime = 0;
+    let curBar = 0;
+    let curStep = 0;
+    let totalBars = 0;
+
+    function getEighthSec() {
+      const bpm = parseInt(document.getElementById('bpm-range').value, 10);
+      return (60 / bpm) / 2;
+    }
+
+    function startStream() {
+      ensureAudio();
+      if (isRunning) return;
+      isRunning = true;
+      document.getElementById('btn-toggle').textContent = 'Pause Stream';
+      document.getElementById('btn-toggle').classList.add('active');
+      document.getElementById('state-badge').textContent = 'LIVE';
+
+      if (state.sentenceId === 0) {
+        initNewSentenceScaffold();
+        curBar = 0; curStep = 0;
+      }
+      nextStepTime = audioCtx.currentTime + 0.04;
+      schedulerTimer = setInterval(schedulerTick, 25);
+    }
+
+    function stopStream() {
+      isRunning = false;
+      if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
+      document.getElementById('btn-toggle').textContent = 'Start Real-Time Stream';
+      document.getElementById('btn-toggle').classList.remove('active');
+      document.getElementById('state-badge').textContent = 'PAUSED';
+    }
+
+    function schedulerTick() {
+      if (!isRunning) return;
+      const lookahead = 0.11; // tight 110ms lookahead = immediate slider responsiveness!
+
+      while (nextStepTime < audioCtx.currentTime + lookahead) {
+        let isNewSentence = false;
+        if (curBar === 0 && curStep === 0 && state.barChords.length === 4) {
+          initNewSentenceScaffold(false);
+          isNewSentence = true;
+        }
+        if (curStep === 0) {
+          enterBar(curBar);
+        }
+
+        // Sample THIS SINGLE STEP in real time from live parameters & grammar!
+        const sampled = sampleStepRealtime(curBar, curStep);
+        const st = sampled.step;
+        const snapBar = curBar;
+        const snapStep = curStep;
+        const snapTotalBars = totalBars + 1;
+        const snapChord = state.currentChord;
+        const snapRole = state.clauseDefs[curBar].role;
+        const snapClauseDefs = isNewSentence ? state.clauseDefs.map(c => ({ ...c })) : null;
+        const snapMacro = state.macro;
+        const snapForm = state.form;
+        const snapSentId = state.sentenceId;
+        const snapMotifOp = state.motifOp;
+        const snapStepsPerBar = state.stepsPerBar;
+
+        // Immediate micro-timing rubato & velocity humanization
+        const jitterSec = (curStep === 0 ? 0.004 : 0.015) * params.touch * randn();
+        const playAt = Math.max(audioCtx.currentTime + 0.004, nextStepTime + jitterSec);
+        const velJitter = 1 + 0.14 * params.touch * randn();
+        const effVel = clamp((st.vel || 0) * velJitter, 0.08, 1.0);
+
+        if (st.type === 'T') {
+          scheduleTak(playAt, effVel);
+        } else if (st.type === 'G') {
+          scheduleGu(playAt, effVel);
+        } else if (st.type === '~' && st.notes) {
+          scheduleTone(st.notes[0], playAt, { vel: effVel * 0.88, type: 'N' });
+          scheduleTone(st.notes[1], playAt + 0.032, { vel: effVel, type: 'N' });
+        } else if (st.idx !== undefined && st.type !== '·') {
+          scheduleTone(st.idx, playAt, { vel: effVel, type: st.type });
+        }
+
+        // Sync visual collapse of the '?' slot + live probability inspector + SVG flash
+        const uiDelayMs = Math.max(0, (playAt - audioCtx.currentTime) * 1000);
+        setTimeout(() => {
+          if (!isRunning) return;
+          if (snapClauseDefs) renderEmptyScaffold(snapClauseDefs, snapStepsPerBar);
+          if (snapStep === 0) {
+            const metaEl = document.getElementById(`clause-meta-${snapBar}`);
+            if (metaEl) metaEl.textContent = `Harmony: ${snapChord} | Role: ${snapRole}`;
+          }
+          fillAndHighlightCell(snapBar, snapStep, st);
+          document.getElementById('pb-rule').textContent = sampled.rule;
+          document.getElementById('pb-dist').textContent = sampled.distText;
+          document.getElementById('tel-section').textContent = MACRO_SECTIONS[snapMacro].label;
+          document.getElementById('tel-bar').textContent = `#${snapSentId} / Bar ${snapTotalBars}`;
+          document.getElementById('tel-form').textContent = snapForm;
+          document.getElementById('tel-harm').textContent = `${snapChord} | E(${sampled.pulses},${snapStepsPerBar})`;
+          document.getElementById('tel-temp').textContent = `τ = ${sampled.tau.toFixed(2)}`;
+          document.getElementById('tel-motif').textContent = snapMotifOp;
+
+          if (st.type === 'T' || st.type === 'G') {
+            flashRim(170);
+          } else if (st.type === '~' && st.notes) {
+            flashField(st.notes[0], 'active-L', 200);
+            setTimeout(() => flashField(st.notes[1], 'active-R', 220), 32);
+          } else if (st.idx !== undefined && st.type !== '·') {
+            const cls = st.type === 'H' ? 'active-H' : (st.hand === 'L' ? 'active-L' : 'active-R');
+            flashField(st.idx, cls, st.type === 'g' ? 120 : 210);
+          }
+        }, uiDelayMs);
+
+        // Advance cursor
+        nextStepTime += getEighthSec();
+        curStep++;
+        if (curStep >= state.stepsPerBar) {
+          curStep = 0;
+          curBar++;
+          totalBars++;
+          if (curBar >= 4) {
+            curBar = 0;
+          }
+        }
+      }
+    }
+
+    // =========================================================================
+    // 6. UI Rendering: SVG Handpan & Incremental '?' Scaffold
+    // =========================================================================
+    let activeScaleKey = 'd-kurd';
+    let activeProfileKey = 'stainless';
+
+    function renderHandpanSVG() {
+      const svg = document.getElementById('handpan-svg');
+      const scale = SCALES[activeScaleKey];
+      svg.innerHTML = '';
+      const ns = 'http://www.w3.org/2000/svg';
+      function el(tag, attrs, parent) {
+        const node = document.createElementNS(ns, tag);
+        Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+        if (parent) parent.appendChild(node);
+        return node;
+      }
+
+      el('circle', { cx: 170, cy: 170, r: 158, fill: '#fff', stroke: '#333', 'stroke-width': 2.5, class: 'rim-ring' }, svg);
+      el('circle', { cx: 170, cy: 170, r: 148, fill: 'none', stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
+      el('line', { x1: 170, y1: 18, x2: 170, y2: 322, stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '3 5' }, svg);
+
+      PAN_GEOMETRY.forEach((geo, idx) => {
+        const g = el('g', { class: 'tone-field', 'data-idx': idx, transform: `translate(${geo.cx}, ${geo.cy})` }, svg);
+        if (idx === 0) {
+          el('circle', { cx: 0, cy: 0, r: geo.rx, fill: '#fff', stroke: '#111', 'stroke-width': 1.8 }, g);
+          el('circle', { cx: 0, cy: 0, r: 12, fill: 'none', stroke: '#ccc', 'stroke-width': 1 }, g);
+        } else {
+          el('ellipse', { cx: 0, cy: 0, rx: geo.rx, ry: geo.ry, transform: `rotate(${geo.rot})`, fill: '#fff', stroke: '#555', 'stroke-width': 1.3 }, g);
+        }
+
+        const nt = el('text', { x: 0, y: -1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#111', 'font-size': idx === 0 ? 15 : 12, 'font-weight': 700, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }, g);
+        nt.textContent = scale.notes[idx];
+
+        const dt = el('text', { x: 0, y: 12, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#555', 'font-size': 9.5, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }, g);
+        dt.textContent = idx === 0 ? 'DING ^1' : `^${scale.degrees[idx]} (${geo.hand})`;
+
+        g.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          ensureAudio();
+          scheduleTone(idx, audioCtx.currentTime, { vel: 0.85, type: idx === 0 ? 'D' : 'N' });
+          flashField(idx, geo.hand === 'L' ? 'active-L' : 'active-R', 220);
+        });
+      });
+    }
+
+    function flashField(idx, cls, dur = 200) {
+      const el = document.querySelector(`.tone-field[data-idx="${idx}"]`);
+      if (!el) return;
+      el.classList.remove('active-R', 'active-L', 'active-H');
+      void el.offsetWidth;
+      el.classList.add(cls);
+      setTimeout(() => el.classList.remove(cls), dur);
+    }
+
+    function flashRim(dur = 170) {
+      const rim = document.querySelector('.rim-ring');
+      if (!rim) return;
+      rim.classList.add('active-perc');
+      setTimeout(() => rim.classList.remove('active-perc'), dur);
+    }
+
+    function renderEmptyScaffold(clauseDefs = state.clauseDefs, stepsPerBar = state.stepsPerBar) {
+      const container = document.getElementById('live-sentence');
+      container.innerHTML = '';
+
+      clauseDefs.forEach((cd, barIdx) => {
+        const block = document.createElement('div');
+        block.className = 'clause-block';
+
+        const hdr = document.createElement('div');
+        hdr.className = 'clause-header';
+        hdr.innerHTML = `<span class="clause-name">${cd.name}</span><span class="clause-meta" id="clause-meta-${barIdx}">Harmony: pending | Role: ${cd.role}</span>`;
+        block.appendChild(hdr);
+
+        const strip = document.createElement('div');
+        strip.className = 'step-strip';
+
+        for (let s = 0; s < stepsPerBar; s++) {
+          const cell = document.createElement('div');
+          cell.className = 'step-cell pending';
+          cell.id = `cell-${barIdx}-${s}`;
+          cell.innerHTML = `<div class="step-note">?</div><div>·</div><div class="step-vel"><div class="step-vel-fill" style="width:0%"></div></div>`;
+          strip.appendChild(cell);
+        }
+
+        block.appendChild(strip);
+        container.appendChild(block);
+      });
+    }
+
+    function fillAndHighlightCell(barIdx, stepIdx, st) {
+      document.querySelectorAll('.step-cell.now-playing').forEach(c => c.classList.remove('now-playing'));
+      const cell = document.getElementById(`cell-${barIdx}-${stepIdx}`);
+      if (!cell) return;
+      cell.classList.remove('pending');
+      if (st.accented) cell.classList.add('accented');
+      cell.classList.add('now-playing');
+
+      const ghostCls = (st.type === 'g' || st.type === '·') ? ' ghost' : '';
+      const prefix = st.type === 'H' ? 'H:' : (st.type === 'M' ? 'M:' : '');
+      const velPct = Math.round((st.vel || 0) * 100);
+
+      cell.innerHTML = `
+        <div class="step-note${ghostCls}">${prefix}${st.label}</div>
+        <div>${st.hand} <span style="color:#666">${st.deg || ''}</span></div>
+        <div class="step-vel"><div class="step-vel-fill" style="width:${velPct}%"></div></div>
+      `;
+    }
+
+    // =========================================================================
+    // 7. Bindings & Presets
+    // =========================================================================
+    const PRESETS = {
+      meditative: { touch: 0.65, perc: 0.10, density: 0.22, entropy: 0.20, tension: 0.20, mutation: 0.25, arc: 0.25, memory: 0.85, bpm: 68 },
+      tresillo:   { touch: 0.40, perc: 0.65, density: 0.48, entropy: 0.28, tension: 0.45, mutation: 0.30, arc: 0.40, memory: 0.80, bpm: 88 },
+      journey:    { touch: 0.52, perc: 0.42, density: 0.52, entropy: 0.40, tension: 0.55, mutation: 0.42, arc: 0.80, memory: 0.72, bpm: 84 },
+      kinetic:    { touch: 0.60, perc: 0.78, density: 0.80, entropy: 0.78, tension: 0.75, mutation: 0.72, arc: 0.85, memory: 0.35, bpm: 106 }
+    };
+
+    const PARAM_KEYS = ['touch', 'perc', 'density', 'entropy', 'tension', 'mutation', 'arc', 'memory'];
+
+    function syncSliders() {
+      PARAM_KEYS.forEach(k => {
+        document.getElementById('p-' + k).value = params[k];
+        document.getElementById('v-' + k).textContent = params[k].toFixed(2);
+      });
+    }
+
+    PARAM_KEYS.forEach(k => {
+      document.getElementById('p-' + k).addEventListener('input', (e) => {
+        params[k] = parseFloat(e.target.value);
+        document.getElementById('v-' + k).textContent = params[k].toFixed(2);
+      });
+    });
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pr = PRESETS[btn.dataset.preset];
+        PARAM_KEYS.forEach(k => { params[k] = pr[k]; });
+        syncSliders();
+        document.getElementById('bpm-range').value = pr.bpm;
+        document.getElementById('bpm-out').textContent = `${pr.bpm} BPM`;
+      });
+    });
+
+    const scaleSel = document.getElementById('scale-select');
+    Object.entries(SCALES).forEach(([k, v]) => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = v.name;
+      scaleSel.appendChild(opt);
+    });
+    scaleSel.addEventListener('change', (e) => {
+      activeScaleKey = e.target.value;
+      renderHandpanSVG();
+    });
+
+    document.getElementById('profile-select').addEventListener('change', (e) => {
+      activeProfileKey = e.target.value;
+    });
+
+    document.getElementById('bpm-range').addEventListener('input', (e) => {
+      document.getElementById('bpm-out').textContent = `${e.target.value} BPM`;
+    });
+
+    document.getElementById('btn-toggle').addEventListener('click', () => {
+      if (isRunning) stopStream();
+      else startStream();
+    });
+
+    document.getElementById('btn-reseed').addEventListener('click', () => {
+      state.seedMotif = null;
+      state.liveBar0Motif = [];
+      state.barMotifRef = [];
+      state.macro = 'THEME';
+      curBar = 0; curStep = 0;
+      initNewSentenceScaffold();
+    });
+
+    // Boot
+    renderHandpanSVG();
+    syncSliders();
+    initNewSentenceScaffold();
+  </script>
+</body>
+</html>
