@@ -2,6 +2,8 @@
   - Allow manual control of attention
   - Steer future sample based on bias vectors
   - Explore with Gemini Decisions API for realtime attention steering. Model will pay attentio to short/mid/long context and determine what to play next
+    - You can use the .env api key to test and engineer the prompts for Decisions API. But the input, if you use decisions API, you must let user put an API key in a password input (no password manager auto complete) and call live APIs. We have the google genai sdk installed in npm
+    - You can get gemini API in the html file by importing them from https://esm.sh/@google/genai
 - Rhythm driven synthesis engine. User just need to tab one key with left hand, and tap another key with right hand. The system will use the rhythm to inform the notes
   - To provide more info, user can use home row. each finger represent a power level. System still dictates the notes
   - To provide even more info, user can move up and down rows to steer pitch rise and fall.
