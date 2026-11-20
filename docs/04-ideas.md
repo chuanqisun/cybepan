@@ -1,3 +1,6 @@
 - Design a multi-tiered attention mechanism to live synthesize each note
 - Allow manual control of attention
 - Steer future sample based on bias vectors
+- Rhythm driven synthesis engine. User just need to tab one key with left hand, and tap another key with right hand. The system will use the rhythm to inform the notes
+- To provide more info, user can use home row. each finger represent a power level. System still dictates the notes
+- To provide even more info, user can move up and down rows to steer pitch rise and fall.
