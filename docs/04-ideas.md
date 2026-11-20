@@ -7,3 +7,4 @@
 - Rhythm driven synthesis engine. User just need to tab one key with left hand, and tap another key with right hand. The system will use the rhythm to inform the notes
   - To provide more info, user can use home row. each finger represent a power level. System still dictates the notes
   - To provide even more info, user can move up and down rows to steer pitch rise and fall.
+- Carefully analyze the sounds from https://www.yishama.com/virtual-pantam-playground and synthesis really good quality sounds. You can even pregenerate the sounds and store them in custom sound bank for extremely low latency playback.
