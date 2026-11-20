@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 — Multi-Tiered Attention &amp; Gemini Decisions Steering</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #111;
+      background: #fff;
+      line-height: 1.55;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      min-height: 100vh;
+    }
+
+    aside.instrument-dock {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid #ddd;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+
+    main.doc {
+      padding: 28px 42px 72px;
+      max-width: 960px;
+    }
+
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+      aside.instrument-dock {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+      main.doc { padding: 22px 18px 56px; }
+    }
+
+    h1, h2, h3 { margin-top: 0; line-height: 1.25; }
+    h1 { margin-bottom: 6px; font-size: 1.65rem; }
+    h2 {
+      margin-top: 34px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+      font-size: 1.18rem;
+    }
+    h3 { margin-top: 18px; margin-bottom: 6px; font-size: 0.96rem; }
+    p { margin: 0 0 10px; font-size: 0.92rem; }
+    ul { margin: 0 0 12px; padding-left: 20px; font-size: 0.9rem; }
+    li { margin-bottom: 4px; }
+
+    .subtitle { color: #555; margin-bottom: 16px; font-size: 0.93rem; }
+
+    code, pre, .mono, .telemetry, .clause-header, .step-cell, .param-val, .prob-bar, .mem-cell, .bias-col, .api-log {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    code { font-size: 0.88em; }
+
+    pre.spec {
+      font-size: 0.8rem;
+      line-height: 1.48;
+      border-left: 2px solid #ccc;
+      padding: 4px 0 4px 14px;
+      overflow-x: auto;
+      margin: 10px 0 16px;
+      white-space: pre-wrap;
+    }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      margin: 0 0 20px;
+      font-size: 0.88rem;
+    }
+    nav.toc a { color: #111; }
+
+    /* Dock */
+    .dock-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .dock-title { font-weight: 700; margin: 0; font-size: 0.95rem; }
+
+    .transport-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .control-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 0.8rem;
+    }
+    select, input[type="range"], input[type="text"], input[type="password"] {
+      width: 100%;
+      font-family: inherit;
+    }
+    input[type="text"], input[type="password"], select {
+      padding: 4px 6px;
+      border: 1px solid #bbb;
+      background: #fff;
+      color: #111;
+      font-size: 0.82rem;
+    }
+
+    button {
+      cursor: pointer;
+      padding: 4px 10px;
+      border: 1px solid #888;
+      background: #fff;
+      color: #111;
+      font-size: 0.82rem;
+    }
+    button:hover { background: #f4f4f4; }
+    button.active, button.primary-on {
+      background: #111;
+      color: #fff;
+      border-color: #111;
+      font-weight: 600;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* SVG Handpan */
+    .pan-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    svg#handpan-svg {
+      width: 100%;
+      max-width: 280px;
+      height: auto;
+      user-select: none;
+    }
+    .tone-field { cursor: pointer; }
+    .tone-field:hover ellipse, .tone-field:hover circle { stroke-width: 2.2; }
+    .tone-field.active-R ellipse, .tone-field.active-R circle { fill: #111 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-R text { fill: #fff !important; }
+    .tone-field.active-L ellipse, .tone-field.active-L circle { fill: #d4d4d4 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-H ellipse, .tone-field.active-H circle { fill: #eee !important; stroke: #111 !important; stroke-width: 2.5 !important; stroke-dasharray: 4 2; }
+    .rim-ring.active-perc { stroke: #111 !important; stroke-width: 5 !important; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+      justify-content: center;
+      font-size: 0.72rem;
+      color: #555;
+    }
+
+    .telemetry {
+      font-size: 0.74rem;
+      line-height: 1.5;
+      color: #333;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+    }
+    .telemetry div {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .telemetry span.k { color: #666; }
+
+    /* Mode & Preset Rows */
+    .bar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      align-items: center;
+      padding: 8px 0;
+      margin-bottom: 12px;
+      border-top: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 0.83rem;
+    }
+    .bar-row .label { color: #555; margin-right: 4px; font-weight: 600; }
+
+    /* Two-column sections */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px 26px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+    .panel {
+      border-top: 1px solid #ccc;
+      padding-top: 10px;
+    }
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    .panel-title { font-weight: 700; font-size: 0.92rem; }
+    .panel-meta { font-size: 0.76rem; color: #666; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .param-item { margin-bottom: 10px; }
+    .param-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.84rem;
+      margin-bottom: 2px;
+    }
+    .param-name { font-weight: 600; }
+    .param-val { font-size: 0.78rem; color: #333; }
+    .param-desc { font-size: 0.75rem; color: #666; margin-top: 1px; }
+
+    /* Attention Weight Stacked Bar */
+    .attn-stacked {
+      display: flex;
+      height: 22px;
+      border: 1px solid #111;
+      margin: 8px 0 10px;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.7rem;
+    }
+    .attn-seg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      white-space: nowrap;
+      transition: width 120ms linear;
+    }
+    .seg-micro { background: #111; color: #fff; }
+    .seg-short { background: #555; color: #fff; }
+    .seg-mid   { background: #999; color: #111; }
+    .seg-long  { background: #e2e2e2; color: #111; }
+
+    /* 9-Note Bias Vector & Probability Chart */
+    .bias-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+    @media (max-width: 680px) {
+      .bias-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    .bias-col {
+      border: 1px solid #ddd;
+      padding: 6px 4px;
+      text-align: center;
+      font-size: 0.72rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .bias-col.is-top { border-color: #111; background: #fafafa; }
+    .bias-note { font-weight: 700; font-size: 0.78rem; }
+    .bias-deg { color: #666; font-size: 0.68rem; }
+    .prob-track {
+      width: 100%;
+      height: 54px;
+      background: #f3f3f3;
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      border-bottom: 1px solid #ccc;
+    }
+    .prob-fill {
+      width: 72%;
+      background: #111;
+      transition: height 80ms linear;
+    }
+    .bias-val-label { font-size: 0.7rem; color: #333; }
+    .bias-slider {
+      writing-mode: horizontal-tb;
+      width: 100%;
+    }
+    .bias-btns {
+      display: flex;
+      gap: 2px;
+      width: 100%;
+    }
+    .bias-btns button {
+      flex: 1;
+      padding: 1px 0;
+      font-size: 0.7rem;
+    }
+
+    /* 32-Step Memory Attention Tape */
+    .mem-tape {
+      display: grid;
+      grid-template-columns: repeat(16, 1fr);
+      gap: 3px;
+      margin: 8px 0 12px;
+    }
+    @media (max-width: 680px) {
+      .mem-tape { grid-template-columns: repeat(8, 1fr); }
+    }
+    .mem-cell {
+      border: 1px solid #ddd;
+      padding: 4px 2px;
+      text-align: center;
+      font-size: 0.68rem;
+      line-height: 1.25;
+      min-height: 38px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .mem-cell .mem-w { font-size: 0.62rem; opacity: 0.82; }
+
+    /* Gemini Decisions API Panel */
+    .gemini-box {
+      border: 1px solid #111;
+      padding: 14px 16px;
+      margin: 12px 0 18px;
+      background: #fcfcfc;
+    }
+    .key-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    @media (max-width: 680px) {
+      .key-row { grid-template-columns: 1fr 1fr; }
+    }
+    .status-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border: 1px solid #111;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .status-pill.ok { background: #111; color: #fff; }
+    .status-pill.err { border-style: dashed; color: #900; border-color: #900; }
+
+    .decision-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #ddd;
+    }
+    .d-card {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.73rem;
+      border-left: 2px solid #999;
+      padding-left: 8px;
+    }
+    .d-card-title { font-weight: 700; margin-bottom: 3px; color: #111; }
+    .d-card-body { color: #444; line-height: 1.4; }
+
+    /* Live Sentence Monitor */
+    .prob-bar {
+      font-size: 0.76rem;
+      color: #333;
+      padding: 7px 0;
+      border-top: 1px solid #ccc;
+      border-bottom: 1px solid #e5e5e5;
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 16px;
+    }
+    .prob-bar .k { color: #666; }
+
+    .clause-block {
+      padding: 8px 0;
+      border-top: 1px solid #e0e0e0;
+    }
+    .clause-header {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 0.76rem;
+      margin-bottom: 5px;
+    }
+    .clause-name { font-weight: 700; }
+    .clause-meta { color: #555; }
+
+    .step-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+      gap: 4px;
+    }
+    .step-cell {
+      border-top: 1px solid #ddd;
+      padding: 4px 2px;
+      text-align: center;
+      font-size: 0.72rem;
+      line-height: 1.3;
+    }
+    .step-cell.pending { color: #bbb; border-top-style: dotted; }
+    .step-cell.accented { border-top: 2px solid #111; }
+    .step-cell.now-playing { background: #111; color: #fff; }
+    .step-cell.now-playing .step-note,
+    .step-cell.now-playing span { color: #fff !important; }
+    .step-note { font-weight: 700; }
+    .step-note.ghost { color: #777; font-weight: 400; }
+    .step-vel { height: 2px; background: #e5e5e5; margin-top: 3px; }
+    .step-vel-fill { height: 100%; background: #444; }
+    .step-cell.now-playing .step-vel-fill { background: #fff; }
+
+    .api-log {
+      font-size: 0.72rem;
+      color: #444;
+      border-top: 1px solid #ddd;
+      padding-top: 6px;
+      margin-top: 8px;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .api-log div { padding: 2px 0; border-bottom: 1px dotted #eee; }
+
+    details summary { cursor: pointer; font-size: 0.82rem; font-weight: 600; margin-top: 8px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 10px 0 16px;
+    }
+    th, td {
+      text-align: left;
+      padding: 7px 10px 7px 0;
+      border-bottom: 1px solid #e0e0e0;
+      vertical-align: top;
+    }
+    th { border-bottom: 2px solid #bbb; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- ==================== STICKY INSTRUMENT & TELEMETRY DOCK ==================== -->
+    <aside class="instrument-dock">
+      <div class="dock-header">
+        <p class="dock-title">Attention Handpan Engine</p>
+        <span class="mono" style="font-size:0.76rem" id="state-badge">STOPPED</span>
+      </div>
+
+      <div class="transport-row">
+        <button id="btn-toggle" type="button">Start Live Synthesis</button>
+        <button id="btn-reseed" type="button" title="Reset memory tape and start a fresh motif">Reset Tape</button>
+      </div>
+
+      <div class="control-grid">
+        <div class="field">
+          <label for="scale-select">Scale / Mode</label>
+          <select id="scale-select"></select>
+        </div>
+        <div class="field">
+          <label for="profile-select">Timbre Profile</label>
+          <select id="profile-select">
+            <optgroup label="Live Web Audio DSP">
+              <option value="stainless" selected>Yishama Stainless (DSP)</option>
+              <option value="ember">Ember (Bright Bloom DSP)</option>
+              <option value="nitrided">Nitrided (Dry DSP)</option>
+              <option value="ceramic">Raw / Ceramic (DSP)</option>
+            </optgroup>
+            <optgroup label="Pre-Generated Studio Banks">
+              <option value="bank:yishama-stainless">Studio Bank: Yishama Stainless</option>
+              <option value="bank:yishama-ember">Studio Bank: Yishama Ember</option>
+              <option value="bank:yishama-nitrided">Studio Bank: Classic Nitrided</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="bpm-range">Tempo: <strong id="bpm-out">84 BPM</strong></label>
+        <input id="bpm-range" type="range" min="54" max="126" step="2" value="84">
+      </div>
+
+      <div class="pan-wrap">
+        <svg id="handpan-svg" viewBox="0 0 340 340" aria-label="Interactive Handpan"></svg>
+        <div class="legend-row">
+          <span>Click any dimple to inject a live note into memory</span>
+        </div>
+        <div class="legend-row">
+          <span>Solid = R/Ding</span>
+          <span>Shaded = L</span>
+          <span>Dashed = 2f₀</span>
+          <span>Rim = Tak/Gu</span>
+        </div>
+      </div>
+
+      <div class="telemetry">
+        <div><span class="k">Steering Source</span><span id="tel-source">Manual</span></div>
+        <div><span class="k">Active Attention</span><span id="tel-attn">25/25/30/20%</span></div>
+        <div><span class="k">Macro / Sentence</span><span id="tel-section">—</span></div>
+        <div><span class="k">Harmony / Grid</span><span id="tel-harm">—</span></div>
+        <div><span class="k">Eff. Temp (τ)</span><span id="tel-temp">—</span></div>
+        <div><span class="k">Gemini Status</span><span id="tel-gemini">Disconnected</span></div>
+      </div>
+    </aside>
+
+    <!-- ==================== MAIN WORKBENCH ==================== -->
+    <main class="doc">
+      <h1>Multi-Tiered Attention &amp; Bias-Vector Note Synthesis</h1>
+      <p class="subtitle">Live note-by-note handpan synthesis driven by four explicit temporal attention heads (Micro, Short, Mid, Long), steerable future-sample bias vectors, and optional real-time steering via the <strong>Gemini Decisions API</strong> (<code>gemini-decision-1</code>, 0 output tokens).</p>
+
+      <nav class="toc">
+        <a href="#sec-attention">I. Multi-Tier Attention Control</a>
+        <a href="#sec-bias">II. Future-Sample Bias Vectors</a>
+        <a href="#sec-gemini">III. Gemini Decisions API Steering</a>
+        <a href="#sec-monitor">IV. Memory Heatmap &amp; Live Decoder</a>
+        <a href="#sec-math">V. Mathematical Architecture</a>
+      </nav>
+
+      <!-- SECTION I: MULTI-TIERED ATTENTION MECHANISM -->
+      <section id="sec-attention">
+        <h2>I. Multi-Tiered Attention Control Surface</h2>
+        <p>Every incoming step queries four temporal context tiers in the rolling memory tape. Tune the attention mixture manually, let the local phrase-aware router shift attention automatically, or delegate real-time steering to <code>gemini-decision-1</code>.</p>
+
+        <div class="bar-row">
+          <span class="label">Control Mode:</span>
+          <button type="button" data-ctrl="manual" class="active">1. Manual Attention</button>
+          <button type="button" data-ctrl="auto">2. Local Self-Attention</button>
+          <button type="button" data-ctrl="gemini">3. Gemini Decisions Live</button>
+          <button type="button" data-ctrl="hybrid">4. Hybrid (Gemini + Manual)</button>
+        </div>
+
+        <div class="bar-row">
+          <span class="label">Attention Presets:</span>
+          <button type="button" data-apreset="balanced">Balanced 4-Tier</button>
+          <button type="button" data-apreset="micro">Micro Zigzag Flow</button>
+          <button type="button" data-apreset="ostinato">Short Ostinato Lock</button>
+          <button type="button" data-apreset="phrase">Mid Phrase Grammar</button>
+          <button type="button" data-apreset="leitmotif">Long Leitmotif Recall</button>
+        </div>
+
+        <!-- Stacked Normalized Attention Distribution Bar -->
+        <div class="attn-stacked" id="attn-stacked" title="Effective normalized attention weights across the 4 temporal tiers">
+          <div class="attn-seg seg-micro" id="seg-micro" style="width:25%">Micro 25%</div>
+          <div class="attn-seg seg-short" id="seg-short" style="width:25%">Short 25%</div>
+          <div class="attn-seg seg-mid"   id="seg-mid"   style="width:30%">Mid 30%</div>
+          <div class="attn-seg seg-long"  id="seg-long"  style="width:20%">Long 20%</div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-title">Manual Attention Head Weights (α)</span>
+              <span class="panel-meta">Auto-normalized Σ α_k = 1</span>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="w-micro">Tier 1: Micro Attention (1–4 steps)</label>
+                <span class="param-val" id="v-w-micro">0.25 (eff 25%)</span>
+              </div>
+              <input id="w-micro" type="range" min="0" max="1" step="0.01" value="0.25">
+              <div class="param-desc">Last 1–4 notes: ergonomic L↔R zigzag, stepwise momentum, local echo.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="w-short">Tier 2: Short Attention (1–2 bars)</label>
+                <span class="param-val" id="v-w-short">0.25 (eff 25%)</span>
+              </div>
+              <input id="w-short" type="range" min="0" max="1" step="0.01" value="0.25">
+              <div class="param-desc">Phase-aligned 8/16-step memory: locks repeating ostinato cells &amp; groove.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="w-mid">Tier 3: Mid Attention (4-bar Sentence)</label>
+                <span class="param-val" id="v-w-mid">0.30 (eff 30%)</span>
+              </div>
+              <input id="w-mid" type="range" min="0" max="1" step="0.01" value="0.30">
+              <div class="param-desc">Sentence role (Antecedent/Consequent), active modal chord &amp; cadential gravity.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="w-long">Tier 4: Long Attention (Macro / DNA)</label>
+                <span class="param-val" id="v-w-long">0.20 (eff 20%)</span>
+              </div>
+              <input id="w-long" type="range" min="0" max="1" step="0.01" value="0.20">
+              <div class="param-desc">Original Bar-1 seed motif DNA, macro section arc &amp; pitch-histogram balance.</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-title">Attention Fusion &amp; Decoder Variants</span>
+              <span class="panel-meta">Combinable mechanisms</span>
+            </div>
+
+            <div class="field" style="margin-bottom:10px">
+              <label for="fusion-select"><strong>Head Fusion Mechanism</strong></label>
+              <select id="fusion-select">
+                <option value="linear" selected>Linear Mixture of Logits (Additive Compromise)</option>
+                <option value="poe">Product of Experts — Sharp Consensus (Multiplicative)</option>
+                <option value="routed">Winner-Take-Most Sharp Routing (Low τ_attn)</option>
+              </select>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-temp">Sampling Temperature (τ)</label>
+                <span class="param-val" id="v-temp">0.48</span>
+              </div>
+              <input id="p-temp" type="range" min="0.12" max="2.0" step="0.02" value="0.48">
+              <div class="param-desc">Lower = crisp argmax commitment; higher = exploratory leaps &amp; color tones.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-density">Rhythmic Density</label>
+                <span class="param-val" id="v-density">0.54</span>
+              </div>
+              <input id="p-density" type="range" min="0.1" max="1" step="0.01" value="0.54">
+              <div class="param-desc">Euclidean accent density <code>E(k,n)</code> and subdivision fill rate.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-perc">Percussive Texture (Tak / Gu / Ghost)</label>
+                <span class="param-val" id="v-perc">0.38</span>
+              </div>
+              <input id="p-perc" type="range" min="0" max="1" step="0.01" value="0.38">
+              <div class="param-desc">Weaves rim slaps, Helmholtz bass thumps, and motoric ghost pulses between notes.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-blend">Gemini Authority Blend (Hybrid Mode)</label>
+                <span class="param-val" id="v-blend">0.70</span>
+              </div>
+              <input id="p-blend" type="range" min="0" max="1" step="0.05" value="0.70">
+              <div class="param-desc">In Hybrid mode, interpolates between manual sliders (0) and Gemini Decisions (1).</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION II: FUTURE SAMPLE STEERING BIAS VECTORS -->
+      <section id="sec-bias">
+        <h2>II. Future-Sample Steering Bias Vectors (<code>b_steer</code>)</h2>
+        <p>Inject additive logit bias directly into the 9-dimensional tone-field space or steer along semantic axes. Watch the live collapsed probability bars respond on the very next eighth-note tick.</p>
+
+        <div class="bar-row">
+          <span class="label">Bias Actions:</span>
+          <button type="button" id="btn-bias-zero">Zero All Biases</button>
+          <button type="button" id="btn-bias-ding">Attract Ding + Fifth</button>
+          <button type="button" id="btn-bias-high">Lift High Rim</button>
+          <button type="button" id="btn-bias-bvi">Harmonic bVI Color</button>
+          <button type="button" id="btn-bias-bvii">Harmonic bVII Tension</button>
+          <button type="button" id="btn-bias-invert">Invert Bias Vector</button>
+        </div>
+
+        <div class="control-grid-3" style="margin-bottom:10px">
+          <div class="field">
+            <label for="bias-strength"><strong>Bias Strength (λ_bias):</strong> <span class="mono" id="v-bias-strength">1.40</span></label>
+            <input id="bias-strength" type="range" min="0" max="3.5" step="0.05" value="1.40">
+          </div>
+          <div class="field">
+            <label for="bias-decay"><strong>Bias Horizon / Decay Mode</strong></label>
+            <select id="bias-decay">
+              <option value="persist" selected>Persistent (Hold Until Changed)</option>
+              <option value="slow">Slow Exponential Decay (~2 Bars)</option>
+              <option value="impulse">Short Impulse Nudge (~4 Steps)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="p-contour"><strong>Semantic Contour Tilt:</strong> <span class="mono" id="v-contour">0.00</span></label>
+            <input id="p-contour" type="range" min="-1" max="1" step="0.05" value="0">
+          </div>
+        </div>
+
+        <div class="control-grid-3" style="margin-bottom:12px">
+          <div class="field">
+            <label for="p-harm-bias"><strong>Harmonic Tension Bias:</strong> <span class="mono" id="v-harm-bias">0.40</span></label>
+            <input id="p-harm-bias" type="range" min="0" max="1" step="0.05" value="0.40">
+          </div>
+          <div class="field">
+            <label for="p-cad-bias"><strong>Cadence Gravity Bias:</strong> <span class="mono" id="v-cad-bias">0.35</span></label>
+            <input id="p-cad-bias" type="range" min="0" max="1" step="0.05" value="0.35">
+          </div>
+          <div class="field">
+            <label for="p-shimmer-bias"><strong>Ornament / 2f₀ Harmonic Bias:</strong> <span class="mono" id="v-shimmer-bias">0.35</span></label>
+            <input id="p-shimmer-bias" type="range" min="0" max="1" step="0.05" value="0.35">
+          </div>
+        </div>
+
+        <!-- 9-Dim Tone Field Bias & Live Probability Grid -->
+        <div class="bias-grid" id="bias-grid"></div>
+      </section>
+
+      <!-- SECTION III: GEMINI DECISIONS API REALTIME STEERING -->
+      <section id="sec-gemini">
+        <h2>III. Gemini Decisions API Realtime Attention Steering</h2>
+        <p>Uses <code>gemini-decision-1</code> via <code>https://esm.sh/@google/genai</code> (<code>v1beta</code>, <code>ai.decisions.create</code>). Because Decisions API evaluates all musical questions in a single forward pass with <strong>0 output tokens</strong> (~250–450 ms), it steers multi-tier attention weights, harmonic gravity, and per-note bias vectors live while Web Audio schedules notes glitch-free.</p>
+
+        <div class="gemini-box">
+          <div class="panel-head" style="margin-bottom:8px">
+            <span class="panel-title">Live Gemini Decisions Connection</span>
+            <span class="status-pill" id="gem-pill">READY (NO KEY)</span>
+          </div>
+
+          <!-- Strict anti-password-manager API Key input (no <form> wrapper) -->
+          <div class="key-row">
+            <input
+              id="gemini-api-key"
+              type="password"
+              name="ephemeral_gemini_decisions_token_field"
+              placeholder="Paste Gemini API Key (held in memory only, never saved)..."
+              autocomplete="new-password"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+            >
+            <button type="button" id="btn-toggle-key">Show</button>
+            <button type="button" id="btn-test-gemini">Ask Gemini Now</button>
+            <button type="button" id="btn-clear-key">Clear</button>
+          </div>
+
+          <div class="control-grid-3" style="margin-bottom:10px">
+            <div class="field">
+              <label for="gem-suite"><strong>Decisions Question Suite</strong></label>
+              <select id="gem-suite">
+                <option value="full" selected>Full Multi-Head (6 Qs: Tier + Chord + 9-Note + Contour + Energy + Cadence)</option>
+                <option value="tiers">Tier &amp; Harmony Only (3 Qs: Faster, lighter context steering)</option>
+                <option value="direct9">Direct 9-Note Probability Vector (9-way Choice + Contour + Cadence)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="gem-cadence"><strong>Realtime Query Cadence</strong></label>
+              <select id="gem-cadence">
+                <option value="4">Every 4 steps (Half-bar — rapid steering)</option>
+                <option value="8" selected>Every 8 steps (1 Bar — recommended)</option>
+                <option value="16">Every 16 steps (2 Bars — economical)</option>
+                <option value="0">Manual Trigger Only ("Ask Gemini Now")</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="gem-goal"><strong>Musical Direction Goal</strong></label>
+              <select id="gem-goal">
+                <option value="story" selected>Lyrical Storytelling Arc (build tension &amp; resolve)</option>
+                <option value="meditative">Deep Meditative Stillness (spacious &amp; hypnotic)</option>
+                <option value="groove">Kinetic Polyrhythmic Groove (avoid monotony)</option>
+                <option value="callresp">Antiphonal Call-and-Response (contrast registers)</option>
+                <option value="modal">Adventurous Modal Departure (explore bVI / bVII / III)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field" style="margin-bottom:8px">
+            <label for="gem-custom-dir"><strong>Optional Custom Steering Note for Gemini Context</strong></label>
+            <input id="gem-custom-dir" type="text" placeholder="e.g., Slowly climb toward a soaring A4 climax, then drop softly to the D3 Ding..." autocomplete="off">
+          </div>
+
+          <div class="decision-cards" id="gem-cards">
+            <div class="d-card">
+              <div class="d-card-title">Attention Tier Probs</div>
+              <div class="d-card-body" id="dc-attn">Waiting for live call…</div>
+            </div>
+            <div class="d-card">
+              <div class="d-card-title">Harmony &amp; Cadence</div>
+              <div class="d-card-body" id="dc-harm">Waiting for live call…</div>
+            </div>
+            <div class="d-card">
+              <div class="d-card-title">Focal Tone Vector (Top 4)</div>
+              <div class="d-card-body" id="dc-note">Waiting for live call…</div>
+            </div>
+            <div class="d-card">
+              <div class="d-card-title">Contour / Energy / Latency</div>
+              <div class="d-card-body" id="dc-meta">0 calls | 0 output tokens</div>
+            </div>
+          </div>
+
+          <details>
+            <summary>Inspect Last Gemini Context Prompt &amp; Raw Decision JSON</summary>
+            <pre class="spec" id="gem-prompt-preview">No Gemini Decisions call made yet.</pre>
+            <pre class="spec" id="gem-json-preview">{}</pre>
+          </details>
+
+          <div class="api-log" id="gem-log">
+            <div>Enter a Gemini API key above and select <strong>Gemini Decisions Live</strong> or <strong>Hybrid</strong> mode (or click <strong>Ask Gemini Now</strong>) to steer live attention &amp; bias vectors.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION IV: LIVE ATTENTION HEATMAP & DECODER -->
+      <section id="sec-monitor">
+        <h2>IV. Rolling Memory Attention Heatmap &amp; Live Decoder</h2>
+        <p>The 32-step memory tape below shades each historical token by its live attention weight <code>w(t, t−Δ)</code> under the active 4-tier distribution. Dark cells are exerting the strongest pull on the next note right now.</p>
+
+        <div class="mem-tape" id="mem-tape"></div>
+
+        <div class="prob-bar">
+          <span><span class="k">Active Rule:</span> <strong id="pb-rule">—</strong></span>
+          <span><span class="k">Top Candidates:</span> <span id="pb-dist">Press Start Live Synthesis</span></span>
+        </div>
+
+        <div id="live-sentence"></div>
+      </section>
+
+      <!-- SECTION V: MATHEMATICAL ARCHITECTURE -->
+      <section id="sec-math">
+        <h2>V. Multi-Tiered Attention &amp; Decisions Steering Model</h2>
+        <pre class="spec">// 1. Four Temporal Attention Heads produce scale-degree logit vectors z_k[0..8]:
+z_micro(j) = ergonomic_zigzag(j; prev_1..4, lastHand) + local_momentum(j)
+z_short(j) = phase_echo(j; memory[t-8], memory[t-16]) + ostinato_gravity(j)
+z_mid(j)   = harmony_pool(j; chord_t) + clause_contour(j; role) + cadential_pull(j)
+z_long(j)  = leitmotif_DNA(j; seed_motif[s]) + pitch_histogram_balance(j; hist_64)
+
+// 2. Head Fusion Variants (α_micro + α_short + α_mid + α_long = 1):
+Linear Mixture : ℓ_attn(j) = Σ_k α_k · z_k(j)
+Product Experts: ℓ_attn(j) = Σ_k α_k · log softmax(z_k / 0.7)(j)
+Sharp Routed   : α'_k = softmax(log(α_k) / 0.25),  ℓ_attn(j) = Σ_k α'_k · z_k(j)
+
+// 3. Future-Sample Bias Vector Injection (Manual + Semantic + Gemini Decisions):
+b_total(j) = b_manual(j) + b_semantic(j; contour, harmony, cadence) + b_gemini(j)
+P(j | t)   = softmax( (ℓ_attn(j) + λ_bias · b_total(j)) / τ )
+
+// 4. Gemini Decisions API Steering (single v1beta/decisions pass, 0 output tokens):
+α_gemini       ← calibrated ChoiceAnswer.probabilities["attention_tier"]
+b_gemini(j)    ← log( ChoiceAnswer.probabilities["focal_note"][j] + ε )
+                 + Σ_C P(chord=C) · 1[j ∈ C] + contour_tilt(ScoreAnswer.score)</pre>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Decision Head</th>
+              <th>API Type</th>
+              <th>Musical Steering Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>attention_tier</code></td><td><code>choice</code> (4)</td><td>Directly sets normalized <code>(α_micro, α_short, α_mid, α_long)</code> attention weights.</td></tr>
+            <tr><td><code>next_harmony</code></td><td><code>choice</code> (6)</td><td>Distributes harmonic chord-tone gravity smoothly across <code>i, III, iv, v, bVI, bVII</code>.</td></tr>
+            <tr><td><code>focal_note</code></td><td><code>choice</code> (9)</td><td>Injects calibrated log-probability vector directly into 9-dim <code>b_gemini[0..8]</code>.</td></tr>
+            <tr><td><code>contour</code></td><td><code>score</code> (0–4)</td><td>Continuous expected register slope steering bass Ding ↔ high rim lift.</td></tr>
+            <tr><td><code>energy</code></td><td><code>score</code> (0–4)</td><td>Steers Euclidean rhythmic density and Tak/Gu/Ghost percussive texture.</td></tr>
+            <tr><td><code>cadence_pull</code></td><td><code>noul</code> (P)</td><td>Calibrated probability of engaging Ding <code>^1</code> cadential gravity &amp; caesura.</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    // =========================================================================
+    // 1. Scales, Pitch Theory & Physical Handpan Geometry
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (Aeolian)',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      },
+      'd-amara': {
+        name: 'D Amara (Celtic Minor)',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        chords: {
+          i:    [0, 1, 3, 5, 7],
+          III:  [1, 2, 5, 7, 8],
+          iv:   [0, 3, 6, 8],
+          v:    [1, 2, 4, 7],
+          bVI:  [2, 5, 7],
+          bVII: [2, 4, 6, 8]
+        }
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (Dorian Pent.)',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        chords: {
+          i:    [0, 2, 3, 5, 7],
+          III:  [2, 3, 4, 7, 8],
+          iv:   [0, 1, 5, 6],
+          v:    [1, 3, 4, 6, 8],
+          bVI:  [2, 4, 5, 7],
+          bVII: [1, 4, 6, 8]
+        }
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (Phrygian Dom.)',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        chords: {
+          i:    [0, 1, 4, 6, 7],
+          III:  [1, 3, 6, 7],
+          iv:   [0, 2, 4, 8],
+          v:    [1, 3, 5, 7],
+          bVI:  [2, 4, 6, 8],
+          bVII: [3, 5, 7]
+        }
+      },
+      'e-sabye': {
+        name: 'E Sabye (Major / Ionian)',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      }
+    };
+
+    const PAN_GEOMETRY = [
+      { cx: 170, cy: 170, rx: 38, ry: 38, rot: 0,   hand: 'R', pan:  0.00 },
+      { cx: 218, cy: 266, rx: 28, ry: 22, rot: -25, hand: 'R', pan:  0.22 },
+      { cx: 122, cy: 266, rx: 28, ry: 22, rot: 25,  hand: 'L', pan: -0.22 },
+      { cx: 274, cy: 208, rx: 25, ry: 20, rot: -68, hand: 'R', pan:  0.34 },
+      { cx: 66,  cy: 208, rx: 25, ry: 20, rot: 68,  hand: 'L', pan: -0.34 },
+      { cx: 274, cy: 132, rx: 23, ry: 18, rot: 68,  hand: 'R', pan:  0.32 },
+      { cx: 66,  cy: 132, rx: 23, ry: 18, rot: -68, hand: 'L', pan: -0.32 },
+      { cx: 218, cy: 74,  rx: 21, ry: 17, rot: 25,  hand: 'R', pan:  0.18 },
+      { cx: 122, cy: 74,  rx: 21, ry: 17, rot: -25, hand: 'L', pan: -0.18 }
+    ];
+
+    // =========================================================================
+    // 2. Yishama-Calibrated Coupled-Bloom Web Audio Engine
+    // =========================================================================
+    const PROFILES = {
+      stainless: { tau1: 0.56, tau2: 0.78, tau3: 1.15, f1Atk: 0.028, f2Bloom: 0.135, f3Bloom: 0.185, oct: 0.48, fifth: 0.30, p4: 0.11, beat: 0.85, skin: 0.14, body: 0.22, brightness: 4400 },
+      ember:     { tau1: 0.48, tau2: 0.74, tau3: 1.25, f1Atk: 0.020, f2Bloom: 0.105, f3Bloom: 0.155, oct: 0.56, fifth: 0.36, p4: 0.16, beat: 0.65, skin: 0.16, body: 0.16, brightness: 5800 },
+      nitrided:  { tau1: 0.36, tau2: 0.44, tau3: 0.55, f1Atk: 0.012, f2Bloom: 0.060, f3Bloom: 0.085, oct: 0.34, fifth: 0.18, p4: 0.06, beat: 0.35, skin: 0.24, body: 0.28, brightness: 3100 },
+      ceramic:   { tau1: 0.30, tau2: 0.32, tau3: 0.35, f1Atk: 0.014, f2Bloom: 0.050, f3Bloom: 0.060, oct: 0.20, fifth: 0.09, p4: 0.03, beat: 0.20, skin: 0.28, body: 0.38, brightness: 2000 }
+    };
+
+    let audioCtx = null, dryGain = null, reverbSend = null, noiseBuffer = null;
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11; comp.ratio.value = 3.5; comp.knee.value = 18;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.80;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createWarmRoomIR(audioCtx, 2.2, 2.9);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.28;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        noiseBuffer = createNoise(audioCtx, 0.35);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createWarmRoomIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const t = i / len;
+          const env = Math.pow(1 - t, decay) * (i < 900 ? 0.65 : 1.0);
+          const w = (Math.random() * 2 - 1) * env;
+          lp = lp * 0.78 + w * 0.22;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    const ENHARMONIC = { 'Db':'C#', 'D#':'Eb', 'Gb':'F#', 'Ab':'G#', 'A#':'Bb' };
+    const studioBanks = new Map(); // bankId -> Map<key, AudioBuffer>
+    let activeBankId = null;
+
+    function canonicalNote(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      return m ? (ENHARMONIC[m[1]] || m[1]) + m[2] : note;
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    }
+
+    async function ensureStudioBank(bankId) {
+      ensureAudio();
+      if (studioBanks.has(bankId)) return studioBanks.get(bankId);
+      try {
+        if (!window.__HANDPAN_BANKS__?.[bankId]) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = `./soundbanks/${bankId}.bank.js`;
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Bank script unavailable'));
+            document.head.appendChild(s);
+          });
+        }
+        const raw = window.__HANDPAN_BANKS__?.[bankId];
+        if (!raw?.samples) return null;
+        const map = new Map();
+        const entries = Object.entries(raw.samples);
+        for (let i = 0; i < entries.length; i += 8) {
+          const sl = entries.slice(i, i + 8);
+          const bufs = await Promise.all(sl.map(([, b64]) => audioCtx.decodeAudioData(b64ToBuf(b64))));
+          bufs.forEach((ab, k) => map.set(sl[k][0], ab));
+        }
+        studioBanks.set(bankId, map);
+        return map;
+      } catch (_) {
+        return null; // graceful fallback to live DSP if standalone
+      }
+    }
+
+    function playStudioBankBuffer(key, when, gainVal, panVal = 0) {
+      if (!activeBankId) return false;
+      const map = studioBanks.get(activeBankId);
+      const ab = map?.get(key);
+      if (!ab) return false;
+      const src = audioCtx.createBufferSource();
+      src.buffer = ab;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(gainVal, when);
+      if (panVal !== 0 && audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = panVal * 0.7;
+        src.connect(g); g.connect(sp); sp.connect(dryGain); sp.connect(reverbSend);
+      } else {
+        src.connect(g); g.connect(dryGain); g.connect(reverbSend);
+      }
+      src.start(when);
+      return true;
+    }
+
+    function scheduleTone(idx, when, opts = {}) {
+      const scale = SCALES[activeScaleKey];
+      const note = scale.notes[idx];
+      if (!note) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      const vel = clamp(opts.vel ?? 0.8, 0.08, 1.0);
+      const type = opts.type ?? 'N';
+
+      if (activeBankId && type !== 'M') {
+        const cNote = canonicalNote(note);
+        const key = type === 'H' ? `${cNote}|H|v0|r0` : `${cNote}|N|v${vel < 0.62 ? 0 : 1}|r0`;
+        const bakedV = type === 'H' ? 0.86 : (vel < 0.62 ? 0.42 : 0.94);
+        const gScale = clamp((vel / bakedV) * (type === 'g' ? 0.60 : 0.92), 0.14, 1.15);
+        if (playStudioBankBuffer(key, t0, gScale, PAN_GEOMETRY[idx]?.pan ?? 0)) return;
+      }
+
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+
+      let t1 = p.tau1 * pitchScale * (isDing ? 1.15 : 1.0);
+      let t2 = p.tau2 * pitchScale * (isDing ? 1.12 : 1.0);
+      let t3 = p.tau3 * pitchScale * (isDing ? 1.15 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { t1 *= 0.45; t2 *= 0.38; t3 *= 0.30; octMul = 0.42; fifthMul = 0.25; }
+      else if (type === 'H') { f0Mul = 0.07; octMul = 1.85; fifthMul = 1.0; t2 *= 1.15; }
+      else if (type === 'M') { t1 *= 0.22; t2 *= 0.18; t3 *= 0.15; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.56, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(10000, p.brightness * (0.65 + 0.50 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(850, cut * 0.52), t0 + t3 * 3.5);
+
+      const panner = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = PAN_GEOMETRY[idx]?.pan ?? 0;
+        vg.connect(lp); lp.connect(panner);
+        panner.connect(dryGain); panner.connect(reverbSend);
+      } else {
+        vg.connect(lp); lp.connect(dryGain); lp.connect(reverbSend);
+      }
+
+      // Yishama coupled-bloom partial helper (delayed bloom peak + T60 tail)
+      function addBloomMode(hz, amp, riseSec, tauSec) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.003 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.05);
+
+        const totalDur = Math.min(5.2, riseSec + tauSec * 5.2);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + riseSec);
+        g.gain.setTargetAtTime(0.0001, t0 + riseSec, tauSec);
+
+        osc.connect(g); g.connect(vg);
+        osc.start(t0);
+        osc.stop(t0 + totalDur);
+      }
+
+      // 1. Fundamental + subtle dual-axis beating pair
+      addBloomMode(freq, 0.60 * f0Mul, p.f1Atk, t1);
+      if (p.beat > 0.05 && f0Mul > 0.2) {
+        addBloomMode(freq + p.beat, 0.22 * f0Mul, p.f1Atk * 1.35, t1 * 0.96);
+      }
+      // 2. Blooming Octave (2f0)
+      addBloomMode(freq * 2.001, p.oct * octMul * (0.55 + 0.55 * vel), p.f2Bloom, t2);
+      // 3. Blooming Compound Fifth (3f0) — rings longer in shimmer tail!
+      addBloomMode(freq * 2.999, p.fifth * fifthMul * (0.45 + 0.65 * vel), p.f3Bloom, t3);
+      // 4. Clean Double Octave (4f0)
+      addBloomMode(freq * 4.001, p.p4 * vel * (isDing ? 1.4 : 0.7), p.f3Bloom * 1.15, t2 * 0.75);
+
+      // 5. Soft woody skin-pad strike transient (5-18ms low-mid, NOT harsh white hiss)
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = isDing ? 420 : 680;
+      bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.skin * vel * (type === 'g' ? 1.3 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(t0); noise.stop(t0 + 0.025);
+
+      // 6. Helmholtz Cavity (~78 Hz) on Ding & low notes
+      if (isDing || idx <= 2) {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(isDing ? 98 : 92, t0);
+        bo.frequency.exponentialRampToValueAtTime(78, t0 + 0.08);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * (isDing ? 1.0 : 0.35), t0 + 0.008);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.24 : 0.12));
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.28);
+      }
+    }
+
+    function scheduleTak(when, vel = 0.8) {
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|TAK', t0, vel * 0.82)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.56, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2650; bp.Q.value = 1.3;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.85, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.036);
+
+      [880, 1620].forEach((hz, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.87, t0 + 0.032);
+        g.gain.setValueAtTime(0.28 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.038);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.042);
+      });
+    }
+
+    function scheduleGu(when, vel = 0.85) {
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|GU', t0, vel * 0.88)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.72, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(118, t0);
+      o.frequency.exponentialRampToValueAtTime(78, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.92, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // =========================================================================
+    // 3. Math & Probabilistic Helpers
+    // =========================================================================
+    function softmax(logits, temp = 1.0) {
+      const tau = Math.max(0.06, temp);
+      let maxL = -Infinity;
+      for (const x of logits) if (x > maxL) maxL = x;
+      let sum = 0;
+      const exps = logits.map(x => {
+        const e = Math.exp((x - maxL) / tau);
+        sum += e;
+        return e;
+      });
+      return exps.map(e => e / (sum || 1));
+    }
+
+    function sampleFromProbs(probs) {
+      let r = Math.random();
+      for (let i = 0; i < probs.length; i++) {
+        r -= probs[i];
+        if (r <= 0) return i;
+      }
+      return probs.length - 1;
+    }
+
+    function sampleWeighted(entries) {
+      const tot = entries.reduce((s, e) => s + e.w, 0);
+      let r = Math.random() * tot;
+      for (const e of entries) { r -= e.w; if (r <= 0) return e.v; }
+      return entries[entries.length - 1].v;
+    }
+
+    function euclideanRhythm(pulses, steps) {
+      const k = clamp(Math.round(pulses), 1, steps);
+      if (k === steps) return Array(steps).fill(1);
+      let pattern = [], counts = [], remainders = [];
+      let divisor = steps - k;
+      remainders.push(k);
+      let level = 0;
+      while (true) {
+        counts.push(Math.floor(divisor / remainders[level]));
+        remainders.push(divisor % remainders[level]);
+        divisor = remainders[level];
+        level++;
+        if (remainders[level] <= 1) break;
+      }
+      counts.push(divisor);
+      function build(lvl) {
+        if (lvl === -1) pattern.push(0);
+        else if (lvl === -2) pattern.push(1);
+        else {
+          for (let i = 0; i < counts[lvl]; i++) build(lvl - 1);
+          if (remainders[lvl] !== 0) build(lvl - 2);
+        }
+      }
+      build(level);
+      const firstOne = pattern.indexOf(1);
+      if (firstOne > 0) pattern = pattern.slice(firstOne).concat(pattern.slice(0, firstOne));
+      return pattern;
+    }
+
+    // =========================================================================
+    // 4. Multi-Tiered Attention State & Future-Sample Bias Vectors
+    // =========================================================================
+    const MACRO_SECTIONS = {
+      INTRO:       { label: 'Intro',       regShift: -0.35, next: [{ v: 'THEME', w: 0.8 }, { v: 'DEVELOPMENT', w: 0.2 }] },
+      THEME:       { label: 'Theme A',     regShift:  0.00, next: [{ v: 'THEME', w: 0.35 }, { v: 'DEVELOPMENT', w: 0.50 }, { v: 'BREAKDOWN', w: 0.15 }] },
+      DEVELOPMENT: { label: 'Lift',        regShift: +0.30, next: [{ v: 'APEX', w: 0.55 }, { v: 'THEME', w: 0.30 }, { v: 'BREAKDOWN', w: 0.15 }] },
+      APEX:        { label: 'Apex',        regShift: +0.55, next: [{ v: 'BREAKDOWN', w: 0.65 }, { v: 'THEME', w: 0.35 }] },
+      BREAKDOWN:   { label: 'Breakdown',   regShift: -0.45, next: [{ v: 'THEME', w: 0.85 }, { v: 'DEVELOPMENT', w: 0.15 }] }
+    };
+
+    const HARMONY_NEXT = {
+      i:    [{ v: 'i', w: 0.28 }, { v: 'bVI', w: 0.28 }, { v: 'III', w: 0.18 }, { v: 'iv', w: 0.16 }, { v: 'bVII', w: 0.10 }],
+      III:  [{ v: 'bVII', w: 0.38 }, { v: 'i', w: 0.26 }, { v: 'bVI', w: 0.20 }, { v: 'v', w: 0.16 }],
+      iv:   [{ v: 'i', w: 0.40 }, { v: 'v', w: 0.30 }, { v: 'bVII', w: 0.20 }, { v: 'bVI', w: 0.10 }],
+      bVI:  [{ v: 'bVII', w: 0.42 }, { v: 'iv', w: 0.28 }, { v: 'III', w: 0.18 }, { v: 'i', w: 0.12 }],
+      bVII: [{ v: 'i', w: 0.55 }, { v: 'III', w: 0.20 }, { v: 'v', w: 0.15 }, { v: 'bVI', w: 0.10 }],
+      v:    [{ v: 'i', w: 0.60 }, { v: 'bVI', w: 0.25 }, { v: 'bVII', w: 0.15 }]
+    };
+
+    const GOAL_TEXT = {
+      story:      'Lyrical storytelling arc: establish a memorable motif, lift into modal tension in bars 2-3, and resolve warmly to Ding on bar 4.',
+      meditative: 'Deep meditative stillness: spacious breathing rests, low-mid warmth, hypnotic gentle repetition, minimal harsh leaps.',
+      groove:     'Kinetic polyrhythmic groove: avoid flat monotony, alternate hands energetically, weave crisp Tak backbeats and upper-rim accents.',
+      callresp:   'Antiphonal call-and-response: contrast low grounded phrases with bright upper-rim answers across consecutive bars.',
+      modal:      'Adventurous modal exploration: favor expressive departures into bVI, III, iv, and bVII over staying on tonic i.'
+    };
+
+    // Control & Steering Parameters
+    const ctrl = {
+      mode: 'manual',          // 'manual' | 'auto' | 'gemini' | 'hybrid'
+      fusion: 'linear',        // 'linear' | 'poe' | 'routed'
+      manualAttn: { micro: 0.25, short: 0.25, mid: 0.30, long: 0.20 },
+      autoAttn:   { micro: 0.25, short: 0.25, mid: 0.30, long: 0.20 },
+      geminiAttn: { micro: 0.20, short: 0.20, mid: 0.40, long: 0.20 },
+      effAttn:    { micro: 0.25, short: 0.25, mid: 0.30, long: 0.20 },
+      temp: 0.48,
+      density: 0.54,
+      perc: 0.38,
+      geminiBlend: 0.70,
+      biasStrength: 1.40,
+      biasDecay: 'persist',    // 'persist' | 'slow' | 'impulse'
+      contourTilt: 0.0,        // -1..+1
+      harmTension: 0.40,       // 0..1
+      cadenceBias: 0.35,       // 0..1
+      shimmerBias: 0.35,       // 0..1
+      manualBias: Array(9).fill(0),   // -3..+3 per tone field
+      geminiBias: Array(9).fill(0),   // derived from Gemini focal_note + harmony
+      geminiChordProbs: null,
+      geminiContour: null,     // -1..+1
+      geminiEnergy: null,      // 0..1
+      geminiCadence: null,     // 0..1
+      lastProbs: Array(9).fill(1 / 9)
+    };
+
+    // Rolling Musical Memory State
+    const state = {
+      macro: 'INTRO',
+      sentenceId: 0,
+      stepsPerBar: 8,
+      totalSteps: 0,
+      totalBars: 0,
+      clauseDefs: [],
+      barChords: [],
+      currentChord: 'i',
+      seedMotif: null,
+      liveBar0Motif: [],
+      memory: [],              // rolling tape of up to 64 past events { stepNum, idx, label, hand, type, chord, barIdx, stepIdx }
+      pitchHist: Array(9).fill(0),
+      lastPitch: 4,
+      lastHand: 'R'
+    };
+
+    // Gemini API Runtime State (in-memory only!)
+    let geminiApiKey = '';
+    let geminiClient = null;
+    let genaiModulePromise = null;
+    let geminiInFlight = false;
+    let geminiCallCount = 0;
+
+    function normalizeWeights(w) {
+      const s = w.micro + w.short + w.mid + w.long;
+      if (s <= 1e-6) return { micro: 0.25, short: 0.25, mid: 0.25, long: 0.25 };
+      return { micro: w.micro / s, short: w.short / s, mid: w.mid / s, long: w.long / s };
+    }
+
+    function computeLocalAutoAttention(barIdx, stepIdx) {
+      // Context-aware local attention router:
+      // Bar 0: lean on Long (seed recall) & Micro (smooth phrasing)
+      // Bar 1: lean on Short (echo Bar 0 ostinato)
+      // Bar 2: lean on Mid (modal departure & lift) + Micro
+      // Bar 3: lean strongly on Mid (cadential resolution) & Long
+      if (barIdx === 0) return normalizeWeights({ micro: 0.28, short: 0.14, mid: 0.22, long: 0.36 });
+      if (barIdx === 1) return normalizeWeights({ micro: 0.22, short: 0.46, mid: 0.20, long: 0.12 });
+      if (barIdx === 2) return normalizeWeights({ micro: 0.30, short: 0.16, mid: 0.42, long: 0.12 });
+      const nearClose = stepIdx >= 5 ? 0.56 : 0.42;
+      return normalizeWeights({ micro: 0.14, short: 0.10, mid: nearClose, long: 1 - 0.24 - nearClose });
+    }
+
+    function getEffectiveAttention(barIdx, stepIdx) {
+      const man = normalizeWeights(ctrl.manualAttn);
+      const aut = computeLocalAutoAttention(barIdx, stepIdx);
+      ctrl.autoAttn = aut;
+      const gem = normalizeWeights(ctrl.geminiAttn);
+
+      if (ctrl.mode === 'manual') return man;
+      if (ctrl.mode === 'auto') return aut;
+      if (ctrl.mode === 'gemini') return geminiCallCount > 0 ? gem : aut;
+      // hybrid
+      const b = geminiCallCount > 0 ? ctrl.geminiBlend : 0;
+      return normalizeWeights({
+        micro: man.micro * (1 - b) + gem.micro * b,
+        short: man.short * (1 - b) + gem.short * b,
+        mid:   man.mid   * (1 - b) + gem.mid   * b,
+        long:  man.long  * (1 - b) + gem.long  * b
+      });
+    }
+
+    // Compute the 4 individual temporal attention head logit vectors z_k[0..8]
+    function computeFourTierLogits(barIdx, stepIdx, grammarMode) {
+      const sc = SCALES[activeScaleKey];
+      const cd = state.clauseDefs[barIdx] || { role: 'idea', dir: 0 };
+      const pool = sc.chords[state.currentChord] || [0, 4, 6];
+      const prefHand = state.lastHand === 'R' ? 'L' : 'R';
+
+      // Extract recent pitched notes for Micro momentum
+      const recentPitched = [];
+      for (let i = state.memory.length - 1; i >= 0 && recentPitched.length < 4; i--) {
+        if (state.memory[i].idx != null) recentPitched.push(state.memory[i].idx);
+      }
+      const prev1 = recentPitched[0] ?? state.lastPitch;
+      const prev2 = recentPitched[1] ?? prev1;
+      const localMom = Math.sign(prev1 - prev2);
+
+      // Phase-aligned Short memory lookups (8 steps ago and 16 steps ago)
+      const lag8  = state.memory.length >= state.stepsPerBar     ? state.memory[state.memory.length - state.stepsPerBar] : null;
+      const lag16 = state.memory.length >= state.stepsPerBar * 2 ? state.memory[state.memory.length - state.stepsPerBar * 2] : null;
+
+      // Long episodic DNA & pitch histogram
+      const dnaNote = state.seedMotif ? state.seedMotif[stepIdx] : null;
+      const histTotal = state.pitchHist.reduce((a, b) => a + b, 0) + 1;
+      const macroShift = MACRO_SECTIONS[state.macro].regShift;
+
+      const zMicro = Array(9).fill(0);
+      const zShort = Array(9).fill(0);
+      const zMid   = Array(9).fill(0);
+      const zLong  = Array(9).fill(0);
+
+      for (let j = 0; j < 9; j++) {
+        // --- TIER 1: MICRO HEAD (last 1-4 steps: ergonomic zigzag + stepwise continuity) ---
+        const dist = Math.abs(j - prev1);
+        zMicro[j] -= 0.48 * Math.abs(dist - 1.5);
+        if (j > 0 && PAN_GEOMETRY[j].hand === prefHand) zMicro[j] += 0.85;
+        if (j === prev1) zMicro[j] -= 1.05;
+        if (localMom !== 0 && Math.sign(j - prev1) === localMom && dist <= 3) zMicro[j] += 0.35;
+        if (j === 0 && grammarMode === 'melody') zMicro[j] -= 0.7;
+
+        // --- TIER 2: SHORT HEAD (1-2 bars: ostinato phase echo & rhythmic cell lock) ---
+        if (lag8 && lag8.idx != null) {
+          zShort[j] += 2.35 * Math.exp(-Math.abs(j - lag8.idx) * 0.9);
+        }
+        if (lag16 && lag16.idx != null) {
+          zShort[j] += 1.25 * Math.exp(-Math.abs(j - lag16.idx) * 0.85);
+        }
+        if (!lag8 && !lag16) {
+          // Before 1 bar exists, softly favor comfortable mid ring
+          zShort[j] += -0.25 * Math.abs(j - 4);
+        }
+
+        // --- TIER 3: MID HEAD (4-bar sentence grammar, modal harmony & cadence) ---
+        zMid[j] += pool.includes(j) ? 1.55 : -0.85;
+        if (cd.dir !== 0 && Math.sign(j - prev1) === cd.dir) zMid[j] += 0.55;
+        if (grammarMode === 'downbeat') {
+          const rootIdx = state.currentChord === 'i' ? 0 : pool[0];
+          zMid[j] += (j === rootIdx) ? 2.4 : -0.4;
+        } else if (grammarMode === 'close-cadence') {
+          zMid[j] += (j === 0) ? 3.1 : (j === 4 ? 1.0 : -0.7);
+        } else if (grammarMode === 'open-cadence') {
+          zMid[j] += (j >= 5) ? 1.65 : -0.5;
+        } else if (j === 0) {
+          zMid[j] -= 1.3;
+        }
+
+        // --- TIER 4: LONG HEAD (seed motif DNA, macro register curve & histogram balance) ---
+        if (dnaNote != null) {
+          zLong[j] += 2.25 * Math.exp(-Math.abs(j - dnaNote) * 0.75);
+        }
+        const normPos = (j - 4) / 4; // -1 (Ding) .. +1 (High rim)
+        zLong[j] += macroShift * normPos * 1.45;
+        // Gently encourage under-represented pitches over long horizon
+        const freqShare = state.pitchHist[j] / histTotal;
+        zLong[j] += (1 / 9 - freqShare) * 3.2;
+      }
+
+      return { zMicro, zShort, zMid, zLong };
+    }
+
+    // Compute per-token attention weights over the rolling memory tape (for the visual heatmap!)
+    function computeMemoryAttentionWeights(alpha) {
+      const n = state.memory.length;
+      const weights = Array(n).fill(0);
+      if (n === 0) return weights;
+      for (let i = 0; i < n; i++) {
+        const lag = n - i; // 1 = most recent
+        let w = 0;
+        if (lag <= 4) w += alpha.micro * Math.exp(-(lag - 1) * 0.55);
+        if (lag === state.stepsPerBar || lag === state.stepsPerBar * 2) w += alpha.short * 1.1;
+        else if (lag > 4 && lag <= 16) w += alpha.short * 0.25;
+        if (lag > 8 && lag <= 32) {
+          const samePhase = (lag % state.stepsPerBar === 0) ? 0.85 : 0.22;
+          w += alpha.mid * samePhase;
+        }
+        if (lag > 24 || i < state.stepsPerBar) {
+          w += alpha.long * (i < state.stepsPerBar ? 0.95 : 0.35);
+        }
+        weights[i] = w;
+      }
+      const maxW = Math.max(...weights, 0.001);
+      return weights.map(w => w / maxW);
+    }
+
+    // Fuse the 4 tier logit vectors + future-sample bias vector into final probabilities
+    function evaluateAttentionDistribution(barIdx, stepIdx, grammarMode) {
+      const sc = SCALES[activeScaleKey];
+      const alpha = getEffectiveAttention(barIdx, stepIdx);
+      ctrl.effAttn = alpha;
+
+      const { zMicro, zShort, zMid, zLong } = computeFourTierLogits(barIdx, stepIdx, grammarMode);
+
+      // Fuse attention heads according to selected variant
+      let attnLogits = Array(9).fill(0);
+      if (ctrl.fusion === 'linear') {
+        for (let j = 0; j < 9; j++) {
+          attnLogits[j] = alpha.micro * zMicro[j] + alpha.short * zShort[j] + alpha.mid * zMid[j] + alpha.long * zLong[j];
+        }
+      } else if (ctrl.fusion === 'poe') {
+        // Product of Experts: weighted sum of log-probabilities
+        const pMicro = softmax(zMicro, 0.72), pShort = softmax(zShort, 0.72), pMid = softmax(zMid, 0.72), pLong = softmax(zLong, 0.72);
+        for (let j = 0; j < 9; j++) {
+          attnLogits[j] =
+            alpha.micro * Math.log(pMicro[j] + 1e-6) +
+            alpha.short * Math.log(pShort[j] + 1e-6) +
+            alpha.mid   * Math.log(pMid[j]   + 1e-6) +
+            alpha.long  * Math.log(pLong[j]  + 1e-6);
+        }
+      } else {
+        // Sharp Routed Attention (sharpen alpha via low temp 0.16)
+        const sharp = softmax([Math.log(alpha.micro + 1e-4), Math.log(alpha.short + 1e-4), Math.log(alpha.mid + 1e-4), Math.log(alpha.long + 1e-4)], 0.16);
+        for (let j = 0; j < 9; j++) {
+          attnLogits[j] = sharp[0] * zMicro[j] + sharp[1] * zShort[j] + sharp[2] * zMid[j] + sharp[3] * zLong[j];
+        }
+      }
+
+      // Compute Future-Sample Bias Vector (Manual + Semantic + Gemini)
+      const useGem = (ctrl.mode === 'gemini' || ctrl.mode === 'hybrid') && geminiCallCount > 0;
+      const gBlend = ctrl.mode === 'gemini' ? 1.0 : (ctrl.mode === 'hybrid' ? ctrl.geminiBlend : 0.0);
+
+      const effContour = (useGem && ctrl.geminiContour != null)
+        ? ctrl.contourTilt * (1 - gBlend) + ctrl.geminiContour * gBlend
+        : ctrl.contourTilt;
+      const effCadence = (useGem && ctrl.geminiCadence != null)
+        ? ctrl.cadenceBias * (1 - gBlend) + ctrl.geminiCadence * gBlend
+        : ctrl.cadenceBias;
+
+      const totalBias = Array(9).fill(0);
+      for (let j = 0; j < 9; j++) {
+        // 1. Direct manual 9-dim tone-field bias
+        let b = ctrl.manualBias[j] * (ctrl.mode === 'gemini' && useGem ? 0.35 : 1.0);
+        // 2. Semantic contour / register tilt (-1 Ding .. +1 High Rim)
+        const pos = (j - 4) / 4;
+        b += effContour * pos * 1.45;
+        // 3. Semantic cadence pull toward Ding (0) and octave tonic (4)
+        if (j === 0) b += (effCadence - 0.35) * (barIdx === 3 ? 2.6 : 1.0);
+        if (j === 4) b += (effCadence - 0.35) * 0.6;
+        // 4. Gemini calibrated focal-note & harmony bias vector
+        if (useGem) {
+          b += ctrl.geminiBias[j] * gBlend;
+        }
+        totalBias[j] = b;
+      }
+
+      const combined = attnLogits.map((l, j) => l + ctrl.biasStrength * totalBias[j]);
+      const probs = softmax(combined, ctrl.temp);
+      ctrl.lastProbs = probs;
+
+      // Apply optional exponential decay to manual bias vector after sampling
+      if (ctrl.biasDecay !== 'persist') {
+        const factor = ctrl.biasDecay === 'impulse' ? 0.72 : 0.91;
+        let changed = false;
+        for (let j = 0; j < 9; j++) {
+          if (Math.abs(ctrl.manualBias[j]) > 0.02) {
+            ctrl.manualBias[j] *= factor;
+            if (Math.abs(ctrl.manualBias[j]) < 0.03) ctrl.manualBias[j] = 0;
+            changed = true;
+          }
+        }
+        if (changed) syncBiasSliders();
+      }
+
+      return { probs, alpha, totalBias };
+    }
+
+    // =========================================================================
+    // 5. Gemini Decisions API Integration (v1beta, 0 output tokens)
+    // =========================================================================
+    async function loadGenAIModule() {
+      if (!genaiModulePromise) {
+        genaiModulePromise = import('https://esm.sh/@google/genai');
+      }
+      return genaiModulePromise;
+    }
+
+    function buildMultiTierContextPrompt(barIdx, stepIdx) {
+      const sc = SCALES[activeScaleKey];
+      const bpm = document.getElementById('bpm-range').value;
+      const goalKey = document.getElementById('gem-goal').value;
+      const customDir = document.getElementById('gem-custom-dir').value.trim();
+
+      const seedStr = state.seedMotif
+        ? state.seedMotif.map(x => x == null ? '·' : sc.notes[x]).join(' ')
+        : 'establishing now';
+
+      const recent16 = state.memory.slice(-16).map(m => m.type === '·' ? '·' : `${m.label}(${m.hand})`).join(' ');
+      const last4 = state.memory.slice(-4).map(m => `${m.label}[${m.hand}]`).join(' -> ') || 'none yet';
+      const pitchCounts = sc.notes.map((n, i) => `${n}:${state.pitchHist[i]}`).join(' ');
+      const cd = state.clauseDefs[barIdx] || { name: 'Clause', role: 'idea' };
+
+      return [
+        `HANDPAN LIVE PERFORMANCE CONTEXT`,
+        `Scale: ${sc.name} (${sc.notes.map((n, i) => `${n}=^${sc.degrees[i]}`).join(', ')}) | Tempo: ${bpm} BPM`,
+        `Musical Goal: ${GOAL_TEXT[goalKey]}${customDir ? ' User direction: ' + customDir : ''}`,
+        `[LONG CONTEXT — Macro & Leitmotif]`,
+        `Section: ${MACRO_SECTIONS[state.macro].label} (Total Bar ${state.totalBars + 1}, Sentence #${state.sentenceId}).`,
+        `Bar-1 Seed Motif DNA: ${seedStr}. Cumulative pitch counts: ${pitchCounts}.`,
+        `[MID CONTEXT — Current 4-Bar Sentence]`,
+        `Active Clause: ${cd.name} (Bar ${barIdx + 1}/4, role=${cd.role}). Bar chords so far: ${state.barChords.join(' -> ') || 'i'}.`,
+        `Last 2 bars (16 steps): ${recent16 || 'opening silence'}`,
+        `[SHORT / MICRO CONTEXT — Immediate Transition]`,
+        `Last 4 steps: ${last4}. Next step position: Bar ${barIdx + 1} step ${stepIdx + 1}/${state.stepsPerBar}.`,
+        `Last pitched note: ${sc.notes[state.lastPitch]} (^${sc.degrees[state.lastPitch]}), Last hand: ${state.lastHand}.`
+      ].join('\n');
+    }
+
+    function buildDecisionQuestions(suite) {
+      const sc = SCALES[activeScaleKey];
+      const noteCriteria = Object.fromEntries(
+        sc.notes.map((n, i) => [`n${i}`, `Pull upcoming melody toward ${n} (${i === 0 ? 'Ding ' : ''}^${sc.degrees[i]}, ${PAN_GEOMETRY[i].hand} hand)`])
+      );
+
+      const qAttn = {
+        type: 'choice',
+        instructions: 'Distribute attention across the 4 temporal context horizons to best shape the next 4-8 handpan steps.',
+        criteria: {
+          micro: 'Last 1-4 steps: smooth L/R zigzag sticking, stepwise momentum, immediate micro-echo',
+          short: 'Last 1-2 bars: repeat and lock into the recent ostinato rhythmic-melodic cell',
+          mid:   '4-bar sentence grammar & harmony: drive chord progression, call-and-response, phrase cadence',
+          long:  'Macro arc & original seed motif DNA: thematic recall, register contrast, large-scale narrative'
+        }
+      };
+
+      const qHarmony = {
+        type: 'choice',
+        instructions: 'Which modal harmony should anchor the upcoming steps?',
+        criteria: {
+          i:    `Tonic home (${sc.chords.i.map(i => sc.notes[i]).join(',')}) — grounded, resolved`,
+          III:  `Relative bright lift (${sc.chords.III.map(i => sc.notes[i]).join(',')}) — open, warm`,
+          iv:   `Subdominant depth (${sc.chords.iv.map(i => sc.notes[i]).join(',')}) — contemplative`,
+          bVI:  `Emotional departure (${sc.chords.bVI.map(i => sc.notes[i]).join(',')}) — poignant lift`,
+          bVII: `Modal tension (${sc.chords.bVII.map(i => sc.notes[i]).join(',')}) — forward drive`,
+          v:    `Dominant suspension (${sc.chords.v.map(i => sc.notes[i]).join(',')}) — poised to resolve`
+        }
+      };
+
+      const qFocalNote = {
+        type: 'choice',
+        instructions: `Which tone field on the ${sc.name} handpan should receive the strongest melodic pull over the next steps?`,
+        criteria: noteCriteria
+      };
+
+      const qContour = {
+        type: 'score',
+        instructions: 'Rate the ideal melodic register direction over the next phrase.',
+        criteria: [
+          '0: Strongly descend toward the Ding tonic floor',
+          '1: Gently step downward toward mid-low register',
+          '2: Hover and weave around the current register',
+          '3: Gently climb upward in pitch',
+          '4: Lift boldly toward the upper rim notes'
+        ]
+      };
+
+      const qEnergy = {
+        type: 'score',
+        instructions: 'Rate the ideal rhythmic density and percussive groove intensity (Tak/Gu/ghost notes).',
+        criteria: [
+          '0: Sparse meditative stillness with breathing rests',
+          '1: Gentle flowing pulse, light ghost notes',
+          '2: Balanced melodic groove',
+          '3: Active syncopated groove with crisp Tak backbeats',
+          '4: High-energy kinetic cascades and rapid alternation'
+        ]
+      };
+
+      const qCadence = {
+        type: 'noul',
+        instructions: `Should the engine apply strong cadential resolution gravity toward the tonic Ding (${sc.notes[0]}) now?`,
+        criteria: {
+          true_description: `Phrase is closing and needs grounding resolution to ${sc.notes[0]}`,
+          false_description: 'Phrase should remain open, moving, or exploring non-tonic tones'
+        }
+      };
+
+      if (suite === 'tiers') return { attention_tier: qAttn, next_harmony: qHarmony, cadence_pull: qCadence };
+      if (suite === 'direct9') return { focal_note: qFocalNote, contour: qContour, cadence_pull: qCadence };
+      return {
+        attention_tier: qAttn,
+        next_harmony: qHarmony,
+        focal_note: qFocalNote,
+        contour: qContour,
+        energy: qEnergy,
+        cadence_pull: qCadence
+      };
+    }
+
+    function appendGeminiLog(msg) {
+      const log = document.getElementById('gem-log');
+      const div = document.createElement('div');
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      log.prepend(div);
+      while (log.children.length > 14) log.removeChild(log.lastChild);
+    }
+
+    async function queryGeminiDecisions(barIdx, stepIdx) {
+      if (!geminiApiKey) {
+        setGeminiPill('NO API KEY', 'err');
+        appendGeminiLog('Enter your Gemini API key to call gemini-decision-1.');
+        return;
+      }
+      if (geminiInFlight) return;
+      geminiInFlight = true;
+      setGeminiPill('QUERYING…', '');
+
+      const suite = document.getElementById('gem-suite').value;
+      const inputPrompt = buildMultiTierContextPrompt(barIdx, stepIdx);
+      const questions = buildDecisionQuestions(suite);
+      document.getElementById('gem-prompt-preview').textContent = inputPrompt;
+
+      const t0 = performance.now();
+      try {
+        const { GoogleGenAI } = await loadGenAIModule();
+        if (!geminiClient) {
+          geminiClient = new GoogleGenAI({ apiKey: geminiApiKey, apiVersion: 'v1beta' });
+        }
+        const res = await geminiClient.decisions.create({
+          model: 'gemini-decision-1',
+          input: inputPrompt,
+          questions
+        });
+        const latencyMs = Math.round(performance.now() - t0);
+        geminiCallCount++;
+
+        applyGeminiDecisionResponse(res, latencyMs);
+        document.getElementById('gem-json-preview').textContent = JSON.stringify(res.answers || res, null, 2);
+        setGeminiPill(`LIVE (${latencyMs}ms)`, 'ok');
+        document.getElementById('tel-gemini').textContent = `OK ${latencyMs}ms (#${geminiCallCount})`;
+      } catch (err) {
+        const msg = err?.message || String(err);
+        setGeminiPill('ERROR', 'err');
+        document.getElementById('tel-gemini').textContent = 'Error';
+        appendGeminiLog(`API error: ${msg}`);
+      } finally {
+        geminiInFlight = false;
+      }
+    }
+
+    function applyGeminiDecisionResponse(res, latencyMs) {
+      const ans = res.answers || {};
+      const sc = SCALES[activeScaleKey];
+
+      // 1. Attention tier probabilities -> smooth update of ctrl.geminiAttn
+      if (ans.attention_tier?.probabilities) {
+        const p = ans.attention_tier.probabilities;
+        const smooth = 0.65; // smooth EMA transition so audio never lurches
+        ctrl.geminiAttn = normalizeWeights({
+          micro: ctrl.geminiAttn.micro * (1 - smooth) + (p.micro ?? 0.25) * smooth,
+          short: ctrl.geminiAttn.short * (1 - smooth) + (p.short ?? 0.25) * smooth,
+          mid:   ctrl.geminiAttn.mid   * (1 - smooth) + (p.mid   ?? 0.25) * smooth,
+          long:  ctrl.geminiAttn.long  * (1 - smooth) + (p.long  ?? 0.25) * smooth
+        });
+        document.getElementById('dc-attn').textContent =
+          `μ:${Math.round((p.micro||0)*100)}% S:${Math.round((p.short||0)*100)}% M:${Math.round((p.mid||0)*100)}% L:${Math.round((p.long||0)*100)}% (win: ${ans.attention_tier.choice})`;
+      }
+
+      // 2. Build 9-dim Gemini steering bias vector from focal_note + next_harmony
+      const newBias = Array(9).fill(0);
+      if (ans.focal_note?.probabilities) {
+        const np = ans.focal_note.probabilities;
+        // Center log-probabilities around mean so total bias is zero-sum
+        const logs = [];
+        for (let i = 0; i < 9; i++) logs.push(Math.log((np[`n${i}`] ?? 0.02) + 0.015));
+        const meanL = logs.reduce((a, b) => a + b, 0) / 9;
+        for (let i = 0; i < 9; i++) newBias[i] += clamp((logs[i] - meanL) * 0.95, -2.0, 2.2);
+
+        const sorted = Object.entries(np).sort((a, b) => b[1] - a[1]).slice(0, 4);
+        document.getElementById('dc-note').textContent =
+          sorted.map(([k, v]) => `${sc.notes[+k.slice(1)]}:${Math.round(v * 100)}%`).join(' | ');
+      }
+
+      if (ans.next_harmony?.probabilities) {
+        const hp = ans.next_harmony.probabilities;
+        ctrl.geminiChordProbs = hp;
+        // Soft harmonic bias across all 9 notes weighted by chord probabilities
+        for (const [chordName, prob] of Object.entries(hp)) {
+          const pool = sc.chords[chordName];
+          if (!pool) continue;
+          for (const idx of pool) newBias[idx] += prob * 1.15;
+        }
+        // Center harmonic bias
+        const mH = newBias.reduce((a, b) => a + b, 0) / 9;
+        for (let i = 0; i < 9; i++) newBias[i] -= mH * 0.5;
+
+        const topCh = Object.entries(hp).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const cadTxt = ans.cadence_pull ? ` | Cad:${Math.round(ans.cadence_pull.noul * 100)}%` : '';
+        document.getElementById('dc-harm').textContent =
+          topCh.map(([c, v]) => `${c}:${Math.round(v * 100)}%`).join(' ') + cadTxt;
+      } else if (ans.cadence_pull) {
+        document.getElementById('dc-harm').textContent = `Cadence pull: ${Math.round(ans.cadence_pull.noul * 100)}%`;
+      }
+
+      ctrl.geminiBias = newBias;
+
+      // 3. Semantic continuous scores
+      if (ans.contour?.score != null) {
+        ctrl.geminiContour = clamp((ans.contour.score - 2.0) / 2.0, -1, 1);
+      }
+      if (ans.energy?.score != null) {
+        ctrl.geminiEnergy = clamp(ans.energy.score / 4.0, 0, 1);
+      }
+      if (ans.cadence_pull?.noul != null) {
+        ctrl.geminiCadence = ans.cadence_pull.noul;
+      }
+
+      const inTok = res.usage?.total_input_tokens ?? '?';
+      const outTok = res.usage?.total_output_tokens ?? 0;
+      const cStr = ans.contour ? `Cnt:${ans.contour.score.toFixed(1)}/4` : '';
+      const eStr = ans.energy ? ` Eng:${ans.energy.score.toFixed(1)}/4` : '';
+      document.getElementById('dc-meta').textContent = `${cStr}${eStr} | ${latencyMs}ms (${inTok}in/${outTok}out)`;
+
+      appendGeminiLog(`#${geminiCallCount} (${latencyMs}ms): tier=${ans.attention_tier?.choice ?? '-'} chord=${ans.next_harmony?.choice ?? '-'} focal=${ans.focal_note ? sc.notes[+ans.focal_note.choice.slice(1)] : '-'} cad=${ans.cadence_pull ? Math.round(ans.cadence_pull.noul*100)+'%' : '-'}`);
+    }
+
+    function setGeminiPill(text, cls) {
+      const el = document.getElementById('gem-pill');
+      el.textContent = text;
+      el.className = 'status-pill' + (cls ? ' ' + cls : '');
+    }
+
+    // =========================================================================
+    // 6. Sentence Scaffold & Step-by-Step Realtime Sampler
+    // =========================================================================
+    function initNewSentenceScaffold(renderNow = true) {
+      if (state.sentenceId === 0) state.macro = 'INTRO';
+      else if (Math.random() < 0.55) state.macro = sampleWeighted(MACRO_SECTIONS[state.macro].next);
+
+      state.sentenceId++;
+      state.stepsPerBar = 8;
+      state.barChords = [];
+      state.liveBar0Motif = Array(state.stepsPerBar).fill(null);
+
+      state.clauseDefs = [
+        { name: 'Clause 1 — Basic Idea',      role: 'idea',     dir: +1 },
+        { name: 'Clause 2 — Echo / Lift',     role: 'var',      dir: +1 },
+        { name: 'Clause 3 — Continuation',    role: 'cont',     dir:  0 },
+        { name: 'Clause 4 — Cadential Close', role: 'cadence',  dir: -1 }
+      ];
+      if (renderNow) renderEmptyScaffold();
+    }
+
+    function enterBar(barIdx) {
+      const useGem = (ctrl.mode === 'gemini' || ctrl.mode === 'hybrid') && ctrl.geminiChordProbs;
+      if (useGem && (ctrl.mode === 'gemini' || Math.random() < ctrl.geminiBlend)) {
+        const entries = Object.entries(ctrl.geminiChordProbs).map(([v, w]) => ({ v, w }));
+        state.currentChord = sampleWeighted(entries);
+      } else if (barIdx === 0) {
+        state.currentChord = 'i';
+      } else if (barIdx === 3 && Math.random() < 0.72 + ctrl.cadenceBias * 0.22) {
+        state.currentChord = 'i';
+      } else if (Math.random() > ctrl.harmTension * 1.1) {
+        state.currentChord = 'i';
+      } else {
+        const cands = HARMONY_NEXT[state.currentChord].map(e => ({
+          v: e.v,
+          w: e.v === 'i' ? e.w * (1.2 - ctrl.harmTension * 0.7) : e.w * (0.6 + ctrl.harmTension)
+        }));
+        state.currentChord = sampleWeighted(cands);
+      }
+      state.barChords[barIdx] = state.currentChord;
+
+      if (barIdx === 1 && !state.seedMotif && state.liveBar0Motif.some(x => x !== null)) {
+        state.seedMotif = [...state.liveBar0Motif];
+      }
+    }
+
+    function recordMemory(ev, barIdx, stepIdx) {
+      state.memory.push({
+        stepNum: state.totalSteps,
+        idx: ev.idx ?? (ev.notes ? ev.notes[0] : null),
+        label: ev.label,
+        hand: ev.hand,
+        type: ev.type,
+        chord: state.currentChord,
+        barIdx,
+        stepIdx
+      });
+      if (state.memory.length > 64) state.memory.shift();
+      if (ev.idx != null) state.pitchHist[ev.idx]++;
+      else if (ev.notes) state.pitchHist[ev.notes[0]]++;
+    }
+
+    function sampleStepRealtime(barIdx, stepIdx) {
+      const sc = SCALES[activeScaleKey];
+      const cd = state.clauseDefs[barIdx];
+      const useGem = (ctrl.mode === 'gemini' || ctrl.mode === 'hybrid') && geminiCallCount > 0;
+      const gBlend = ctrl.mode === 'gemini' ? 1.0 : (ctrl.mode === 'hybrid' ? ctrl.geminiBlend : 0.0);
+
+      const effDens = (useGem && ctrl.geminiEnergy != null)
+        ? clamp(ctrl.density * (1 - gBlend) + (0.22 + ctrl.geminiEnergy * 0.68) * gBlend, 0.12, 0.96)
+        : ctrl.density;
+      const effPerc = (useGem && ctrl.geminiEnergy != null)
+        ? clamp(ctrl.perc * (1 - gBlend) + (0.12 + ctrl.geminiEnergy * 0.70) * gBlend, 0, 0.95)
+        : ctrl.perc;
+
+      const pulses = clamp(Math.round(2 + effDens * (state.stepsPerBar - 3)), 2, state.stepsPerBar - 1);
+      const euclid = euclideanRhythm(pulses, state.stepsPerBar);
+      const isAccent = euclid[stepIdx] === 1;
+      const isLast = stepIdx === state.stepsPerBar - 1;
+      const isPenult = stepIdx === state.stepsPerBar - 2;
+      const prefHand = state.lastHand === 'R' ? 'L' : 'R';
+
+      // Trigger async Gemini Decisions steering on cadence boundary (non-blocking!)
+      const cadence = parseInt(document.getElementById('gem-cadence').value, 10);
+      if ((ctrl.mode === 'gemini' || ctrl.mode === 'hybrid') && geminiApiKey && cadence > 0 && (state.totalSteps % cadence === 0)) {
+        queryGeminiDecisions(barIdx, stepIdx);
+      }
+
+      // Case A: Bar 4 Final Caesura
+      if (cd.role === 'cadence' && isLast) {
+        const restP = clamp(0.75 + ctrl.cadenceBias * 0.20 - effDens * 0.15, 0.40, 0.95);
+        const evalRes = evaluateAttentionDistribution(barIdx, stepIdx, 'close-cadence');
+        if (Math.random() < restP) {
+          const step = { type: '·', label: '·', hand: '-', vel: 0, accented: false, deg: '' };
+          return { step, rule: 'Cadential Caesura (Rest)', evalRes, pulses };
+        }
+        const idx = sampleFromProbs(evalRes.probs);
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        const step = { type: 'H', idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.54, accented: false };
+        return { step, rule: 'Cadential Harmonic Tail', evalRes, pulses };
+      }
+
+      // Case B: Penultimate Cadential Resolution
+      if (cd.role === 'cadence' && isPenult) {
+        const evalRes = evaluateAttentionDistribution(barIdx, stepIdx, 'close-cadence');
+        const idx = sampleFromProbs(evalRes.probs);
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        const step = { type: idx === 0 ? 'D' : 'N', idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.92, accented: true };
+        return { step, rule: 'Attention Cadential Resolution', evalRes, pulses };
+      }
+
+      // Case C: Downbeat Anchor
+      if (stepIdx === 0) {
+        const evalRes = evaluateAttentionDistribution(barIdx, stepIdx, 'downbeat');
+        const idx = sampleFromProbs(evalRes.probs);
+        if (barIdx === 0) state.liveBar0Motif[0] = idx;
+        const pool = sc.chords[state.currentChord] || [0, 4, 6];
+        if (Math.random() < ctrl.shimmerBias * 0.45 && pool.length >= 2) {
+          const top = pool[pool.length - 1];
+          state.lastPitch = top; state.lastHand = 'R';
+          const step = { type: '~', notes: [idx, top], label: `${sc.notes[idx]}~${sc.notes[top]}`, deg: `^${sc.degrees[idx]}+^${sc.degrees[top]}`, hand: 'L+R', vel: 0.88, accented: true };
+          return { step, rule: `Downbeat Rolled Dyad (${state.currentChord})`, evalRes, pulses };
+        }
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        const step = { type: idx === 0 ? 'D' : 'N', idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.90, accented: true };
+        return { step, rule: `Downbeat Attention Sample (${state.currentChord})`, evalRes, pulses };
+      }
+
+      // Case D: Euclidean Accent -> Attention-Steered Pitch
+      if (isAccent) {
+        const gMode = (barIdx === 1 && isLast) ? 'open-cadence' : 'melody';
+        const evalRes = evaluateAttentionDistribution(barIdx, stepIdx, gMode);
+        const idx = sampleFromProbs(evalRes.probs);
+        if (barIdx === 0) state.liveBar0Motif[stepIdx] = idx;
+
+        let evType = 'N';
+        if (idx >= 5 && Math.random() < ctrl.shimmerBias * 0.34) evType = 'H';
+        else if (Math.random() < effPerc * 0.14) evType = 'M';
+
+        state.lastPitch = idx; state.lastHand = PAN_GEOMETRY[idx].hand;
+        const step = { type: evType, idx, label: sc.notes[idx], deg: '^' + sc.degrees[idx], hand: state.lastHand, vel: 0.78 + Math.random() * 0.14, accented: true };
+        return { step, rule: `Attention Sample E(${pulses},${state.stepsPerBar})[${stepIdx}]`, evalRes, pulses };
+      }
+
+      // Case E: Unaccented Subdivision (Tak / Gu / Ghost / Rest)
+      const evalRes = evaluateAttentionDistribution(barIdx, stepIdx, 'melody');
+      const pTak = (stepIdx === 4 ? 0.80 : 0.12) * effPerc;
+      const pGu = (stepIdx === 2 || stepIdx === 5 ? 0.32 : 0.06) * effPerc;
+      const pGhost = 0.62 * effPerc + 0.32 * effDens;
+      const pRest = Math.max(0.10, 1.15 - effPerc * 0.85 - effDens * 0.65);
+
+      const evChoice = sampleWeighted([
+        { v: 'T', w: pTak }, { v: 'G', w: pGu }, { v: 'g', w: pGhost }, { v: '·', w: pRest }
+      ]);
+
+      if (evChoice === 'T') {
+        return { step: { type: 'T', label: 'Tak', deg: 'rim', hand: prefHand, vel: 0.72 + effPerc * 0.18, accented: false }, rule: 'Subdivision → Tak', evalRes, pulses };
+      }
+      if (evChoice === 'G') {
+        return { step: { type: 'G', label: 'Gu', deg: 'cav', hand: 'L', vel: 0.78, accented: false }, rule: 'Subdivision → Gu', evalRes, pulses };
+      }
+      if (evChoice === 'g') {
+        const gIdx = sampleFromProbs(evalRes.probs);
+        state.lastHand = prefHand;
+        return { step: { type: 'g', idx: gIdx, label: sc.notes[gIdx], deg: 'g', hand: prefHand, vel: 0.22 + Math.random() * 0.10, accented: false }, rule: 'Subdivision → Ghost Pulse', evalRes, pulses };
+      }
+      return { step: { type: '·', label: '·', hand: '-', vel: 0, accented: false, deg: '' }, rule: 'Subdivision → Rest', evalRes, pulses };
+    }
+
+    // =========================================================================
+    // 7. Two-Clock Web Audio Lookahead Scheduler
+    // =========================================================================
+    let isRunning = false, schedulerTimer = null;
+    let nextStepTime = 0, curBar = 0, curStep = 0;
+
+    function getEighthSec() {
+      return (60 / parseInt(document.getElementById('bpm-range').value, 10)) / 2;
+    }
+
+    function startStream() {
+      ensureAudio();
+      if (isRunning) return;
+      isRunning = true;
+      document.getElementById('btn-toggle').textContent = 'Pause Stream';
+      document.getElementById('btn-toggle').classList.add('active');
+      document.getElementById('state-badge').textContent = 'LIVE';
+
+      if (state.sentenceId === 0) {
+        initNewSentenceScaffold(true);
+        curBar = 0; curStep = 0;
+      }
+      nextStepTime = audioCtx.currentTime + 0.04;
+      schedulerTimer = setInterval(schedulerTick, 25);
+    }
+
+    function stopStream() {
+      isRunning = false;
+      if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
+      document.getElementById('btn-toggle').textContent = 'Start Live Synthesis';
+      document.getElementById('btn-toggle').classList.remove('active');
+      document.getElementById('state-badge').textContent = 'PAUSED';
+    }
+
+    function schedulerTick() {
+      if (!isRunning) return;
+      const lookahead = 0.11;
+
+      while (nextStepTime < audioCtx.currentTime + lookahead) {
+        let isNewSentence = false;
+        if (curBar === 0 && curStep === 0 && state.barChords.length === 4) {
+          initNewSentenceScaffold(false);
+          isNewSentence = true;
+        }
+        if (curStep === 0) enterBar(curBar);
+
+        const sampled = sampleStepRealtime(curBar, curStep);
+        const st = sampled.step;
+        recordMemory(st, curBar, curStep);
+
+        const snapBar = curBar, snapStep = curStep;
+        const snapChord = state.currentChord;
+        const snapRole = state.clauseDefs[curBar].role;
+        const snapClauseDefs = isNewSentence ? state.clauseDefs.map(c => ({ ...c })) : null;
+        const snapAlpha = { ...sampled.evalRes.alpha };
+        const snapProbs = [...sampled.evalRes.probs];
+        const snapMemSnap = state.memory.slice(-32);
+        const snapMemWeights = computeMemoryAttentionWeights(snapAlpha).slice(-32);
+        const snapMacro = MACRO_SECTIONS[state.macro].label;
+        const snapSentId = state.sentenceId;
+
+        const playAt = Math.max(audioCtx.currentTime + 0.004, nextStepTime);
+        if (st.type === 'T') scheduleTak(playAt, st.vel);
+        else if (st.type === 'G') scheduleGu(playAt, st.vel);
+        else if (st.type === '~' && st.notes) {
+          scheduleTone(st.notes[0], playAt, { vel: st.vel * 0.88, type: 'N' });
+          scheduleTone(st.notes[1], playAt + 0.032, { vel: st.vel, type: 'N' });
+        } else if (st.idx !== undefined && st.type !== '·') {
+          scheduleTone(st.idx, playAt, { vel: st.vel, type: st.type });
+        }
+
+        const uiDelay = Math.max(0, (playAt - audioCtx.currentTime) * 1000);
+        setTimeout(() => {
+          if (!isRunning) return;
+          if (snapClauseDefs) renderEmptyScaffold(snapClauseDefs);
+          if (snapStep === 0) {
+            const metaEl = document.getElementById(`clause-meta-${snapBar}`);
+            if (metaEl) metaEl.textContent = `Harmony: ${snapChord} | Role: ${snapRole}`;
+          }
+          fillAndHighlightCell(snapBar, snapStep, st);
+          updateAttentionVisuals(snapAlpha, snapProbs);
+          renderMemoryHeatmap(snapMemSnap, snapMemWeights);
+
+          const sc = SCALES[activeScaleKey];
+          const top4 = snapProbs.map((p, i) => ({ i, p })).sort((a, b) => b.p - a.p).slice(0, 4);
+          document.getElementById('pb-rule').textContent = sampled.rule;
+          document.getElementById('pb-dist').textContent = top4.map(d => `${sc.notes[d.i]} ${Math.round(d.p * 100)}%`).join(' | ');
+          document.getElementById('tel-section').textContent = `${snapMacro} / #${snapSentId}`;
+          document.getElementById('tel-harm').textContent = `${snapChord} | E(${sampled.pulses},8)`;
+          document.getElementById('tel-temp').textContent = `τ = ${ctrl.temp.toFixed(2)}`;
+
+          if (st.type === 'T' || st.type === 'G') flashRim(160);
+          else if (st.type === '~' && st.notes) {
+            flashField(st.notes[0], 'active-L', 200);
+            setTimeout(() => flashField(st.notes[1], 'active-R', 220), 32);
+          } else if (st.idx !== undefined && st.type !== '·') {
+            const cls = st.type === 'H' ? 'active-H' : (st.hand === 'L' ? 'active-L' : 'active-R');
+            flashField(st.idx, cls, st.type === 'g' ? 115 : 210);
+          }
+        }, uiDelay);
+
+        nextStepTime += getEighthSec();
+        state.totalSteps++;
+        curStep++;
+        if (curStep >= state.stepsPerBar) {
+          curStep = 0;
+          curBar++;
+          state.totalBars++;
+          if (curBar >= 4) curBar = 0;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 8. UI Rendering: SVG Handpan, 9-Dim Bias Vector, Attention Bar, Memory Tape
+    // =========================================================================
+    let activeScaleKey = 'd-kurd';
+    let activeProfileKey = 'stainless';
+
+    function renderHandpanSVG() {
+      const svg = document.getElementById('handpan-svg');
+      const sc = SCALES[activeScaleKey];
+      svg.innerHTML = '';
+      const ns = 'http://www.w3.org/2000/svg';
+      function el(tag, attrs, parent) {
+        const node = document.createElementNS(ns, tag);
+        Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+        if (parent) parent.appendChild(node);
+        return node;
+      }
+
+      el('circle', { cx: 170, cy: 170, r: 158, fill: '#fff', stroke: '#333', 'stroke-width': 2.5, class: 'rim-ring' }, svg);
+      el('circle', { cx: 170, cy: 170, r: 148, fill: 'none', stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
+      el('line', { x1: 170, y1: 18, x2: 170, y2: 322, stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '3 5' }, svg);
+
+      PAN_GEOMETRY.forEach((geo, idx) => {
+        const g = el('g', { class: 'tone-field', 'data-idx': idx, transform: `translate(${geo.cx}, ${geo.cy})` }, svg);
+        if (idx === 0) {
+          el('circle', { cx: 0, cy: 0, r: geo.rx, fill: '#fff', stroke: '#111', 'stroke-width': 1.8 }, g);
+          el('circle', { cx: 0, cy: 0, r: 12, fill: 'none', stroke: '#ccc', 'stroke-width': 1 }, g);
+        } else {
+          el('ellipse', { cx: 0, cy: 0, rx: geo.rx, ry: geo.ry, transform: `rotate(${geo.rot})`, fill: '#fff', stroke: '#555', 'stroke-width': 1.3 }, g);
+        }
+        const nt = el('text', { x: 0, y: -1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#111', 'font-size': idx === 0 ? 15 : 12, 'font-weight': 700, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }, g);
+        nt.textContent = sc.notes[idx];
+        const dt = el('text', { x: 0, y: 12, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#555', 'font-size': 9.5, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }, g);
+        dt.textContent = idx === 0 ? 'DING ^1' : `^${sc.degrees[idx]} (${geo.hand})`;
+
+        g.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          ensureAudio();
+          scheduleTone(idx, audioCtx.currentTime, { vel: 0.86, type: idx === 0 ? 'D' : 'N' });
+          flashField(idx, geo.hand === 'L' ? 'active-L' : 'active-R', 210);
+          // Also inject user-played note directly into the attention memory tape!
+          state.lastPitch = idx;
+          state.lastHand = geo.hand;
+          recordMemory({ type: idx === 0 ? 'D' : 'N', idx, label: sc.notes[idx], hand: geo.hand }, curBar, curStep);
+          const ev = evaluateAttentionDistribution(curBar, curStep, 'melody');
+          updateAttentionVisuals(ev.alpha, ev.probs);
+          renderMemoryHeatmap(state.memory.slice(-32), computeMemoryAttentionWeights(ev.alpha).slice(-32));
+        });
+      });
+    }
+
+    function flashField(idx, cls, dur = 200) {
+      const el = document.querySelector(`.tone-field[data-idx="${idx}"]`);
+      if (!el) return;
+      el.classList.remove('active-R', 'active-L', 'active-H');
+      void el.offsetWidth;
+      el.classList.add(cls);
+      setTimeout(() => el.classList.remove(cls), dur);
+    }
+
+    function flashRim(dur = 160) {
+      const rim = document.querySelector('.rim-ring');
+      if (!rim) return;
+      rim.classList.add('active-perc');
+      setTimeout(() => rim.classList.remove('active-perc'), dur);
+    }
+
+    function renderBiasGrid() {
+      const grid = document.getElementById('bias-grid');
+      const sc = SCALES[activeScaleKey];
+      grid.innerHTML = '';
+      sc.notes.forEach((note, idx) => {
+        const col = document.createElement('div');
+        col.className = 'bias-col';
+        col.id = `bias-col-${idx}`;
+        col.innerHTML = `
+          <div class="bias-note">${note}</div>
+          <div class="bias-deg">${idx === 0 ? 'DING' : '^' + sc.degrees[idx]} (${PAN_GEOMETRY[idx].hand})</div>
+          <div class="prob-track"><div class="prob-fill" id="pfill-${idx}" style="height:11%"></div></div>
+          <div class="bias-val-label" id="plbl-${idx}">P 11%</div>
+          <input class="bias-slider" id="bsl-${idx}" type="range" min="-2.5" max="2.5" step="0.1" value="${ctrl.manualBias[idx].toFixed(1)}" title="Logit steering bias for ${note}">
+          <div class="bias-val-label" id="blbl-${idx}">b ${ctrl.manualBias[idx] >= 0 ? '+' : ''}${ctrl.manualBias[idx].toFixed(1)}</div>
+          <div class="bias-btns">
+            <button type="button" data-nudge="${idx}" data-delta="-0.8">−</button>
+            <button type="button" data-nudge="${idx}" data-delta="0.8">+</button>
+          </div>
+        `;
+        grid.appendChild(col);
+
+        const sl = col.querySelector(`#bsl-${idx}`);
+        sl.addEventListener('input', (e) => {
+          ctrl.manualBias[idx] = parseFloat(e.target.value);
+          document.getElementById(`blbl-${idx}`).textContent = `b ${ctrl.manualBias[idx] >= 0 ? '+' : ''}${ctrl.manualBias[idx].toFixed(1)}`;
+          previewDistribution();
+        });
+      });
+
+      grid.querySelectorAll('[data-nudge]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.nudge, 10);
+          const d = parseFloat(btn.dataset.delta);
+          ctrl.manualBias[i] = clamp(ctrl.manualBias[i] + d, -2.5, 2.5);
+          syncBiasSliders();
+          previewDistribution();
+        });
+      });
+    }
+
+    function syncBiasSliders() {
+      for (let i = 0; i < 9; i++) {
+        const sl = document.getElementById(`bsl-${i}`);
+        const lb = document.getElementById(`blbl-${i}`);
+        if (sl) sl.value = ctrl.manualBias[i].toFixed(1);
+        if (lb) lb.textContent = `b ${ctrl.manualBias[i] >= 0 ? '+' : ''}${ctrl.manualBias[i].toFixed(1)}`;
+      }
+    }
+
+    function updateAttentionVisuals(alpha, probs) {
+      const mP = Math.round(alpha.micro * 100);
+      const sP = Math.round(alpha.short * 100);
+      const dP = Math.round(alpha.mid * 100);
+      const lP = Math.max(0, 100 - mP - sP - dP);
+
+      const segM = document.getElementById('seg-micro');
+      const segS = document.getElementById('seg-short');
+      const segD = document.getElementById('seg-mid');
+      const segL = document.getElementById('seg-long');
+      segM.style.width = mP + '%'; segM.textContent = mP >= 10 ? `Micro ${mP}%` : '';
+      segS.style.width = sP + '%'; segS.textContent = sP >= 10 ? `Short ${sP}%` : '';
+      segD.style.width = dP + '%'; segD.textContent = dP >= 10 ? `Mid ${dP}%` : '';
+      segL.style.width = lP + '%'; segL.textContent = lP >= 10 ? `Long ${lP}%` : '';
+
+      document.getElementById('v-w-micro').textContent = `${ctrl.manualAttn.micro.toFixed(2)} (eff ${mP}%)`;
+      document.getElementById('v-w-short').textContent = `${ctrl.manualAttn.short.toFixed(2)} (eff ${sP}%)`;
+      document.getElementById('v-w-mid').textContent   = `${ctrl.manualAttn.mid.toFixed(2)} (eff ${dP}%)`;
+      document.getElementById('v-w-long').textContent  = `${ctrl.manualAttn.long.toFixed(2)} (eff ${lP}%)`;
+      document.getElementById('tel-attn').textContent  = `${mP}/${sP}/${dP}/${lP}%`;
+
+      const maxP = Math.max(...probs, 0.01);
+      probs.forEach((p, idx) => {
+        const fill = document.getElementById(`pfill-${idx}`);
+        const lbl  = document.getElementById(`plbl-${idx}`);
+        const col  = document.getElementById(`bias-col-${idx}`);
+        if (fill) fill.style.height = `${Math.round(p * 100)}%`;
+        if (lbl)  lbl.textContent = `P ${Math.round(p * 100)}%`;
+        if (col)  col.classList.toggle('is-top', p >= maxP * 0.98 && p > 0.15);
+      });
+    }
+
+    function renderMemoryHeatmap(memSlice, weights) {
+      const tape = document.getElementById('mem-tape');
+      tape.innerHTML = '';
+      const total = 32;
+      const pad = Math.max(0, total - memSlice.length);
+      for (let i = 0; i < pad; i++) {
+        const c = document.createElement('div');
+        c.className = 'mem-cell';
+        c.style.color = '#ccc';
+        c.innerHTML = '<div>·</div><div class="mem-w">—</div>';
+        tape.appendChild(c);
+      }
+      memSlice.forEach((m, i) => {
+        const w = weights[i] ?? 0;
+        const shade = Math.round(255 - w * 225);
+        const fg = shade < 135 ? '#fff' : '#111';
+        const c = document.createElement('div');
+        c.className = 'mem-cell';
+        c.style.background = `rgb(${shade},${shade},${shade})`;
+        c.style.color = fg;
+        c.title = `Step #${m.stepNum} | ${m.label} (${m.hand}) | Chord ${m.chord} | Attn ${(w * 100).toFixed(0)}%`;
+        c.innerHTML = `<div><strong>${m.label}</strong></div><div class="mem-w">${Math.round(w * 100)}%</div>`;
+        tape.appendChild(c);
+      });
+    }
+
+    function renderEmptyScaffold(clauseDefs = state.clauseDefs) {
+      const container = document.getElementById('live-sentence');
+      container.innerHTML = '';
+      clauseDefs.forEach((cd, barIdx) => {
+        const block = document.createElement('div');
+        block.className = 'clause-block';
+        block.innerHTML = `
+          <div class="clause-header">
+            <span class="clause-name">${cd.name}</span>
+            <span class="clause-meta" id="clause-meta-${barIdx}">Harmony: pending | Role: ${cd.role}</span>
+          </div>
+          <div class="step-strip" id="strip-${barIdx}"></div>
+        `;
+        const strip = block.querySelector(`#strip-${barIdx}`);
+        for (let s = 0; s < state.stepsPerBar; s++) {
+          const cell = document.createElement('div');
+          cell.className = 'step-cell pending';
+          cell.id = `cell-${barIdx}-${s}`;
+          cell.innerHTML = `<div class="step-note">?</div><div>·</div><div class="step-vel"><div class="step-vel-fill" style="width:0%"></div></div>`;
+          strip.appendChild(cell);
+        }
+        container.appendChild(block);
+      });
+    }
+
+    function fillAndHighlightCell(barIdx, stepIdx, st) {
+      document.querySelectorAll('.step-cell.now-playing').forEach(c => c.classList.remove('now-playing'));
+      const cell = document.getElementById(`cell-${barIdx}-${stepIdx}`);
+      if (!cell) return;
+      cell.classList.remove('pending');
+      if (st.accented) cell.classList.add('accented');
+      cell.classList.add('now-playing');
+      const ghostCls = (st.type === 'g' || st.type === '·') ? ' ghost' : '';
+      const prefix = st.type === 'H' ? 'H:' : (st.type === 'M' ? 'M:' : '');
+      const velPct = Math.round((st.vel || 0) * 100);
+      cell.innerHTML = `
+        <div class="step-note${ghostCls}">${prefix}${st.label}</div>
+        <div>${st.hand} <span style="color:#666">${st.deg || ''}</span></div>
+        <div class="step-vel"><div class="step-vel-fill" style="width:${velPct}%"></div></div>
+      `;
+    }
+
+    function previewDistribution() {
+      const savedDecay = ctrl.biasDecay;
+      ctrl.biasDecay = 'persist';
+      const ev = evaluateAttentionDistribution(curBar, curStep, 'melody');
+      ctrl.biasDecay = savedDecay;
+      updateAttentionVisuals(ev.alpha, ev.probs);
+      renderMemoryHeatmap(state.memory.slice(-32), computeMemoryAttentionWeights(ev.alpha).slice(-32));
+    }
+
+    // =========================================================================
+    // 9. Controls, Presets & Event Bindings
+    // =========================================================================
+    const ATTN_PRESETS = {
+      balanced:  { micro: 0.25, short: 0.25, mid: 0.30, long: 0.20 },
+      micro:     { micro: 0.72, short: 0.10, mid: 0.12, long: 0.06 },
+      ostinato:  { micro: 0.14, short: 0.68, mid: 0.12, long: 0.06 },
+      phrase:    { micro: 0.12, short: 0.12, mid: 0.64, long: 0.12 },
+      leitmotif: { micro: 0.10, short: 0.12, mid: 0.18, long: 0.60 }
+    };
+
+    function syncAttnSliders() {
+      ['micro', 'short', 'mid', 'long'].forEach(k => {
+        document.getElementById('w-' + k).value = ctrl.manualAttn[k];
+      });
+      previewDistribution();
+    }
+
+    ['micro', 'short', 'mid', 'long'].forEach(k => {
+      document.getElementById('w-' + k).addEventListener('input', (e) => {
+        ctrl.manualAttn[k] = parseFloat(e.target.value);
+        previewDistribution();
+      });
+    });
+
+    document.querySelectorAll('[data-ctrl]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        ctrl.mode = btn.dataset.ctrl;
+        document.querySelectorAll('[data-ctrl]').forEach(b => b.classList.toggle('active', b === btn));
+        const labels = { manual: 'Manual', auto: 'Local Self-Attn', gemini: 'Gemini Live', hybrid: 'Hybrid Blend' };
+        document.getElementById('tel-source').textContent = labels[ctrl.mode];
+        if ((ctrl.mode === 'gemini' || ctrl.mode === 'hybrid') && geminiApiKey && geminiCallCount === 0) {
+          queryGeminiDecisions(curBar, curStep);
+        }
+        previewDistribution();
+      });
+    });
+
+    document.querySelectorAll('[data-apreset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Object.assign(ctrl.manualAttn, ATTN_PRESETS[btn.dataset.apreset]);
+        syncAttnSliders();
+      });
+    });
+
+    document.getElementById('fusion-select').addEventListener('change', (e) => { ctrl.fusion = e.target.value; previewDistribution(); });
+    document.getElementById('p-temp').addEventListener('input', (e) => { ctrl.temp = parseFloat(e.target.value); document.getElementById('v-temp').textContent = ctrl.temp.toFixed(2); previewDistribution(); });
+    document.getElementById('p-density').addEventListener('input', (e) => { ctrl.density = parseFloat(e.target.value); document.getElementById('v-density').textContent = ctrl.density.toFixed(2); });
+    document.getElementById('p-perc').addEventListener('input', (e) => { ctrl.perc = parseFloat(e.target.value); document.getElementById('v-perc').textContent = ctrl.perc.toFixed(2); });
+    document.getElementById('p-blend').addEventListener('input', (e) => { ctrl.geminiBlend = parseFloat(e.target.value); document.getElementById('v-blend').textContent = ctrl.geminiBlend.toFixed(2); previewDistribution(); });
+
+    document.getElementById('bias-strength').addEventListener('input', (e) => { ctrl.biasStrength = parseFloat(e.target.value); document.getElementById('v-bias-strength').textContent = ctrl.biasStrength.toFixed(2); previewDistribution(); });
+    document.getElementById('bias-decay').addEventListener('change', (e) => { ctrl.biasDecay = e.target.value; });
+    document.getElementById('p-contour').addEventListener('input', (e) => { ctrl.contourTilt = parseFloat(e.target.value); document.getElementById('v-contour').textContent = ctrl.contourTilt.toFixed(2); previewDistribution(); });
+    document.getElementById('p-harm-bias').addEventListener('input', (e) => { ctrl.harmTension = parseFloat(e.target.value); document.getElementById('v-harm-bias').textContent = ctrl.harmTension.toFixed(2); });
+    document.getElementById('p-cad-bias').addEventListener('input', (e) => { ctrl.cadenceBias = parseFloat(e.target.value); document.getElementById('v-cad-bias').textContent = ctrl.cadenceBias.toFixed(2); previewDistribution(); });
+    document.getElementById('p-shimmer-bias').addEventListener('input', (e) => { ctrl.shimmerBias = parseFloat(e.target.value); document.getElementById('v-shimmer-bias').textContent = ctrl.shimmerBias.toFixed(2); });
+
+    // Bias Quick Actions
+    document.getElementById('btn-bias-zero').addEventListener('click', () => { ctrl.manualBias.fill(0); syncBiasSliders(); previewDistribution(); });
+    document.getElementById('btn-bias-ding').addEventListener('click', () => { ctrl.manualBias = [2.2, 1.4, -0.4, -0.4, 1.2, -0.3, 0, -0.4, 0.8]; syncBiasSliders(); previewDistribution(); });
+    document.getElementById('btn-bias-high').addEventListener('click', () => { ctrl.manualBias = [-1.4, -0.8, -0.4, 0.2, 0.5, 1.1, 1.5, 1.9, 2.2]; syncBiasSliders(); previewDistribution(); });
+    document.getElementById('btn-bias-bvi').addEventListener('click', () => {
+      const pool = SCALES[activeScaleKey].chords.bVI;
+      ctrl.manualBias = Array.from({ length: 9 }, (_, i) => pool.includes(i) ? 1.8 : -0.6);
+      syncBiasSliders(); previewDistribution();
+    });
+    document.getElementById('btn-bias-bvii').addEventListener('click', () => {
+      const pool = SCALES[activeScaleKey].chords.bVII;
+      ctrl.manualBias = Array.from({ length: 9 }, (_, i) => pool.includes(i) ? 1.8 : -0.6);
+      syncBiasSliders(); previewDistribution();
+    });
+    document.getElementById('btn-bias-invert').addEventListener('click', () => {
+      ctrl.manualBias = ctrl.manualBias.map(v => clamp(-v, -2.5, 2.5));
+      syncBiasSliders(); previewDistribution();
+    });
+
+    // Gemini API Key Handling (memory-only, no persistence)
+    const keyInput = document.getElementById('gemini-api-key');
+    keyInput.addEventListener('input', (e) => {
+      geminiApiKey = e.target.value.trim();
+      geminiClient = null; // rebuild on new key
+      setGeminiPill(geminiApiKey ? 'KEY SET (IDLE)' : 'READY (NO KEY)', '');
+    });
+    document.getElementById('btn-toggle-key').addEventListener('click', (e) => {
+      const show = keyInput.type === 'password';
+      keyInput.type = show ? 'text' : 'password';
+      e.target.textContent = show ? 'Hide' : 'Show';
+    });
+    document.getElementById('btn-clear-key').addEventListener('click', () => {
+      keyInput.value = '';
+      geminiApiKey = '';
+      geminiClient = null;
+      setGeminiPill('READY (NO KEY)', '');
+      document.getElementById('tel-gemini').textContent = 'Disconnected';
+    });
+    document.getElementById('btn-test-gemini').addEventListener('click', () => {
+      queryGeminiDecisions(curBar, curStep);
+    });
+
+    // Scale, Profile, Tempo, Transport
+    const scaleSel = document.getElementById('scale-select');
+    Object.entries(SCALES).forEach(([k, v]) => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = v.name;
+      scaleSel.appendChild(opt);
+    });
+    scaleSel.addEventListener('change', (e) => {
+      activeScaleKey = e.target.value;
+      renderHandpanSVG();
+      renderBiasGrid();
+      previewDistribution();
+    });
+    document.getElementById('profile-select').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val.startsWith('bank:')) {
+        activeBankId = val.slice(5);
+        activeProfileKey = activeBankId.replace('yishama-', '');
+        ensureStudioBank(activeBankId);
+      } else {
+        activeBankId = null;
+        activeProfileKey = val;
+      }
+    });
+    document.getElementById('bpm-range').addEventListener('input', (e) => { document.getElementById('bpm-out').textContent = `${e.target.value} BPM`; });
+    document.getElementById('btn-toggle').addEventListener('click', () => { if (isRunning) stopStream(); else startStream(); });
+    document.getElementById('btn-reseed').addEventListener('click', () => {
+      state.memory = [];
+      state.seedMotif = null;
+      state.liveBar0Motif = [];
+      state.pitchHist.fill(0);
+      state.macro = 'THEME';
+      state.totalSteps = 0;
+      curBar = 0; curStep = 0;
+      initNewSentenceScaffold(true);
+      previewDistribution();
+    });
+
+    // Boot
+    renderHandpanSVG();
+    renderBiasGrid();
+    initNewSentenceScaffold(true);
+    previewDistribution();
+  </script>
+</body>
+</html>

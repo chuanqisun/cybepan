@@ -1,0 +1,29 @@
+{
+  "generatedAt": "2026-11-20T04:49:41.451Z",
+  "banks": [
+    {
+      "id": "yishama-stainless",
+      "file": "yishama-stainless.bank.js",
+      "name": "Yishama Stainless (Studio Pre-Gen)",
+      "description": "Empirically matched Yishama stainless pantam: 140–185 ms nonlinear 2f₀/3f₀ bloom, inverted decay tails (τ₃ > τ₂ > τ₁), gentle dual-axis beating, warm 78 Hz Helmholtz cavity.",
+      "count": 71,
+      "sizeMB": 4.4
+    },
+    {
+      "id": "yishama-ember",
+      "file": "yishama-ember.bank.js",
+      "name": "Yishama Ember Steel (Studio Pre-Gen)",
+      "description": "Crystalline Ember alloy: luminous extended 2f₀ & 3f₀ shimmer halo, slightly quicker bloom onset, crisp clean articulation without mud.",
+      "count": 71,
+      "sizeMB": 4.62
+    },
+    {
+      "id": "yishama-nitrided",
+      "file": "yishama-nitrided.bank.js",
+      "name": "Classic Nitrided Hang (Studio Pre-Gen)",
+      "description": "Dry, focused nitrided steel character: woody tactile finger-pad attack, tighter controlled sustain, punchy separation for fast rhythmic playing.",
+      "count": 71,
+      "sizeMB": 3.27
+    }
+  ]
+}

@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 — Rhythm-Driven Handpan Synthesis Engine</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #111;
+      background: #fff;
+      line-height: 1.55;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      min-height: 100vh;
+    }
+
+    aside.instrument-dock {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid #ddd;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+
+    main.doc {
+      padding: 28px 42px 72px;
+      max-width: 960px;
+    }
+
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+      aside.instrument-dock {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+      main.doc { padding: 22px 18px 56px; }
+    }
+
+    h1, h2, h3 { margin-top: 0; line-height: 1.25; }
+    h1 { margin-bottom: 6px; font-size: 1.65rem; }
+    h2 {
+      margin-top: 32px;
+      margin-bottom: 11px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+      font-size: 1.16rem;
+    }
+    h3 { margin-top: 16px; margin-bottom: 6px; font-size: 0.96rem; }
+    p { margin: 0 0 10px; font-size: 0.92rem; }
+
+    .subtitle { color: #555; margin-bottom: 16px; font-size: 0.93rem; }
+
+    code, pre, .mono, .telemetry, .key-cap, .tap-card, .param-val, .rhythm-banner {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    code { font-size: 0.88em; }
+
+    pre.spec {
+      font-size: 0.8rem;
+      line-height: 1.48;
+      border-left: 2px solid #ccc;
+      padding: 4px 0 4px 14px;
+      overflow-x: auto;
+      margin: 10px 0 16px;
+      white-space: pre-wrap;
+    }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      margin: 0 0 18px;
+      font-size: 0.88rem;
+    }
+    nav.toc a { color: #111; }
+
+    /* Dock */
+    .dock-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .dock-title { font-weight: 700; margin: 0; font-size: 0.95rem; }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .control-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 0.8rem;
+    }
+    select, input[type="range"] { width: 100%; font-family: inherit; }
+    select { padding: 4px 6px; border: 1px solid #bbb; background: #fff; color: #111; font-size: 0.82rem; }
+
+    button {
+      cursor: pointer;
+      padding: 5px 10px;
+      border: 1px solid #888;
+      background: #fff;
+      color: #111;
+      font-size: 0.82rem;
+    }
+    button:hover { background: #f4f4f4; }
+    button.active {
+      background: #111;
+      color: #fff;
+      border-color: #111;
+      font-weight: 600;
+    }
+
+    /* SVG Handpan */
+    .pan-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+    svg#handpan-svg {
+      width: 100%;
+      max-width: 280px;
+      height: auto;
+      user-select: none;
+    }
+    .tone-field { cursor: pointer; }
+    .tone-field:hover ellipse, .tone-field:hover circle { stroke-width: 2.2; }
+    .tone-field.active-R ellipse, .tone-field.active-R circle { fill: #111 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-R text { fill: #fff !important; }
+    .tone-field.active-L ellipse, .tone-field.active-L circle { fill: #d4d4d4 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-H ellipse, .tone-field.active-H circle { fill: #eee !important; stroke: #111 !important; stroke-width: 2.5 !important; stroke-dasharray: 4 2; }
+    .rim-ring.active-perc { stroke: #111 !important; stroke-width: 5 !important; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+      justify-content: center;
+      font-size: 0.72rem;
+      color: #555;
+    }
+
+    .telemetry {
+      font-size: 0.74rem;
+      line-height: 1.5;
+      color: #333;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+    }
+    .telemetry div {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .telemetry span.k { color: #666; }
+
+    /* Mode Selector Bar */
+    .mode-cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 10px 0 14px;
+    }
+    @media (max-width: 720px) { .mode-cards { grid-template-columns: 1fr; } }
+    .mode-card {
+      border: 1px solid #ccc;
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: #fff;
+      text-align: left;
+    }
+    .mode-card:hover { border-color: #666; }
+    .mode-card.active {
+      border: 2px solid #111;
+      background: #fafafa;
+    }
+    .mode-card-title { font-weight: 700; font-size: 0.88rem; }
+    .mode-card-keys { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.74rem; color: #444; }
+    .mode-card-desc { font-size: 0.78rem; color: #555; }
+
+    .bar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      align-items: center;
+      padding: 8px 0;
+      margin-bottom: 12px;
+      border-top: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e5e5e5;
+      font-size: 0.82rem;
+    }
+    .bar-row .label { color: #555; font-weight: 600; margin-right: 4px; }
+
+    /* Interactive QWERTY Rhythm Deck */
+    .rhythm-banner {
+      border: 1px solid #111;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 6px 14px;
+      font-size: 0.78rem;
+      background: #fcfcfc;
+    }
+
+    .kbd-deck {
+      border: 1px solid #ddd;
+      padding: 14px 12px 12px;
+      background: #fafafa;
+      margin-bottom: 14px;
+      user-select: none;
+    }
+    .kbd-row-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 7px;
+    }
+    .kbd-row-wrap:last-child { margin-bottom: 0; }
+    .kbd-row-label {
+      width: 96px;
+      flex-shrink: 0;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #444;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      line-height: 1.25;
+    }
+    .kbd-hands {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 22px 1fr;
+      gap: 6px;
+      align-items: center;
+    }
+    .kbd-hand-group {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+    .kbd-divider {
+      text-align: center;
+      color: #bbb;
+      font-size: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .key-cap {
+      border: 1px solid #999;
+      background: #fff;
+      padding: 7px 4px 5px;
+      text-align: center;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      transition: transform 40ms ease, background 60ms ease;
+    }
+    .key-cap:hover:not(.dimmed) { border-color: #111; }
+    .key-cap.dimmed {
+      opacity: 0.24;
+      border-style: dotted;
+      cursor: default;
+    }
+    .key-cap.key-home-anchor { border-bottom: 3px solid #111; }
+    .key-cap.pressed {
+      background: #111 !important;
+      color: #fff !important;
+      border-color: #111 !important;
+      transform: translateY(1px);
+    }
+    .key-cap.pressed .kc-meta { color: #ddd !important; }
+    .kc-char { font-size: 0.94rem; font-weight: 700; line-height: 1.1; }
+    .kc-meta { font-size: 0.64rem; color: #555; line-height: 1.15; }
+    .kc-bar {
+      width: 80%;
+      height: 3px;
+      background: #e5e5e5;
+      margin-top: 2px;
+    }
+    .kc-bar-fill { height: 100%; background: #333; }
+    .key-cap.pressed .kc-bar-fill { background: #fff; }
+
+    .space-row {
+      margin-top: 8px;
+      padding-left: 106px;
+      display: flex;
+      gap: 8px;
+    }
+    .space-key {
+      flex: 1;
+      border: 1px dashed #999;
+      background: #fff;
+      padding: 5px 10px;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.74rem;
+      color: #444;
+      cursor: pointer;
+    }
+    .space-key.pressed { background: #111; color: #fff; border-style: solid; }
+
+    /* Tap Timeline & Pitch Contour Strip */
+    .tap-strip {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 4px;
+      margin: 10px 0 14px;
+    }
+    @media (max-width: 720px) { .tap-strip { grid-template-columns: repeat(6, 1fr); } }
+    .tap-card {
+      border-top: 1px solid #ccc;
+      padding: 5px 3px;
+      text-align: center;
+      font-size: 0.7rem;
+      line-height: 1.3;
+      background: #fff;
+    }
+    .tap-card.latest { background: #111; color: #fff; }
+    .tap-card.latest span { color: #ddd !important; }
+    .tap-note { font-weight: 700; font-size: 0.78rem; }
+    .tap-vel { height: 2px; background: #e5e5e5; margin-top: 3px; }
+    .tap-vel-fill { height: 100%; background: #333; }
+    .tap-card.latest .tap-vel-fill { background: #fff; }
+
+    /* Pitch Trajectory Canvas */
+    canvas#contour-canvas {
+      width: 100%;
+      height: 115px;
+      border: 1px solid #ddd;
+      background: #fff;
+      display: block;
+      margin: 8px 0 14px;
+    }
+
+    /* Two-column parameter area */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 26px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+    .panel { border-top: 1px solid #ccc; padding-top: 10px; }
+    .param-item { margin-bottom: 10px; }
+    .param-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.84rem;
+      margin-bottom: 2px;
+    }
+    .param-name { font-weight: 600; }
+    .param-val { font-size: 0.78rem; color: #333; }
+    .param-desc { font-size: 0.75rem; color: #666; margin-top: 1px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 10px 0 16px;
+    }
+    th, td {
+      text-align: left;
+      padding: 7px 10px 7px 0;
+      border-bottom: 1px solid #e0e0e0;
+      vertical-align: top;
+    }
+    th { border-bottom: 2px solid #bbb; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- ==================== STICKY INSTRUMENT DOCK ==================== -->
+    <aside class="instrument-dock">
+      <div class="dock-header">
+        <p class="dock-title">Rhythm-Driven Handpan</p>
+        <span class="mono" style="font-size:0.76rem" id="state-badge">READY</span>
+      </div>
+
+      <div class="control-grid">
+        <div class="field">
+          <label for="scale-select">Scale / Mode</label>
+          <select id="scale-select"></select>
+        </div>
+        <div class="field">
+          <label for="profile-select">Timbre Profile</label>
+          <select id="profile-select">
+            <optgroup label="Live Web Audio DSP">
+              <option value="stainless" selected>Yishama Stainless (DSP)</option>
+              <option value="ember">Ember (Bright Bloom DSP)</option>
+              <option value="nitrided">Nitrided (Dry / Crisp DSP)</option>
+              <option value="ceramic">Raw / Ceramic (DSP)</option>
+            </optgroup>
+            <optgroup label="Pre-Generated Studio Banks">
+              <option value="bank:yishama-stainless">Studio Bank: Yishama Stainless</option>
+              <option value="bank:yishama-ember">Studio Bank: Yishama Ember</option>
+              <option value="bank:yishama-nitrided">Studio Bank: Classic Nitrided</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      <div class="pan-wrap">
+        <svg id="handpan-svg" viewBox="0 0 340 340" aria-label="Interactive Handpan"></svg>
+        <div class="legend-row">
+          <span>Solid = Right (R) / Ding</span>
+          <span>Shaded = Left (L)</span>
+          <span>Dashed = 2f₀</span>
+          <span>Rim = Tak/Gu</span>
+        </div>
+      </div>
+
+      <div class="telemetry">
+        <div><span class="k">Input Mode</span><span id="tel-mode">Mode 1: Two-Key</span></div>
+        <div><span class="k">Est. Tempo / IOI</span><span id="tel-tempo">— BPM / — ms</span></div>
+        <div><span class="k">Detected Rhythm</span><span id="tel-rhythm">Waiting for tap…</span></div>
+        <div><span class="k">Active Chord / Bar</span><span id="tel-chord">i | Tap 0/8</span></div>
+        <div><span class="k">Hand Pattern</span><span id="tel-hand">—</span></div>
+        <div><span class="k">Last Pitch / Power</span><span id="tel-last">—</span></div>
+      </div>
+
+      <div style="display:flex; gap:6px;">
+        <button type="button" id="btn-reset-phrase" style="flex:1">Reset Phrase / Motif</button>
+        <button type="button" id="btn-pulse-toggle">Pulse: Off</button>
+      </div>
+    </aside>
+
+    <!-- ==================== MAIN INTERACTIVE WORKBENCH ==================== -->
+    <main class="doc">
+      <h1>Rhythm-Driven Handpan Synthesis Engine</h1>
+      <p class="subtitle">Play pure rhythm with your left and right hands on your keyboard; the music-grammar synthesizer interprets your timing, hand alternation, finger power, and row elevation in real time to choose every musical note.</p>
+
+      <nav class="toc">
+        <a href="#sec-modes">I. Progressive Input Modes</a>
+        <a href="#sec-deck">II. Live Rhythm Keyboard &amp; Contour</a>
+        <a href="#sec-variants">III. Synthesizer Brain &amp; Mapping Variants</a>
+        <a href="#sec-rules">IV. Rhythm-to-Note Grammar Rules</a>
+      </nav>
+
+      <!-- SECTION I: THREE PROGRESSIVE INPUT MODES -->
+      <section id="sec-modes">
+        <h2>I. Progressive Keyboard Input Modes</h2>
+        <p>Start with just two keys (<code>F</code> and <code>J</code>) to feel pure rhythm-driven melody, then expand to the home row for 4-level finger dynamics, and finally to all 3 rows for pitch rise/fall steering.</p>
+
+        <div class="mode-cards" id="mode-cards">
+          <button type="button" class="mode-card active" data-mode="two-key">
+            <span class="mode-card-title">1. Two-Key Dual-Hand</span>
+            <span class="mode-card-keys">L: [F] &nbsp;|&nbsp; R: [J]</span>
+            <span class="mode-card-desc">Just tap left &amp; right rhythm. IOI speed, pauses, same-hand skips, and simultaneous hits dictate every note.</span>
+          </button>
+          <button type="button" class="mode-card" data-mode="home-row">
+            <span class="mode-card-title">2. Home Row Finger Power</span>
+            <span class="mode-card-keys">L: [A S D F] &nbsp;|&nbsp; R: [J K L ;]</span>
+            <span class="mode-card-desc">Each finger carries a power level (Lv1 Ghost → Lv4 Accent). System still dictates notes, shaped by dynamics.</span>
+          </button>
+          <button type="button" class="mode-card" data-mode="three-row">
+            <span class="mode-card-title">3. Three-Row Pitch Steering</span>
+            <span class="mode-card-keys">↑ QWER/UIOP &nbsp;·&nbsp; ASDF/JKL; &nbsp;↓ ZXCV/M,./</span>
+            <span class="mode-card-desc">Fingers = power levels AND moving up/down rows steers melodic rise, neutral flow, or descent toward Ding.</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- SECTION II: INTERACTIVE KEYBOARD DECK & LIVE RHYTHM MONITOR -->
+      <section id="sec-deck">
+        <h2>II. Live Rhythm Keyboard &amp; Pitch Trajectory</h2>
+
+        <div class="bar-row">
+          <span class="label">Simulated Tap Demos (Hear &amp; Watch):</span>
+          <button type="button" data-sim="tresillo">2-Key Tresillo (3-3-2)</button>
+          <button type="button" data-sim="paradiddle">Paradiddle (R L R R L R L L)</button>
+          <button type="button" data-sim="dynamics">Home-Row Ghost → Accent</button>
+          <button type="button" data-sim="wave">3-Row Rising &amp; Falling Wave</button>
+          <button type="button" id="btn-sim-stop">Stop Demo</button>
+        </div>
+
+        <div class="rhythm-banner" id="rhythm-banner">
+          <span><strong>TAP YOUR KEYBOARD NOW</strong> (or click keys below)</span>
+          <span id="banner-rule">Tip: Pause briefly for Ding downbeat · Tap fast for cascades · Tap L+R together for rolled dyad</span>
+        </div>
+
+        <div class="kbd-deck" id="kbd-deck"></div>
+
+        <h3>Pitch Trajectory &amp; Synthesized Event Strip</h3>
+        <canvas id="contour-canvas" width="840" height="115"></canvas>
+        <div class="tap-strip" id="tap-strip"></div>
+      </section>
+
+      <!-- SECTION III: ENGINE & MAPPING VARIANTS -->
+      <section id="sec-variants">
+        <h2>III. Synthesis Engine &amp; Mapping Variants</h2>
+        <p>Mix and match any input mode above with different melodic grammar engines, finger-power curves, and row-steering interpretations.</p>
+
+        <div class="two-col">
+          <div class="panel">
+            <div class="field" style="margin-bottom:10px">
+              <label for="brain-select"><strong>Melodic Synthesis Brain</strong></label>
+              <select id="brain-select">
+                <option value="grammar" selected>1. Grammar-Guided Phrase (4-Bar Sentence + Modal Chords)</option>
+                <option value="topology">2. Strict Handpan Hemisphere Split (L→L Fields, R→R Fields)</option>
+                <option value="arpeggio">3. Flowing Arpeggio &amp; Chord Cycle Weaver</option>
+                <option value="motif">4. Live Motif Echo &amp; Variation (Learns First 8 Taps)</option>
+              </select>
+            </div>
+
+            <div class="field" style="margin-bottom:10px">
+              <label for="power-map-select"><strong>Finger Power Mapping (Modes 2 &amp; 3)</strong></label>
+              <select id="power-map-select">
+                <option value="anatomical" selected>Anatomical Natural (Index F/J = Lv4 Accent, Pinky A/; = Lv1 Ghost)</option>
+                <option value="outward">Outward Crescendo (Inner F/J = Lv1 Ghost, Pinky A/; = Lv4 Accent)</option>
+                <option value="ltr">Parallel Left-to-Right (A/J = Lv1 → F/; = Lv4)</option>
+              </select>
+            </div>
+
+            <div class="field" style="margin-bottom:10px">
+              <label for="row-mode-select"><strong>Row Elevation Mapping (Mode 3)</strong></label>
+              <select id="row-mode-select">
+                <option value="relative" selected>Relative Contour Steering (Top = Climb, Home = Hold/Flow, Bottom = Fall)</option>
+                <option value="zones">Absolute Register Zones (Top = Rim 5–8, Home = Mid 2–6, Bottom = Bass 0–3)</option>
+                <option value="harmonic">Hybrid Contour + Harmonic Lift (Top = Climb + Tension, Bottom = Cadence)</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="prog-select"><strong>Chord Progression Flavor</strong></label>
+              <select id="prog-select">
+                <option value="markov" selected>Adaptive Meso-Markov (i, III, iv, bVI, bVII, v)</option>
+                <option value="andalusian">Epic Cycle (i → bVI → bVII → i)</option>
+                <option value="lyrical">Lyrical Cycle (i → III → bVII → iv)</option>
+                <option value="drone">Meditative Tonic Pedal (i with gentle color)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-entropy">Melodic Entropy (τ)</label>
+                <span class="param-val" id="v-entropy">0.36</span>
+              </div>
+              <input id="p-entropy" type="range" min="0.08" max="1.0" step="0.02" value="0.36">
+              <div class="param-desc">Low = faithful chordal predictability; high = surprising leaps &amp; modal color.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-steer">Row Pitch-Steering Strength</label>
+                <span class="param-val" id="v-steer">0.75</span>
+              </div>
+              <input id="p-steer" type="range" min="0.1" max="1.0" step="0.05" value="0.75">
+              <div class="param-desc">How decisively Top/Bottom rows bend the pitch sampler vs. harmonic grammar.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-perc">Auto-Percussion Blend (Tak / Gu)</label>
+                <span class="param-val" id="v-perc">0.22</span>
+              </div>
+              <input id="p-perc" type="range" min="0" max="0.9" step="0.02" value="0.22">
+              <div class="param-desc">0 = 100% melodic notes; higher weaves Tak slaps on backbeats &amp; Gu on heavy lows.</div>
+            </div>
+
+            <div class="param-item">
+              <div class="param-top">
+                <label class="param-name" for="p-barlen">Taps per Harmonic Bar</label>
+                <span class="param-val" id="v-barlen">8 taps (4/4)</span>
+              </div>
+              <input id="p-barlen" type="range" min="4" max="12" step="2" value="8">
+              <div class="param-desc">Controls harmonic chord change cadence (6 = waltz/compound, 8 = 4/4 groove).</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION IV: RHYTHM-TO-NOTE GRAMMAR RULES -->
+      <section id="sec-rules">
+        <h2>IV. How Rhythm, Power &amp; Row Height Synthesize Notes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Input Signal</th>
+              <th>Musical Feature Detected</th>
+              <th>Synthesizer Response</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>IOI &gt; 1.55 × beat</code> or pause &gt; 900 ms</td>
+              <td>Phrase Caesura / Breathing Space</td>
+              <td>Anchors on tonic <strong>Ding (^1)</strong> or chord root; advances or resets phrase cleanly.</td>
+            </tr>
+            <tr>
+              <td><code>IOI &lt; 0.60 × beat</code></td>
+              <td>Rapid Flurry / 16th-Note Burst</td>
+              <td>Switches to tight <strong>stepwise scalar cascade</strong> (|Δp| = 1–2) following active contour momentum.</td>
+            </tr>
+            <tr>
+              <td><code>L ↔ R</code> vs <code>L → L / R → R</code></td>
+              <td>Cross-Shell vs Same-Hand Stickings</td>
+              <td>Alternation drives stepwise zigzags across hemispheres; same-hand double executes a <strong>triadic skip</strong> (+2 or −2 degrees).</td>
+            </tr>
+            <tr>
+              <td><code>|t_L − t_R| &lt; 42 ms</code></td>
+              <td>Simultaneous Dual-Hand Tap</td>
+              <td>Upgrades second tap into a consonant <strong>Rolled Dyad (~)</strong> / 2-voice handpan chord!</td>
+            </tr>
+            <tr>
+              <td>Finger Power <code>Lv1..Lv4</code></td>
+              <td>Ghost → Soft → Lead → Accent</td>
+              <td><code>Lv1</code> emits damped ghost pulses; <code>Lv2–3</code> weave melody; <code>Lv4</code> triggers Ding roots, high-rim climaxes, <code>2f₀</code> harmonics, or Tak backbeats.</td>
+            </tr>
+            <tr>
+              <td>Row Elevation <code>↑ / · / ↓</code></td>
+              <td>Top / Home / Bottom Row</td>
+              <td>Adds continuous directional energy gradient (<code>+E_row</code>) steering melody upward toward rim or downward toward Ding.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. Scales, Pitch Theory & Physical Handpan Geometry
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (Aeolian)',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        chords: { i: [0,1,4,6,8], III: [1,3,6,8], iv: [0,2,4,7], v: [1,3,5,8], bVI: [2,4,6], bVII: [3,5,7] }
+      },
+      'd-amara': {
+        name: 'D Amara (Celtic Minor)',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        chords: { i: [0,1,3,5,7], III: [1,2,5,7,8], iv: [0,3,6,8], v: [1,2,4,7], bVI: [2,5,7], bVII: [2,4,6,8] }
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (Dorian Pent.)',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        chords: { i: [0,2,3,5,7], III: [2,3,4,7,8], iv: [0,1,5,6], v: [1,3,4,6,8], bVI: [2,4,5,7], bVII: [1,4,6,8] }
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (Phrygian Dom.)',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        chords: { i: [0,1,4,6,7], III: [1,3,6,7], iv: [0,2,4,8], v: [1,3,5,7], bVI: [2,4,6,8], bVII: [3,5,7] }
+      },
+      'e-sabye': {
+        name: 'E Sabye (Major / Ionian)',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        chords: { i: [0,1,4,6,8], III: [1,3,6,8], iv: [0,2,4,7], v: [1,3,5,8], bVI: [2,4,6], bVII: [3,5,7] }
+      }
+    };
+
+    const PAN_GEOMETRY = [
+      { cx: 170, cy: 170, rx: 38, ry: 38, rot: 0,   hand: 'R', pan:  0.00 },
+      { cx: 218, cy: 266, rx: 28, ry: 22, rot: -25, hand: 'R', pan:  0.22 },
+      { cx: 122, cy: 266, rx: 28, ry: 22, rot: 25,  hand: 'L', pan: -0.22 },
+      { cx: 274, cy: 208, rx: 25, ry: 20, rot: -68, hand: 'R', pan:  0.34 },
+      { cx: 66,  cy: 208, rx: 25, ry: 20, rot: 68,  hand: 'L', pan: -0.34 },
+      { cx: 274, cy: 132, rx: 23, ry: 18, rot: 68,  hand: 'R', pan:  0.32 },
+      { cx: 66,  cy: 132, rx: 23, ry: 18, rot: -68, hand: 'L', pan: -0.32 },
+      { cx: 218, cy: 74,  rx: 21, ry: 17, rot: 25,  hand: 'R', pan:  0.18 },
+      { cx: 122, cy: 74,  rx: 21, ry: 17, rot: -25, hand: 'L', pan: -0.18 }
+    ];
+
+    // =========================================================================
+    // 2. Yishama-Calibrated Coupled-Bloom Web Audio Engine (Zero-Latency Trigger)
+    // =========================================================================
+    const PROFILES = {
+      stainless: { tau1: 0.56, tau2: 0.78, tau3: 1.15, f1Atk: 0.025, f2Bloom: 0.130, f3Bloom: 0.180, oct: 0.48, fifth: 0.30, p4: 0.11, beat: 0.85, skin: 0.14, body: 0.22, brightness: 4400 },
+      ember:     { tau1: 0.48, tau2: 0.74, tau3: 1.25, f1Atk: 0.018, f2Bloom: 0.100, f3Bloom: 0.150, oct: 0.56, fifth: 0.36, p4: 0.16, beat: 0.65, skin: 0.16, body: 0.16, brightness: 5800 },
+      nitrided:  { tau1: 0.35, tau2: 0.43, tau3: 0.54, f1Atk: 0.010, f2Bloom: 0.055, f3Bloom: 0.080, oct: 0.34, fifth: 0.18, p4: 0.06, beat: 0.35, skin: 0.24, body: 0.28, brightness: 3100 },
+      ceramic:   { tau1: 0.29, tau2: 0.31, tau3: 0.34, f1Atk: 0.012, f2Bloom: 0.048, f3Bloom: 0.060, oct: 0.20, fifth: 0.09, p4: 0.03, beat: 0.20, skin: 0.28, body: 0.38, brightness: 2000 }
+    };
+
+    let audioCtx = null, dryGain = null, reverbSend = null, noiseBuffer = null;
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC({ latencyHint: 'interactive' });
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11; comp.ratio.value = 3.5; comp.knee.value = 18;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.82;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createWarmRoomIR(audioCtx, 2.2, 2.9);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.28;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        noiseBuffer = createNoise(audioCtx, 0.35);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createWarmRoomIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const env = Math.pow(1 - i / len, decay) * (i < 850 ? 0.65 : 1.0);
+          lp = lp * 0.78 + (Math.random() * 2 - 1) * env * 0.22;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    const ENHARMONIC = { 'Db':'C#', 'D#':'Eb', 'Gb':'F#', 'Ab':'G#', 'A#':'Bb' };
+    const studioBanks = new Map();
+    let activeBankId = null;
+
+    function canonicalNote(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      return m ? (ENHARMONIC[m[1]] || m[1]) + m[2] : note;
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    }
+
+    async function ensureStudioBank(bankId) {
+      ensureAudio();
+      if (studioBanks.has(bankId)) return studioBanks.get(bankId);
+      try {
+        if (!window.__HANDPAN_BANKS__?.[bankId]) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = `./soundbanks/${bankId}.bank.js`;
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Bank script unavailable'));
+            document.head.appendChild(s);
+          });
+        }
+        const raw = window.__HANDPAN_BANKS__?.[bankId];
+        if (!raw?.samples) return null;
+        const map = new Map();
+        const entries = Object.entries(raw.samples);
+        for (let i = 0; i < entries.length; i += 8) {
+          const sl = entries.slice(i, i + 8);
+          const bufs = await Promise.all(sl.map(([, b64]) => audioCtx.decodeAudioData(b64ToBuf(b64))));
+          bufs.forEach((ab, k) => map.set(sl[k][0], ab));
+        }
+        studioBanks.set(bankId, map);
+        return map;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function playStudioBankBuffer(key, when, gainVal, panVal = 0) {
+      if (!activeBankId) return false;
+      const map = studioBanks.get(activeBankId);
+      const ab = map?.get(key);
+      if (!ab) return false;
+      const src = audioCtx.createBufferSource();
+      src.buffer = ab;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(gainVal, when);
+      if (panVal !== 0 && audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = panVal * 0.7;
+        src.connect(g); g.connect(sp); sp.connect(dryGain); sp.connect(reverbSend);
+      } else {
+        src.connect(g); g.connect(dryGain); g.connect(reverbSend);
+      }
+      src.start(when);
+      return true;
+    }
+
+    function triggerTone(idx, opts = {}) {
+      ensureAudio();
+      const sc = SCALES[activeScaleKey];
+      const note = sc.notes[idx];
+      if (!note) return;
+      const t0 = audioCtx.currentTime + (opts.delaySec || 0.001);
+      const vel = clamp(opts.vel ?? 0.8, 0.12, 1.0);
+      const type = opts.type ?? 'N';
+
+      if (activeBankId && type !== 'M') {
+        const cNote = canonicalNote(note);
+        const key = type === 'H' ? `${cNote}|H|v0|r0` : `${cNote}|N|v${vel < 0.62 ? 0 : 1}|r0`;
+        const bakedV = type === 'H' ? 0.86 : (vel < 0.62 ? 0.42 : 0.94);
+        const gScale = clamp((vel / bakedV) * (type === 'g' ? 0.60 : 0.92), 0.14, 1.15);
+        if (playStudioBankBuffer(key, t0, gScale, PAN_GEOMETRY[idx]?.pan ?? 0)) return;
+      }
+
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+
+      let t1 = p.tau1 * pitchScale * (isDing ? 1.15 : 1.0);
+      let t2 = p.tau2 * pitchScale * (isDing ? 1.12 : 1.0);
+      let t3 = p.tau3 * pitchScale * (isDing ? 1.15 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { t1 *= 0.42; t2 *= 0.35; t3 *= 0.28; octMul = 0.38; fifthMul = 0.22; }
+      else if (type === 'H') { f0Mul = 0.07; octMul = 1.85; fifthMul = 1.0; t2 *= 1.15; }
+      else if (type === 'M') { t1 *= 0.22; t2 *= 0.18; t3 *= 0.14; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.58, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(10000, p.brightness * (0.58 + 0.56 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(820, cut * 0.50), t0 + t3 * 3.5);
+
+      const panner = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = PAN_GEOMETRY[idx]?.pan ?? 0;
+        vg.connect(lp); lp.connect(panner);
+        panner.connect(dryGain); panner.connect(reverbSend);
+      } else {
+        vg.connect(lp); lp.connect(dryGain); lp.connect(reverbSend);
+      }
+
+      function addMode(hz, amp, riseSec, tauSec) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.003 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.045);
+
+        const totalDur = Math.min(5.0, riseSec + tauSec * 5.0);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + riseSec);
+        g.gain.setTargetAtTime(0.0001, t0 + riseSec, tauSec);
+        osc.connect(g); g.connect(vg);
+        osc.start(t0); osc.stop(t0 + totalDur);
+      }
+
+      addMode(freq, 0.60 * f0Mul, p.f1Atk, t1);
+      if (p.beat > 0.05 && f0Mul > 0.2) addMode(freq + p.beat, 0.22 * f0Mul, p.f1Atk * 1.3, t1 * 0.96);
+      addMode(freq * 2.001, p.oct * octMul * (0.50 + 0.60 * vel), p.f2Bloom, t2);
+      addMode(freq * 2.999, p.fifth * fifthMul * (0.42 + 0.68 * vel), p.f3Bloom, t3);
+      addMode(freq * 4.001, p.p4 * vel * (isDing ? 1.4 : 0.7), p.f3Bloom * 1.15, t2 * 0.72);
+
+      // Soft woody finger-pad strike
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = isDing ? 420 : 680; bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.skin * vel * (type === 'g' ? 1.3 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.017);
+      n.connect(bp); bp.connect(ng); ng.connect(vg);
+      n.start(t0); n.stop(t0 + 0.024);
+
+      if (isDing || idx <= 2) {
+        const bo = audioCtx.createOscillator(), bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(isDing ? 98 : 92, t0);
+        bo.frequency.exponentialRampToValueAtTime(78, t0 + 0.08);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * (isDing ? 1.0 : 0.35), t0 + 0.007);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.24 : 0.12));
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.28);
+      }
+    }
+
+    function triggerTak(vel = 0.8) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      if (playStudioBankBuffer('PERC|TAK', t0, vel * 0.82)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.58, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2650; bp.Q.value = 1.3;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.88, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.036);
+
+      [880, 1620].forEach((hz, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.87, t0 + 0.032);
+        g.gain.setValueAtTime(0.28 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.038);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.042);
+      });
+    }
+
+    function triggerGu(vel = 0.85) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      if (playStudioBankBuffer('PERC|GU', t0, vel * 0.88)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.72, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(118, t0);
+      o.frequency.exponentialRampToValueAtTime(78, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.92, t0 + 0.007);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // =========================================================================
+    // 3. Keyboard Layout & Power / Row Mapping Tables
+    // =========================================================================
+    const ROWS = [
+      { id: 'top',  dir: +1, label: 'TOP ROW ↑\n(Rise)',     left: ['q','w','e','r'], right: ['u','i','o','p'] },
+      { id: 'home', dir:  0, label: 'HOME ROW ·\n(Neutral)', left: ['a','s','d','f'], right: ['j','k','l',';'] },
+      { id: 'bot',  dir: -1, label: 'BOT ROW ↓\n(Fall)',     left: ['z','x','c','v'], right: ['m',',','.','/'] }
+    ];
+
+    const POWER_LEVELS = [
+      { lv: 1, name: 'Ghost',  vel: 0.26, tag: 'Lv1' },
+      { lv: 2, name: 'Soft',   vel: 0.52, tag: 'Lv2' },
+      { lv: 3, name: 'Lead',   vel: 0.78, tag: 'Lv3' },
+      { lv: 4, name: 'Accent', vel: 1.00, tag: 'Lv4' }
+    ];
+
+    function getFingerPower(hand, colIdx) {
+      const map = document.getElementById('power-map-select').value;
+      // colIdx is 0..3 left-to-right within the hand group
+      if (map === 'anatomical') {
+        // Left: A(0)=Lv1, S(1)=Lv2, D(2)=Lv3, F(3)=Lv4; Right: J(0)=Lv4, K(1)=Lv3, L(2)=Lv2, ;(3)=Lv1
+        return hand === 'L' ? POWER_LEVELS[colIdx] : POWER_LEVELS[3 - colIdx];
+      }
+      if (map === 'outward') {
+        // Inner index = Lv1 Ghost, outer pinky = Lv4 Accent
+        return hand === 'L' ? POWER_LEVELS[3 - colIdx] : POWER_LEVELS[colIdx];
+      }
+      // ltr: A/J=1 -> F/;=4
+      return POWER_LEVELS[colIdx];
+    }
+
+    function lookupKeyDescriptor(rawKey) {
+      const k = rawKey.toLowerCase();
+      if (k === ' ') return { key: ' ', special: 'ding-reset', hand: 'B', rowDir: -1, power: POWER_LEVELS[3] };
+      for (const row of ROWS) {
+        const li = row.left.indexOf(k);
+        if (li !== -1) return { key: k, hand: 'L', colIdx: li, rowId: row.id, rowDir: row.dir, power: getFingerPower('L', li) };
+        const ri = row.right.indexOf(k);
+        if (ri !== -1) return { key: k, hand: 'R', colIdx: ri, rowId: row.id, rowDir: row.dir, power: getFingerPower('R', ri) };
+      }
+      return null;
+    }
+
+    function isKeyActiveInMode(desc) {
+      if (!desc) return false;
+      if (desc.special === 'ding-reset') return true;
+      if (inputMode === 'two-key') return desc.key === 'f' || desc.key === 'j';
+      if (inputMode === 'home-row') return desc.rowId === 'home';
+      return true; // three-row
+    }
+
+    // =========================================================================
+    // 4. Rhythm-Driven Grammar-Guided Synthesis Engine
+    // =========================================================================
+    const HARMONY_NEXT = {
+      i:    [{ v: 'i', w: 0.25 }, { v: 'bVI', w: 0.30 }, { v: 'III', w: 0.20 }, { v: 'iv', w: 0.15 }, { v: 'bVII', w: 0.10 }],
+      III:  [{ v: 'bVII', w: 0.42 }, { v: 'i', w: 0.24 }, { v: 'bVI', w: 0.20 }, { v: 'v', w: 0.14 }],
+      iv:   [{ v: 'i', w: 0.38 }, { v: 'v', w: 0.32 }, { v: 'bVII', w: 0.20 }, { v: 'bVI', w: 0.10 }],
+      bVI:  [{ v: 'bVII', w: 0.44 }, { v: 'iv', w: 0.26 }, { v: 'III', w: 0.18 }, { v: 'i', w: 0.12 }],
+      bVII: [{ v: 'i', w: 0.56 }, { v: 'III', w: 0.20 }, { v: 'v', w: 0.14 }, { v: 'bVI', w: 0.10 }],
+      v:    [{ v: 'i', w: 0.62 }, { v: 'bVI', w: 0.24 }, { v: 'bVII', w: 0.14 }]
+    };
+
+    const PROGRESSIONS = {
+      andalusian: ['i', 'bVI', 'bVII', 'i'],
+      lyrical:    ['i', 'III', 'bVII', 'iv'],
+      drone:      ['i', 'i', 'bVI', 'i']
+    };
+
+    let activeScaleKey = 'd-kurd';
+    let activeProfileKey = 'stainless';
+    let inputMode = 'two-key'; // 'two-key' | 'home-row' | 'three-row'
+
+    const eng = {
+      tapCount: 0,
+      barTap: 0,
+      barIdx: 0,
+      currentChord: 'i',
+      lastTapMs: 0,
+      lastHand: 'R',
+      lastPitch: 0,
+      contourDir: +1,      // current natural wave direction (+1 up, -1 down)
+      ioiHistory: [],      // rolling recent IOIs in ms
+      velHistory: [],      // rolling recent power velocities
+      estBeatMs: 360,      // adaptive eighth-note/pulse estimate
+      seedMotif: [],       // first 8 taps' pitch contour for Motif Echo brain
+      arpCursor: 0,
+      timeline: []         // recent 24 synthesized tap records for strip & contour plot
+    };
+
+    function sampleWeighted(entries) {
+      const tot = entries.reduce((s, e) => s + e.w, 0);
+      let r = Math.random() * tot;
+      for (const e of entries) { r -= e.w; if (r <= 0) return e.v; }
+      return entries[entries.length - 1].v;
+    }
+
+    function sampleBoltzmann(cands, temp) {
+      const tau = Math.max(0.08, temp);
+      let minE = Infinity;
+      for (const c of cands) if (c.energy < minE) minE = c.energy;
+      let sum = 0;
+      const w = cands.map(c => { const v = Math.exp(-(c.energy - minE) / tau); sum += v; return v; });
+      let r = Math.random() * sum;
+      for (let i = 0; i < cands.length; i++) { r -= w[i]; if (r <= 0) return cands[i].item; }
+      return cands[cands.length - 1].item;
+    }
+
+    function advanceChord(rowBias = 0) {
+      const progType = document.getElementById('prog-select').value;
+      const barInSentence = eng.barIdx % 4;
+      if (progType !== 'markov') {
+        eng.currentChord = PROGRESSIONS[progType][barInSentence];
+        return;
+      }
+      // Adaptive Meso-Markov steered by recent velocity slope & row elevation
+      if (barInSentence === 0) {
+        eng.currentChord = 'i';
+      } else if (barInSentence === 3 && rowBias <= 0 && Math.random() < 0.78) {
+        eng.currentChord = 'i';
+      } else {
+        const recentVel = eng.velHistory.length ? eng.velHistory.reduce((a, b) => a + b, 0) / eng.velHistory.length : 0.7;
+        const tension = clamp(0.35 + (recentVel - 0.55) * 0.7 + rowBias * 0.3, 0.1, 0.95);
+        const cands = HARMONY_NEXT[eng.currentChord].map(e => ({
+          v: e.v,
+          w: e.v === 'i' ? e.w * (1.25 - tension * 0.75) : e.w * (0.65 + tension)
+        }));
+        eng.currentChord = sampleWeighted(cands);
+      }
+    }
+
+    function handleRhythmInput(rawKey, forcedTimestamp = null) {
+      const desc = lookupKeyDescriptor(rawKey);
+      if (!desc || !isKeyActiveInMode(desc)) return;
+
+      const now = forcedTimestamp ?? performance.now();
+      const sc = SCALES[activeScaleKey];
+      const brain = document.getElementById('brain-select').value;
+      const rowMode = document.getElementById('row-mode-select').value;
+      const entropy = parseFloat(document.getElementById('p-entropy').value);
+      const steerStr = parseFloat(document.getElementById('p-steer').value);
+      const percBlend = parseFloat(document.getElementById('p-perc').value);
+      const tapsPerBar = parseInt(document.getElementById('p-barlen').value, 10);
+
+      // Compute Inter-Onset Interval (IOI) & update adaptive tempo tracker
+      const ioi = eng.lastTapMs > 0 ? (now - eng.lastTapMs) : 1200;
+      const isSimultaneous = eng.lastTapMs > 0 && ioi < 44 && desc.hand !== eng.lastHand && !desc.special;
+      const isLongPause = eng.lastTapMs === 0 || ioi > Math.max(880, eng.estBeatMs * 2.15);
+
+      if (!isSimultaneous && ioi >= 95 && ioi <= 950) {
+        eng.ioiHistory.push(ioi);
+        if (eng.ioiHistory.length > 10) eng.ioiHistory.shift();
+        const sorted = [...eng.ioiHistory].sort((a, b) => a - b);
+        const med = sorted[Math.floor(sorted.length / 2)];
+        eng.estBeatMs = eng.estBeatMs * 0.65 + med * 0.35;
+      }
+
+      const ioiRatio = ioi / (eng.estBeatMs || 350);
+      const isFlurry = !isSimultaneous && !isLongPause && ioiRatio < 0.62;
+      const isSlowAccent = !isLongPause && ioiRatio > 1.38;
+      const isSameHand = !isSimultaneous && !isLongPause && desc.hand === eng.lastHand;
+
+      // Determine effective power & row steering according to inputMode
+      let power = desc.power;
+      let rowDir = desc.rowDir;
+      if (inputMode === 'two-key') {
+        // In 2-key mode, derive expressive velocity dynamically from rhythm!
+        let dynVel = isLongPause ? 0.94 : (isFlurry ? 0.62 : (isSlowAccent ? 0.88 : (isSameHand ? 0.84 : 0.74)));
+        if (eng.barTap === 0) dynVel = Math.max(dynVel, 0.90);
+        const lv = dynVel > 0.86 ? 4 : (dynVel > 0.68 ? 3 : (dynVel > 0.45 ? 2 : 1));
+        power = { lv, name: POWER_LEVELS[lv - 1].name, vel: dynVel, tag: 'Auto' };
+        rowDir = 0;
+      } else if (inputMode === 'home-row') {
+        rowDir = 0;
+      }
+
+      eng.velHistory.push(power.vel);
+      if (eng.velHistory.length > 6) eng.velHistory.shift();
+
+      // Handle Spacebar Ding Reset
+      if (desc.special === 'ding-reset') {
+        eng.barTap = 0; eng.barIdx = 0; eng.currentChord = 'i';
+        eng.lastPitch = 0; eng.lastHand = 'R'; eng.lastTapMs = now;
+        triggerTone(0, { vel: 0.95, type: 'D' });
+        flashField(0, 'active-R', 260);
+        flashKeyVisual(' ', 180);
+        recordTapUI({ key: 'SPC', hand: 'R', power, rowDir: -1, pattern: 'Phrase Reset → Ding', type: 'D', idx: 0, label: sc.notes[0], chord: 'i', ioi });
+        return;
+      }
+
+      // Advance phrase/bar clock on non-simultaneous taps
+      if (!isSimultaneous) {
+        if (isLongPause) {
+          eng.barTap = 0;
+          if (eng.tapCount > 0) {
+            eng.barIdx++;
+            advanceChord(rowDir);
+          }
+        } else {
+          eng.barTap++;
+          if (eng.barTap >= tapsPerBar) {
+            eng.barTap = 0;
+            eng.barIdx++;
+            advanceChord(rowDir);
+          }
+        }
+        eng.tapCount++;
+      }
+
+      // Detect human-readable rhythm pattern label
+      let patternLabel = 'Steady Pulse';
+      if (isSimultaneous) patternLabel = 'Dual-Hand Dyad (~)';
+      else if (isLongPause) patternLabel = 'Caesura → Downbeat';
+      else if (isFlurry) patternLabel = 'Fast Scalar Flurry';
+      else if (isSameHand) patternLabel = 'Same-Hand Triadic Skip';
+      else if (isSlowAccent) patternLabel = 'Elongated Accent';
+      else patternLabel = 'L↔R Zigzag Groove';
+
+      // Auto-flip natural wave direction at shell boundaries when rowDir === 0
+      if (eng.lastPitch >= 7) eng.contourDir = -1;
+      else if (eng.lastPitch <= 1) eng.contourDir = +1;
+      const targetDir = rowDir !== 0 ? rowDir : eng.contourDir;
+
+      const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+      const tau = 0.14 + 1.85 * entropy;
+
+      // ---- SPECIAL CASE 1: Simultaneous Dual-Hand -> Harmonic Dyad! ----
+      if (isSimultaneous) {
+        // Choose a consonant partner on the opposite hemisphere
+        const cands = [];
+        for (let j = 0; j < 9; j++) {
+          if (j === eng.lastPitch) continue;
+          let E = pool.includes(j) ? -1.4 : 1.0;
+          if (j > 0 && PAN_GEOMETRY[j].hand !== desc.hand) E += 1.2;
+          const dist = Math.abs(j - eng.lastPitch);
+          E += (dist === 2 || dist === 3 || dist === 4) ? -1.0 : 0.8;
+          if (rowDir !== 0) E += -Math.sign(j - eng.lastPitch) * rowDir * steerStr * 1.4;
+          cands.push({ item: j, energy: E });
+        }
+        const idx = sampleBoltzmann(cands, tau * 0.7);
+        eng.lastPitch = idx;
+        eng.lastHand = desc.hand;
+        eng.lastTapMs = now;
+        triggerTone(idx, { vel: clamp(power.vel * 0.94, 0.2, 1), type: 'N' });
+        flashField(idx, desc.hand === 'L' ? 'active-L' : 'active-R', 220);
+        flashKeyVisual(desc.key, 150);
+        recordTapUI({ key: desc.key.toUpperCase(), hand: desc.hand, power, rowDir, pattern: patternLabel, type: '~', idx, label: '~' + sc.notes[idx], chord: eng.currentChord, ioi });
+        return;
+      }
+
+      // ---- SPECIAL CASE 2: Auto-Percussion (Tak on mid-bar backbeat, Gu on heavy low) ----
+      const isBackbeat = eng.barTap === Math.floor(tapsPerBar / 2);
+      if (percBlend > 0.04 && !isLongPause) {
+        const takProb = (isBackbeat && power.lv >= 3 ? 0.75 : (power.lv === 4 && rowDir === 0 ? 0.16 : 0.04)) * percBlend;
+        const guProb = (rowDir < 0 && power.lv >= 3 ? 0.42 : (eng.barTap === 2 ? 0.18 : 0.03)) * percBlend;
+        const r = Math.random();
+        if (r < takProb) {
+          eng.lastHand = desc.hand; eng.lastTapMs = now;
+          triggerTak(clamp(power.vel, 0.35, 1.0));
+          flashRim(160);
+          flashKeyVisual(desc.key, 140);
+          recordTapUI({ key: desc.key.toUpperCase(), hand: desc.hand, power, rowDir, pattern: patternLabel + ' → Tak', type: 'T', idx: null, label: 'Tak', chord: eng.currentChord, ioi });
+          return;
+        }
+        if (r < takProb + guProb) {
+          eng.lastHand = desc.hand; eng.lastTapMs = now;
+          triggerGu(clamp(power.vel, 0.4, 1.0));
+          flashRim(180);
+          flashKeyVisual(desc.key, 140);
+          recordTapUI({ key: desc.key.toUpperCase(), hand: desc.hand, power, rowDir, pattern: patternLabel + ' → Gu', type: 'G', idx: null, label: 'Gu', chord: eng.currentChord, ioi });
+          return;
+        }
+      }
+
+      // ---- CORE PITCH ENERGY SAMPLER (Informed by Rhythm, Hand, Power & Row!) ----
+      const cands = [];
+      for (let j = 0; j < 9; j++) {
+        let E = 0;
+
+        // 1. Harmonic chord gravity
+        if (!pool.includes(j)) E += (isFlurry ? 0.75 : 1.45);
+
+        // 2. Physical Handpan Hemisphere Split
+        const hMatch = (j === 0) ? (desc.hand === 'R' || rowDir < 0 || eng.barTap === 0) : (PAN_GEOMETRY[j].hand === desc.hand);
+        if (brain === 'topology') {
+          E += hMatch ? -1.4 : 2.6;
+        } else {
+          E += hMatch ? -0.45 : 0.55;
+        }
+
+        // 3. Interval & Rhythm-driven motion
+        const delta = j - eng.lastPitch;
+        const dist = Math.abs(delta);
+        if (dist === 0) E += (power.lv === 1 ? 0.25 : 1.25); // ghost notes may gently pedal; leads move!
+
+        if (isFlurry) {
+          // Fast burst -> tight conjunct scalar run (dist 1 or 2)
+          E += 0.75 * Math.abs(dist - 1.2);
+          if (Math.sign(delta) === targetDir) E -= 0.7;
+        } else if (isSameHand) {
+          // Same-hand double -> idiomatic triadic skip (dist ~ 2)
+          E += 0.65 * Math.abs(dist - 2.2);
+        } else {
+          // Normal alternating pulse -> smooth ergonomic step/third
+          E += 0.36 * Math.abs(dist - 1.6);
+        }
+
+        // 4. Downbeat / Caesura / Bar Boundary Grammar
+        if (isLongPause || eng.barTap === 0) {
+          const rootIdx = eng.currentChord === 'i' ? 0 : pool[0];
+          if (j === rootIdx && rowDir <= 0) E -= (power.lv >= 3 ? 2.6 : 1.5);
+          if (j === 0 && eng.currentChord === 'i' && rowDir <= 0) E -= 1.2;
+        } else if (eng.barTap === tapsPerBar - 1 && (eng.barIdx % 4) === 3 && rowDir <= 0) {
+          // Phrase cadence approach
+          E += (j === 0) ? -2.4 : (j === 4 ? -0.8 : 0.5);
+        } else if (j === 0 && rowDir >= 0 && power.lv < 4) {
+          // Keep Ding special unless low-row or power accent
+          E += 1.65;
+        }
+
+        // 5. Finger Power Level (Lv1..Lv4) Melodic Influence
+        if (power.lv === 1) {
+          // Ghost pulse prefers comfortable inner-low shell (1..4) near lastPitch
+          E += 0.45 * Math.abs(j - clamp(eng.lastPitch, 1, 4));
+          if (j >= 7) E += 1.2;
+        } else if (power.lv === 4) {
+          // Power accent favors Ding (if low/downbeat) OR dramatic high chord tone
+          if (rowDir > 0) E += (j >= 6) ? -1.4 : 0.6;
+          else if (rowDir < 0) E += (j <= 1) ? -2.0 : 0.8;
+          else if (pool.includes(j) && (j === 0 || j >= 5)) E -= 0.85;
+        }
+
+        // 6. Row Elevation Pitch Steering (Mode 3!)
+        if (rowDir !== 0) {
+          const s = steerStr * 2.7;
+          if (rowMode === 'relative' || rowMode === 'harmonic') {
+            if (rowDir > 0) {
+              // Steer pitch UP: strongly reward j > lastPitch (or top rim if already at 8)
+              if (eng.lastPitch >= 7) E += (j >= 7 ? -s * 0.7 : s * 0.6);
+              else E += (delta > 0 && delta <= 3) ? -s : (delta <= 0 ? s * 0.85 : -s * 0.35);
+            } else {
+              // Steer pitch DOWN: strongly reward j < lastPitch (or Ding if already at 0)
+              if (eng.lastPitch <= 1) E += (j === 0 ? -s * 0.9 : s * 0.6);
+              else E += (delta < 0 && delta >= -3) ? -s : (delta >= 0 ? s * 0.85 : -s * 0.35);
+            }
+          } else if (rowMode === 'zones') {
+            // Absolute register zones
+            const center = rowDir > 0 ? 7.2 : 1.0;
+            E += s * 0.42 * Math.abs(j - center);
+          }
+          if (rowMode === 'harmonic' && rowDir > 0 && (j === 2 || j === 3 || j === 6 || j === 8)) {
+            E -= 0.55; // color tones when lifting
+          }
+        } else if (rowMode === 'zones' && inputMode === 'three-row') {
+          // Home row in zones mode gently centers mid ring 2..6
+          E += steerStr * 0.55 * Math.abs(j - 4);
+        }
+
+        // 7. Specialized Brain Modifiers (Arpeggio Weaver & Motif Echo)
+        if (brain === 'arpeggio') {
+          const sortedPool = [...pool].sort((a, b) => a - b);
+          const targetIdx = sortedPool[clamp(eng.arpCursor, 0, sortedPool.length - 1)];
+          E += (j === targetIdx) ? -2.3 : 0.45 * Math.abs(j - targetIdx);
+        } else if (brain === 'motif' && eng.seedMotif.length >= tapsPerBar) {
+          const mTarget = eng.seedMotif[eng.barTap % eng.seedMotif.length];
+          if (mTarget != null) {
+            const shifted = clamp(mTarget + (rowDir * 2), 0, 8);
+            E += 0.9 * Math.abs(j - shifted);
+          }
+        }
+
+        cands.push({ item: j, energy: E });
+      }
+
+      const idx = sampleBoltzmann(cands, tau);
+
+      // Update Arpeggio cursor & Motif memory
+      const poolLen = pool.length;
+      if (brain === 'arpeggio') {
+        eng.arpCursor += targetDir;
+        if (eng.arpCursor >= poolLen) { eng.arpCursor = poolLen - 2; eng.contourDir = -1; }
+        else if (eng.arpCursor < 0) { eng.arpCursor = 1; eng.contourDir = +1; }
+      }
+      if (eng.seedMotif.length < tapsPerBar) eng.seedMotif.push(idx);
+
+      // Choose expressive articulation from finger power & pitch
+      let evType = idx === 0 ? 'D' : 'N';
+      if (power.lv === 1) evType = 'g';
+      else if (power.lv === 4 && idx >= 6 && rowDir > 0 && Math.random() < 0.35) evType = 'H';
+
+      // Smoothly update wave direction when moving freely
+      if (idx > eng.lastPitch) eng.contourDir = +1;
+      else if (idx < eng.lastPitch) eng.contourDir = -1;
+
+      eng.lastPitch = idx;
+      eng.lastHand = desc.hand;
+      eng.lastTapMs = now;
+
+      // Trigger Audio + Visuals IMMEDIATELY!
+      triggerTone(idx, { vel: power.vel, type: evType });
+      const flashCls = evType === 'H' ? 'active-H' : (desc.hand === 'L' ? 'active-L' : 'active-R');
+      flashField(idx, flashCls, evType === 'g' ? 120 : 220);
+      flashKeyVisual(desc.key, 150);
+
+      recordTapUI({
+        key: desc.key.toUpperCase(),
+        hand: desc.hand,
+        power,
+        rowDir,
+        pattern: patternLabel,
+        type: evType,
+        idx,
+        label: (evType === 'H' ? 'H:' : '') + sc.notes[idx],
+        chord: eng.currentChord,
+        ioi
+      });
+    }
+
+    // =========================================================================
+    // 5. Visual Rendering: Keyboard Deck, SVG Handpan, Contour Plot & Tap Strip
+    // =========================================================================
+    function renderKeyboardDeck() {
+      const deck = document.getElementById('kbd-deck');
+      deck.innerHTML = '';
+
+      ROWS.forEach(row => {
+        const wrap = document.createElement('div');
+        wrap.className = 'kbd-row-wrap';
+
+        const lbl = document.createElement('div');
+        lbl.className = 'kbd-row-label';
+        lbl.innerHTML = row.label.replace('\n', '<br>');
+        wrap.appendChild(lbl);
+
+        const hands = document.createElement('div');
+        hands.className = 'kbd-hands';
+
+        const makeGroup = (keys, hand) => {
+          const grp = document.createElement('div');
+          grp.className = 'kbd-hand-group';
+          keys.forEach((k, colIdx) => {
+            const desc = lookupKeyDescriptor(k);
+            const active = isKeyActiveInMode(desc);
+            const cap = document.createElement('div');
+            cap.className = 'key-cap' + (active ? '' : ' dimmed') + ((k === 'f' || k === 'j') ? ' key-home-anchor' : '');
+            cap.dataset.key = k;
+
+            const arrow = inputMode === 'three-row' ? (row.dir > 0 ? '↑' : (row.dir < 0 ? '↓' : '·')) : '';
+            const metaText = inputMode === 'two-key'
+              ? (active ? `${hand} Hand` : '—')
+              : `${hand} ${desc.power.tag} ${arrow}`;
+            const barPct = inputMode === 'two-key' ? (active ? 80 : 0) : Math.round(desc.power.vel * 100);
+
+            cap.innerHTML = `
+              <div class="kc-char">${k.toUpperCase()}</div>
+              <div class="kc-meta">${metaText}</div>
+              <div class="kc-bar"><div class="kc-bar-fill" style="width:${barPct}%"></div></div>
+            `;
+            cap.addEventListener('pointerdown', (e) => {
+              e.preventDefault();
+              handleRhythmInput(k);
+            });
+            grp.appendChild(cap);
+          });
+          return grp;
+        };
+
+        hands.appendChild(makeGroup(row.left, 'L'));
+        const div = document.createElement('div');
+        div.className = 'kbd-divider';
+        div.textContent = '|';
+        hands.appendChild(div);
+        hands.appendChild(makeGroup(row.right, 'R'));
+
+        wrap.appendChild(hands);
+        deck.appendChild(wrap);
+      });
+
+      const spWrap = document.createElement('div');
+      spWrap.className = 'space-row';
+      const sp = document.createElement('div');
+      sp.className = 'space-key';
+      sp.dataset.key = ' ';
+      sp.textContent = '[SPACE] — Ding (^1) Phrase Anchor & Bar Reset';
+      sp.addEventListener('pointerdown', (e) => { e.preventDefault(); handleRhythmInput(' '); });
+      spWrap.appendChild(sp);
+      deck.appendChild(spWrap);
+    }
+
+    function flashKeyVisual(k, dur = 150) {
+      const sel = k === ' ' ? '.space-key' : `.key-cap[data-key="${CSS.escape(k)}"]`;
+      const el = document.querySelector(sel);
+      if (!el) return;
+      el.classList.add('pressed');
+      setTimeout(() => el.classList.remove('pressed'), dur);
+    }
+
+    function renderHandpanSVG() {
+      const svg = document.getElementById('handpan-svg');
+      const sc = SCALES[activeScaleKey];
+      svg.innerHTML = '';
+      const ns = 'http://www.w3.org/2000/svg';
+      function el(tag, attrs, parent) {
+        const node = document.createElementNS(ns, tag);
+        Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+        if (parent) parent.appendChild(node);
+        return node;
+      }
+
+      el('circle', { cx: 170, cy: 170, r: 158, fill: '#fff', stroke: '#333', 'stroke-width': 2.5, class: 'rim-ring' }, svg);
+      el('circle', { cx: 170, cy: 170, r: 148, fill: 'none', stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
+      el('line', { x1: 170, y1: 18, x2: 170, y2: 322, stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '3 5' }, svg);
+
+      PAN_GEOMETRY.forEach((geo, idx) => {
+        const g = el('g', { class: 'tone-field', 'data-idx': idx, transform: `translate(${geo.cx}, ${geo.cy})` }, svg);
+        if (idx === 0) {
+          el('circle', { cx: 0, cy: 0, r: geo.rx, fill: '#fff', stroke: '#111', 'stroke-width': 1.8 }, g);
+          el('circle', { cx: 0, cy: 0, r: 12, fill: 'none', stroke: '#ccc', 'stroke-width': 1 }, g);
+        } else {
+          el('ellipse', { cx: 0, cy: 0, rx: geo.rx, ry: geo.ry, transform: `rotate(${geo.rot})`, fill: '#fff', stroke: '#555', 'stroke-width': 1.3 }, g);
+        }
+        const nt = el('text', { x: 0, y: -1, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#111', 'font-size': idx === 0 ? 15 : 12, 'font-weight': 700, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }, g);
+        nt.textContent = sc.notes[idx];
+        const dt = el('text', { x: 0, y: 12, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#555', 'font-size': 9.5, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }, g);
+        dt.textContent = idx === 0 ? 'DING ^1' : `^${sc.degrees[idx]} (${geo.hand})`;
+
+        g.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          triggerTone(idx, { vel: 0.85, type: idx === 0 ? 'D' : 'N' });
+          flashField(idx, geo.hand === 'L' ? 'active-L' : 'active-R', 220);
+        });
+      });
+    }
+
+    function flashField(idx, cls, dur = 200) {
+      const el = document.querySelector(`.tone-field[data-idx="${idx}"]`);
+      if (!el) return;
+      el.classList.remove('active-R', 'active-L', 'active-H');
+      void el.offsetWidth;
+      el.classList.add(cls);
+      setTimeout(() => el.classList.remove(cls), dur);
+    }
+
+    function flashRim(dur = 160) {
+      const rim = document.querySelector('.rim-ring');
+      if (!rim) return;
+      rim.classList.add('active-perc');
+      setTimeout(() => rim.classList.remove('active-perc'), dur);
+    }
+
+    function recordTapUI(rec) {
+      eng.timeline.push(rec);
+      if (eng.timeline.length > 24) eng.timeline.shift();
+
+      const estBpm = Math.round(60000 / ((eng.estBeatMs || 350) * 2));
+      const tapsPerBar = document.getElementById('p-barlen').value;
+      const arrow = rec.rowDir > 0 ? '↑' : (rec.rowDir < 0 ? '↓' : '·');
+
+      document.getElementById('state-badge').textContent = 'LIVE';
+      document.getElementById('tel-tempo').textContent = `${clamp(estBpm, 40, 180)} BPM / ${Math.min(999, Math.round(rec.ioi))} ms`;
+      document.getElementById('tel-rhythm').textContent = rec.pattern;
+      document.getElementById('tel-chord').textContent = `${rec.chord} | Tap ${eng.barTap + 1}/${tapsPerBar}`;
+      document.getElementById('tel-hand').textContent = `${rec.hand} [${rec.key}] ${arrow}`;
+      document.getElementById('tel-last').textContent = `${rec.label} (${rec.power.name} ${Math.round(rec.power.vel * 100)}%)`;
+      document.getElementById('banner-rule').textContent = `[${rec.key}] ${rec.pattern} → ${rec.label} (Chord ${rec.chord}, ${rec.power.name})`;
+
+      renderTapStrip();
+      drawContourCanvas();
+    }
+
+    function renderTapStrip() {
+      const strip = document.getElementById('tap-strip');
+      const items = eng.timeline.slice(-12);
+      strip.innerHTML = '';
+      for (let i = 0; i < 12; i++) {
+        const rec = items[i];
+        const card = document.createElement('div');
+        if (!rec) {
+          card.className = 'tap-card';
+          card.style.color = '#ccc';
+          card.innerHTML = '<div class="tap-note">·</div><div>—</div><div class="tap-vel"></div>';
+        } else {
+          const isLatest = i === items.length - 1;
+          card.className = 'tap-card' + (isLatest ? ' latest' : '');
+          const arrow = rec.rowDir > 0 ? '↑' : (rec.rowDir < 0 ? '↓' : '·');
+          card.innerHTML = `
+            <div class="tap-note">${rec.label}</div>
+            <div>${rec.hand}[${rec.key}] ${arrow} <span style="color:#666">${rec.chord}</span></div>
+            <div class="tap-vel"><div class="tap-vel-fill" style="width:${Math.round(rec.power.vel * 100)}%"></div></div>
+          `;
+        }
+        strip.appendChild(card);
+      }
+    }
+
+    function drawContourCanvas() {
+      const cvs = document.getElementById('contour-canvas');
+      const ctx = cvs.getContext('2d');
+      const W = cvs.width, H = cvs.height;
+      ctx.clearRect(0, 0, W, H);
+      const sc = SCALES[activeScaleKey];
+
+      // Draw subtle horizontal pitch lanes (0 = Ding bottom .. 8 = high rim top)
+      ctx.font = '10px ui-monospace, Menlo, monospace';
+      for (let j = 0; j < 9; j++) {
+        const y = H - 14 - (j / 8) * (H - 26);
+        ctx.strokeStyle = j === 0 ? '#ccc' : '#efefef';
+        ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(W - 10, y); ctx.stroke();
+        if (j === 0 || j === 4 || j === 8) {
+          ctx.fillStyle = '#777';
+          ctx.fillText(sc.notes[j], 6, y + 3);
+        }
+      }
+
+      const items = eng.timeline;
+      if (items.length === 0) return;
+
+      const stepX = (W - 60) / 23;
+      const pts = [];
+      items.forEach((rec, i) => {
+        const x = 48 + i * stepX;
+        if (rec.idx != null) {
+          const y = H - 14 - (rec.idx / 8) * (H - 26);
+          pts.push({ x, y, rec });
+        } else {
+          // Percussive marker along bottom
+          ctx.fillStyle = '#888';
+          ctx.fillRect(x - 2, H - 10, 4, 6);
+        }
+      });
+
+      // Connect melodic trajectory line
+      if (pts.length > 1) {
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        pts.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+        ctx.stroke();
+      }
+
+      // Draw tap nodes sized by power velocity & shaded by hand
+      pts.forEach((p, idx) => {
+        const r = 3 + p.rec.power.vel * 4.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = p.rec.hand === 'R' ? '#111' : '#fff';
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = idx === pts.length - 1 ? 2.4 : 1.4;
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    // =========================================================================
+    // 6. Built-In Simulated Rhythm Pattern Demos & Optional Pulse Guide
+    // =========================================================================
+    let simTimers = [];
+    let pulseInterval = null;
+
+    function stopSimulation() {
+      simTimers.forEach(clearTimeout);
+      simTimers = [];
+      document.querySelectorAll('[data-sim]').forEach(b => b.classList.remove('active'));
+    }
+
+    function runSimulation(kind, btn) {
+      stopSimulation();
+      ensureAudio();
+      btn.classList.add('active');
+
+      // Switch to appropriate mode so the user sees the keys light up!
+      if (kind === 'tresillo' || kind === 'paradiddle') setInputMode('two-key');
+      else if (kind === 'dynamics') setInputMode('home-row');
+      else if (kind === 'wave') setInputMode('three-row');
+
+      const seqs = {
+        tresillo: [
+          ['j', 0], ['f', 520], ['j', 1040], ['f', 1380], ['j', 1720], ['f', 1900], ['j', 2080],
+          ['j', 2600], ['f', 2950], ['j', 3130], ['f', 3480], ['j', 3820], ['f', 4000], ['j', 4180], ['f', 4520], [' ', 5100]
+        ],
+        paradiddle: [
+          ['j', 0], ['f', 240], ['j', 480], ['j', 720], ['f', 960], ['j', 1200], ['f', 1440], ['f', 1680],
+          ['j', 1920], ['f', 2160], ['j', 2400], ['j', 2640], ['f', 2880], ['j', 3120], ['f', 3360], ['f', 3600],
+          ['j', 3840], ['f', 3855], ['j', 4320]
+        ],
+        dynamics: [
+          ['f', 0], ['l', 250], ['k', 500], ['s', 750], ['d', 1000], ['j', 1250], [';', 1500], ['a', 1750],
+          ['f', 2000], ['k', 2240], ['d', 2480], ['j', 2720], ['s', 2960], ['l', 3200], ['j', 3440], ['f', 3840]
+        ],
+        wave: [
+          ['v', 0], ['m', 340], ['d', 680], ['k', 980], ['e', 1260], ['i', 1500], ['r', 1720], ['u', 1940],
+          ['o', 2200], ['w', 2460], ['k', 2740], ['d', 3020], ['m', 3320], ['c', 3640], ['v', 4040]
+        ]
+      };
+
+      const events = seqs[kind] || [];
+      events.forEach(([key, ms], idx) => {
+        const t = setTimeout(() => {
+          handleRhythmInput(key);
+          if (idx === events.length - 1) btn.classList.remove('active');
+        }, ms);
+        simTimers.push(t);
+      });
+    }
+
+    function togglePulseGuide() {
+      const btn = document.getElementById('btn-pulse-toggle');
+      if (pulseInterval) {
+        clearInterval(pulseInterval);
+        pulseInterval = null;
+        btn.textContent = 'Pulse: Off';
+        btn.classList.remove('active');
+        return;
+      }
+      ensureAudio();
+      btn.textContent = 'Pulse: On';
+      btn.classList.add('active');
+      let tick = 0;
+      const fireClick = () => {
+        const t0 = audioCtx.currentTime + 0.005;
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'sine';
+        o.frequency.value = tick % 4 === 0 ? 1100 : 720;
+        g.gain.setValueAtTime(0.035, t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.025);
+        o.connect(g); g.connect(dryGain);
+        o.start(t0); o.stop(t0 + 0.03);
+        tick++;
+      };
+      fireClick();
+      pulseInterval = setInterval(fireClick, 714); // gentle ~84 BPM quarter pulse
+    }
+
+    // =========================================================================
+    // 7. Physical Keyboard Listener & Control Bindings
+    // =========================================================================
+    function setInputMode(mode) {
+      inputMode = mode;
+      document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('active', c.dataset.mode === mode));
+      const labels = { 'two-key': 'Mode 1: Two-Key', 'home-row': 'Mode 2: Home Row Power', 'three-row': 'Mode 3: 3-Row Steering' };
+      document.getElementById('tel-mode').textContent = labels[mode];
+      renderKeyboardDeck();
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+      const desc = lookupKeyDescriptor(e.key);
+      if (desc && isKeyActiveInMode(desc)) {
+        e.preventDefault();
+        handleRhythmInput(e.key);
+      }
+    });
+
+    document.querySelectorAll('.mode-card').forEach(card => {
+      card.addEventListener('click', () => setInputMode(card.dataset.mode));
+    });
+
+    document.querySelectorAll('[data-sim]').forEach(btn => {
+      btn.addEventListener('click', () => runSimulation(btn.dataset.sim, btn));
+    });
+    document.getElementById('btn-sim-stop').addEventListener('click', stopSimulation);
+    document.getElementById('btn-pulse-toggle').addEventListener('click', togglePulseGuide);
+
+    document.getElementById('btn-reset-phrase').addEventListener('click', () => {
+      stopSimulation();
+      eng.tapCount = 0; eng.barTap = 0; eng.barIdx = 0; eng.currentChord = 'i';
+      eng.lastTapMs = 0; eng.lastPitch = 0; eng.seedMotif = []; eng.timeline = [];
+      eng.ioiHistory = []; eng.velHistory = [];
+      document.getElementById('tel-chord').textContent = `i | Tap 0/${document.getElementById('p-barlen').value}`;
+      document.getElementById('tel-rhythm').textContent = 'Reset — tap to begin';
+      renderTapStrip();
+      drawContourCanvas();
+    });
+
+    document.getElementById('power-map-select').addEventListener('change', renderKeyboardDeck);
+    document.getElementById('p-entropy').addEventListener('input', (e) => { document.getElementById('v-entropy').textContent = parseFloat(e.target.value).toFixed(2); });
+    document.getElementById('p-steer').addEventListener('input', (e) => { document.getElementById('v-steer').textContent = parseFloat(e.target.value).toFixed(2); });
+    document.getElementById('p-perc').addEventListener('input', (e) => { document.getElementById('v-perc').textContent = parseFloat(e.target.value).toFixed(2); });
+    document.getElementById('p-barlen').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      const tag = v === 6 ? '(6/8)' : (v === 8 ? '(4/4)' : (v === 12 ? '(12/8)' : '(2/4)'));
+      document.getElementById('v-barlen').textContent = `${v} taps ${tag}`;
+    });
+
+    const scaleSel = document.getElementById('scale-select');
+    Object.entries(SCALES).forEach(([k, v]) => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = v.name;
+      scaleSel.appendChild(opt);
+    });
+    scaleSel.addEventListener('change', (e) => {
+      activeScaleKey = e.target.value;
+      renderHandpanSVG();
+      drawContourCanvas();
+    });
+    document.getElementById('profile-select').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val.startsWith('bank:')) {
+        activeBankId = val.slice(5);
+        activeProfileKey = activeBankId.replace('yishama-', '');
+        ensureStudioBank(activeBankId);
+      } else {
+        activeBankId = null;
+        activeProfileKey = val;
+      }
+    });
+
+    // Boot
+    renderHandpanSVG();
+    renderKeyboardDeck();
+    renderTapStrip();
+    drawContourCanvas();
+  </script>
+</body>
+</html>
