@@ -1,0 +1,4301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>12 — PanLang Micro-Notation &amp; Ultra-Low-Latency Decisions Cockpit</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --bg-deep: #070a0f;
+      --surface: #0f141c;
+      --surface-2: #141b26;
+      --hairline: #1e2633;
+      --hairline-hi: #2d394c;
+      --text: #f1f5f9;
+      --text-dim: #8b9bb4;
+      --text-muted: #52627a;
+      --cyan: #38bdf8;
+      --cyan-soft: rgba(56, 189, 248, 0.14);
+      --cyan-glow: rgba(56, 189, 248, 0.35);
+      --orange: #ff5a1f;
+      --orange-soft: rgba(255, 90, 31, 0.16);
+      --orange-glow: rgba(255, 90, 31, 0.42);
+      --ok: #34d399;
+      --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.45;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Subtle drafting grid background */
+    body {
+      background-image:
+        linear-gradient(to right, rgba(30, 38, 51, 0.24) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(30, 38, 51, 0.24) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    .mono { font-family: var(--mono); }
+
+    /* ============================================================
+       1. COCKPIT HEADER BAR
+       ============================================================ */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 16px;
+      background: rgba(10, 13, 18, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--hairline);
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 3px 7px;
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      background: var(--cyan-soft);
+      border-radius: 3px;
+    }
+    .brand-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text);
+    }
+    .brand-sub {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    .header-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .ctrl-select, .ctrl-input {
+      background: var(--bg-deep);
+      color: var(--text);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 8px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .ctrl-select:focus, .ctrl-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px var(--cyan-soft);
+    }
+
+    .tempo-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .tempo-pill button {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 1px 4px;
+      line-height: 1;
+    }
+    .tempo-pill button:hover { color: var(--cyan); }
+    .tempo-val { color: var(--text); font-weight: 600; min-width: 44px; text-align: center; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      border-radius: 3px;
+      border: 1px solid var(--hairline-hi);
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      user-select: none;
+    }
+    .btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .btn:active { transform: translateY(1px); }
+
+    .btn-primary {
+      background: var(--cyan-soft);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .btn-primary:hover {
+      background: rgba(56, 189, 248, 0.24);
+      color: var(--text);
+    }
+    .btn-primary.playing {
+      background: var(--orange-soft);
+      border-color: var(--orange);
+      color: var(--orange);
+      box-shadow: 0 0 12px rgba(255, 90, 31, 0.25);
+    }
+
+    .btn-accent {
+      border-color: rgba(255, 90, 31, 0.5);
+      color: var(--orange);
+      background: rgba(255, 90, 31, 0.08);
+    }
+    .btn-accent:hover {
+      border-color: var(--orange);
+      background: var(--orange-soft);
+      color: #fff;
+    }
+
+    .api-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      padding: 3px 6px;
+    }
+    .api-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .api-dot.live { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+    .api-dot.busy { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+    .api-dot.err  { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+    .api-input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      width: 132px;
+      outline: none;
+    }
+    .api-input::placeholder { color: var(--text-muted); }
+
+    /* ============================================================
+       2. TOKEN COMPRESSION & LATENCY BENCHMARK STRIP
+       ============================================================ */
+    .bench-strip {
+      display: grid;
+      grid-template-columns: minmax(260px, 1.45fr) repeat(4, minmax(120px, 1fr));
+      border-bottom: 1px solid var(--hairline);
+      background: var(--bg-deep);
+    }
+    .bench-cell {
+      padding: 7px 14px;
+      border-right: 1px solid var(--hairline);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 3px;
+      min-width: 0;
+    }
+    .bench-cell:last-child { border-right: none; }
+    .bench-label {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .bench-val {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .bench-sub {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--text-dim);
+    }
+    .bench-delta {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--cyan);
+      padding: 1px 5px;
+      border-radius: 2px;
+      background: var(--cyan-soft);
+    }
+    .bench-delta.flash {
+      color: var(--orange);
+      background: var(--orange-soft);
+    }
+
+    .comp-bar-track {
+      position: relative;
+      height: 5px;
+      background: #171e2a;
+      border-radius: 1px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+    .comp-bar-panlang {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      background: var(--cyan);
+      transition: width 0.25s ease;
+    }
+    .comp-bar-baseline {
+      position: absolute;
+      left: 0; top: 0; bottom: 0; right: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        rgba(139, 155, 180, 0.16),
+        rgba(139, 155, 180, 0.16) 3px,
+        transparent 3px,
+        transparent 6px
+      );
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 2px;
+      border: 1px solid var(--hairline-hi);
+      color: var(--text-dim);
+      background: var(--surface);
+      transition: all 0.18s;
+    }
+    .status-badge.hit {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: var(--cyan-soft);
+    }
+    .status-badge.prefetch, .status-badge.abort {
+      border-color: var(--orange);
+      color: var(--orange);
+      background: var(--orange-soft);
+    }
+
+    /* ============================================================
+       3. MAIN COCKPIT GRID
+       ============================================================ */
+    .cockpit-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 338px;
+      min-height: calc(100vh - 102px);
+    }
+
+    /* LEFT: LIVING PANLANG RIBBON STAGE */
+    .stage-panel {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--hairline);
+      min-width: 0;
+    }
+
+    .seed-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--hairline);
+      background: var(--surface);
+      flex-wrap: wrap;
+    }
+    .seed-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .seed-input {
+      flex: 1;
+      min-width: 220px;
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline-hi);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 5px 10px;
+      outline: none;
+    }
+    .seed-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px var(--cyan-soft);
+    }
+    .chip-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+    .motif-chip {
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .motif-chip:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: var(--cyan-soft);
+    }
+
+    /* RIBBON CONTAINER */
+    .ribbon-shell {
+      position: relative;
+      display: flex;
+      flex: 1;
+      min-height: 368px;
+      background: var(--bg-deep);
+      border-bottom: 1px solid var(--hairline);
+      overflow: hidden;
+    }
+
+    /* Fixed left pitch-degree axis ruler */
+    .pitch-ruler {
+      width: 56px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--hairline);
+      background: rgba(15, 20, 28, 0.92);
+      position: relative;
+      z-index: 5;
+      user-select: none;
+    }
+    .ruler-head {
+      height: 118px;
+      border-bottom: 1px solid var(--hairline);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 6px;
+      font-family: var(--mono);
+      font-size: 8.5px;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      gap: 4px;
+    }
+    .ruler-head .arc-key {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--cyan);
+    }
+    .ruler-head .arc-key.lock { color: var(--orange); }
+    .ruler-lanes {
+      position: relative;
+      height: 242px;
+    }
+    .ruler-btn {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 22px;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.1s, background 0.1s;
+    }
+    .ruler-btn:hover {
+      background: var(--cyan-soft);
+      color: var(--text);
+    }
+    .ruler-btn .deg-num { color: var(--cyan); font-weight: 700; }
+    .ruler-btn.active {
+      background: var(--orange-soft);
+      color: var(--text);
+    }
+    .ruler-btn.active .deg-num { color: var(--orange); }
+
+    /* Scrollable SVG Ribbon Viewport */
+    .ribbon-scroll {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: hidden;
+      position: relative;
+      scrollbar-width: thin;
+      scrollbar-color: var(--hairline-hi) var(--bg-deep);
+    }
+    .ribbon-scroll::-webkit-scrollbar { height: 7px; }
+    .ribbon-scroll::-webkit-scrollbar-track { background: var(--bg-deep); }
+    .ribbon-scroll::-webkit-scrollbar-thumb { background: var(--hairline-hi); border-radius: 3px; }
+
+    #panlang-svg {
+      display: block;
+      height: 360px;
+      min-width: 100%;
+    }
+
+    .ribbon-overlay-hint {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .ribbon-overlay-hint > * { pointer-events: auto; }
+    .hint-pill {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      color: var(--text-dim);
+      background: rgba(10, 13, 18, 0.86);
+      border: 1px solid var(--hairline);
+      padding: 3px 7px;
+      border-radius: 2px;
+    }
+    .hint-pill b { color: var(--text); font-weight: 600; }
+    .hint-pill .hi { color: var(--orange); }
+    .jump-live-btn {
+      display: none;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 2px;
+      border: 1px solid var(--orange);
+      background: var(--orange-soft);
+      color: var(--orange);
+      cursor: pointer;
+    }
+    .jump-live-btn.visible { display: inline-flex; }
+
+    /* SVG Token Styles */
+    .tok-group { cursor: pointer; }
+    .tok-group:hover .tok-box { stroke: var(--cyan); stroke-width: 1.4; }
+    .tok-box { transition: fill 0.12s, stroke 0.12s; }
+    .tok-label {
+      font-family: var(--mono);
+      font-weight: 600;
+      pointer-events: none;
+      user-select: none;
+    }
+    .tok-sub {
+      font-family: var(--mono);
+      font-size: 8.5px;
+      pointer-events: none;
+      user-select: none;
+    }
+    .bar-fork-hit { cursor: pointer; }
+    .bar-fork-hit:hover text { fill: var(--orange); }
+
+    @keyframes pulseRing {
+      0%   { opacity: 0.85; transform: scale(0.95); }
+      100% { opacity: 0; transform: scale(1.38); }
+    }
+    @keyframes dashFlow {
+      from { stroke-dashoffset: 24; }
+      to   { stroke-dashoffset: 0; }
+    }
+    .arc-live-flow {
+      stroke-dasharray: 5 3;
+      animation: dashFlow 0.75s linear infinite;
+    }
+
+    /* LIVE SERIALIZED PANLANG STREAM TICKER */
+    .stream-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--hairline);
+      min-height: 36px;
+    }
+    .stream-tag {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .stream-code {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .stream-code::-webkit-scrollbar { display: none; }
+    .pl-hdr { color: var(--text-muted); }
+    .pl-bar { color: var(--hairline-hi); margin: 0 3px; }
+    .pl-harm { color: var(--cyan); font-weight: 600; }
+    .pl-lock { color: var(--orange); font-weight: 700; background: var(--orange-soft); padding: 0 3px; border-radius: 2px; }
+    .pl-op { color: var(--cyan); }
+    .pl-user { text-decoration: underline; text-decoration-color: var(--orange); text-underline-offset: 3px; }
+
+    /* LINEAR TACTILE PANLANG INSTRUMENT KEY-RAIL */
+    .key-rail-wrap {
+      padding: 10px 14px 12px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .key-rail-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .key-rail-head b { color: var(--text-dim); }
+    .gesture-readout {
+      color: var(--orange);
+      font-weight: 600;
+      min-height: 14px;
+    }
+    .key-rail {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(0, 1fr)) 10px repeat(4, minmax(0, 0.92fr));
+      gap: 5px;
+      align-items: stretch;
+    }
+    .rail-sep {
+      width: 1px;
+      background: var(--hairline);
+      justify-self: center;
+      margin: 4px 0;
+    }
+    .pan-key {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 4px 6px;
+      min-height: 62px;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: var(--mono);
+      cursor: pointer;
+      user-select: none;
+      touch-action: none;
+      transition: transform 0.05s, border-color 0.1s, background 0.1s, box-shadow 0.12s;
+    }
+    .pan-key:hover {
+      border-color: var(--cyan);
+      background: var(--surface-2);
+    }
+    .pan-key.pressed, .pan-key.sounding {
+      border-color: var(--orange);
+      background: var(--orange-soft);
+      box-shadow: 0 0 14px rgba(255, 90, 31, 0.28), inset 0 0 8px rgba(255, 90, 31, 0.18);
+      transform: translateY(1px);
+    }
+    .pan-key.ai-pull {
+      border-color: rgba(56, 189, 248, 0.72);
+    }
+    .pan-key.ding {
+      border-color: rgba(56, 189, 248, 0.45);
+      background: linear-gradient(180deg, rgba(56, 189, 248, 0.08), var(--surface));
+    }
+    .pan-key.perc {
+      background: var(--bg-deep);
+    }
+    .pan-key.toggle-on {
+      border-color: var(--cyan);
+      background: var(--cyan-soft);
+      color: var(--cyan);
+    }
+    .pk-deg {
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .pk-note {
+      font-size: 10px;
+      color: var(--cyan);
+    }
+    .pk-kbd {
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+    .pk-prob-bar {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      bottom: 2px;
+      height: 2px;
+      background: transparent;
+      overflow: hidden;
+    }
+    .pk-prob-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--cyan);
+      transition: width 0.2s ease;
+    }
+
+    /* ============================================================
+       4. RIGHT CONSOLE: ULTRA-MINIMAL 3-VECTOR STEERING
+       ============================================================ */
+    .console-panel {
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 14px;
+      gap: 12px;
+    }
+    .sec-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .sec-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .sec-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--cyan);
+    }
+
+    /* 2D ELECTRIC STEERING PAD */
+    .pad-wrap {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pad-stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 0.88;
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline-hi);
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: crosshair;
+      touch-action: none;
+      user-select: none;
+    }
+    #steer-pad-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .pad-axis-label {
+      position: absolute;
+      font-family: var(--mono);
+      font-size: 8.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .pad-axis-top { top: 6px; left: 50%; transform: translateX(-50%); color: var(--cyan); }
+    .pad-axis-bot { bottom: 6px; left: 50%; transform: translateX(-50%); }
+    .pad-axis-left { left: 7px; top: 50%; transform: translateY(-50%) rotate(-90deg); transform-origin: left center; }
+    .pad-axis-right { right: 7px; top: 50%; transform: translateY(-50%) rotate(90deg); transform-origin: right center; }
+
+    .vector-readout-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .vec-box {
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      padding: 5px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono);
+      font-size: 10.5px;
+    }
+    .vec-box .lbl { color: var(--text-muted); font-size: 9.5px; }
+    .vec-box .val { color: var(--text); font-weight: 700; }
+    .vec-box .val.hot { color: var(--orange); }
+
+    /* VECTOR 3: ELASTIC BREATH DIAL */
+    .dial-card {
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      border-radius: 4px;
+      padding: 9px 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .dial-svg-wrap {
+      width: 78px;
+      height: 78px;
+      flex-shrink: 0;
+      cursor: ns-resize;
+      touch-action: none;
+      user-select: none;
+    }
+    .dial-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .dial-title {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+    }
+    .dial-mode {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .dial-desc {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+    .dial-pills {
+      display: flex;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .dial-preset {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: 2px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 9px;
+      padding: 2px 4px;
+      cursor: pointer;
+    }
+    .dial-preset:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* SPACESHIP STEPPED TELEMETRY METERS */
+    .telemetry-card {
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      border-radius: 4px;
+      padding: 9px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .meter-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .meter-row {
+      display: grid;
+      grid-template-columns: 54px 1fr 34px;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+    .meter-name {
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .meter-name.win { color: var(--text); font-weight: 700; }
+    .step-bar {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 2px;
+      height: 8px;
+    }
+    .step-seg {
+      background: #151c27;
+      border-radius: 1px;
+      transition: background 0.16s ease, box-shadow 0.16s ease;
+    }
+    .step-seg.on { background: var(--cyan); }
+    .step-seg.hot {
+      background: var(--orange);
+      box-shadow: 0 0 6px var(--orange-glow);
+    }
+    .meter-pct {
+      text-align: right;
+      color: var(--text-muted);
+      font-size: 9.5px;
+    }
+    .meter-pct.win { color: var(--orange); font-weight: 700; }
+
+    .deg-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 6px;
+      border-top: 1px solid var(--hairline);
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+    .deg-pills { display: flex; gap: 5px; }
+    .deg-pill {
+      padding: 1px 5px;
+      border: 1px solid var(--hairline-hi);
+      border-radius: 2px;
+      background: var(--surface);
+      color: var(--cyan);
+      font-weight: 600;
+    }
+    .deg-pill.top {
+      border-color: var(--orange);
+      color: var(--orange);
+      background: var(--orange-soft);
+    }
+
+    /* ============================================================
+       5. COLLAPSIBLE PAYLOAD & DECISIONS INSPECTOR DRAWER
+       ============================================================ */
+    .drawer {
+      border-top: 1px solid var(--hairline);
+      background: var(--bg-deep);
+      display: none;
+    }
+    .drawer.open { display: block; }
+    .drawer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .drawer-col {
+      padding: 12px 14px;
+      border-right: 1px solid var(--hairline);
+      min-width: 0;
+    }
+    .drawer-col:last-child { border-right: none; }
+    .code-pane {
+      margin-top: 7px;
+      background: var(--bg);
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      padding: 9px 10px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      line-height: 1.48;
+      color: var(--text-dim);
+      max-height: 240px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .code-pane.panlang-pane { color: var(--text); border-color: rgba(56, 189, 248, 0.35); }
+    .prefetch-log {
+      margin-top: 8px;
+      max-height: 112px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--hairline);
+      padding-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .prefetch-log .ev-hit { color: var(--cyan); }
+    .prefetch-log .ev-abort { color: var(--orange); }
+    .prefetch-log .ev-err { color: #f87171; }
+
+    /* ============================================================
+       6. RESEARCH & PANLANG GRAMMAR SPEC SECTION
+       ============================================================ */
+    .spec-section {
+      border-top: 1px solid var(--hairline);
+      background: var(--surface);
+      padding: 18px 20px 28px;
+    }
+    .spec-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr 1fr;
+      gap: 16px;
+      max-width: 1480px;
+      margin: 0 auto;
+    }
+    .spec-card {
+      background: var(--bg-deep);
+      border: 1px solid var(--hairline);
+      border-radius: 4px;
+      padding: 13px 15px;
+    }
+    .spec-card h3 {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 8px;
+    }
+    .spec-card p {
+      color: var(--text-dim);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 10.5px;
+    }
+    .spec-table td, .spec-table th {
+      text-align: left;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--hairline);
+      vertical-align: top;
+    }
+    .spec-table th { color: var(--text-muted); font-weight: 600; font-size: 9.5px; text-transform: uppercase; }
+    .spec-table td:first-child { color: var(--text); font-weight: 700; white-space: nowrap; }
+    .spec-table td:nth-child(2) { color: var(--cyan); }
+    .spec-table td:last-child { color: var(--text-dim); }
+
+    @media (max-width: 1120px) {
+      .cockpit-main { grid-template-columns: 1fr; }
+      .stage-panel { border-right: none; border-bottom: 1px solid var(--hairline); }
+      .bench-strip { grid-template-columns: 1fr 1fr; }
+      .drawer-grid, .spec-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       1. COCKPIT HEADER BAR
+       ============================================================ -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-tag">12 · PANLANG</span>
+      <div>
+        <div class="brand-title">PanLang Micro-Notation &amp; Ultra-Low-Latency Decisions Cockpit</div>
+        <div class="brand-sub">Score = Symbolic Language = Direct Instrument · Zero-Output-Token Calibrated Steering</div>
+      </div>
+    </div>
+
+    <div class="header-group">
+      <select id="scale-select" class="ctrl-select" title="Handpan Scale">
+        <option value="d-kurd">D Kurd (Aeolian)</option>
+        <option value="d-amara">D Amara (Celtic Min)</option>
+        <option value="fs-pygmy">F# Pygmy (Dorian)</option>
+        <option value="cs-hijaz">C# Hijaz (Phrygian)</option>
+        <option value="e-sabye">E Sabye (Ionian)</option>
+      </select>
+
+      <select id="bank-select" class="ctrl-select" title="Audio Engine / Studio Bank">
+        <option value="yishama-stainless">Yishama Stainless (Bank)</option>
+        <option value="yishama-ember">Yishama Ember (Bank)</option>
+        <option value="yishama-nitrided">Classic Nitrided (Bank)</option>
+        <option value="dsp-stainless">Live Yishama DSP</option>
+      </select>
+
+      <div class="tempo-pill" title="Base Pulse Tempo (sculpted dynamically by Breath Dial)">
+        <button id="bpm-down" type="button">−</button>
+        <span class="tempo-val" id="bpm-display">T:82</span>
+        <button id="bpm-up" type="button">+</button>
+      </div>
+    </div>
+
+    <div class="header-group">
+      <button id="btn-play" class="btn btn-primary" type="button">▶ PLAY</button>
+      <button id="btn-fork-now" class="btn btn-accent" type="button" title="Abort &amp; generate alternate continuation from playhead">⑂ FORK</button>
+      <button id="btn-reset" class="btn" type="button" title="Reset ribbon to clean seed">↺ RESET</button>
+
+      <div class="api-pill" title="Ephemeral memory-only Gemini API key for gemini-decision-1 (never stored)">
+        <span id="api-dot" class="api-dot"></span>
+        <input
+          id="api-key-input"
+          class="api-input"
+          type="password"
+          placeholder="Gemini API key…"
+          autocomplete="new-password"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+        />
+        <button id="btn-api-test" class="btn" type="button" style="padding:2px 6px;font-size:10px;">PING</button>
+      </div>
+
+      <button id="btn-inspector" class="btn" type="button">INSPECT JSON</button>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       2. LIVE TOKEN COMPRESSION & LATENCY BENCHMARK STRIP
+       ============================================================ -->
+  <section class="bench-strip" aria-label="Token Compression and Latency Benchmark">
+    <div class="bench-cell">
+      <div class="bench-label">
+        <span>PROMPT COMPRESSION (PANLANG VS 05 PROSE)</span>
+        <span id="bench-pct" class="bench-delta">−81.4%</span>
+      </div>
+      <div class="bench-val">
+        <span id="bench-pl-tok">~52 tok</span>
+        <span class="bench-sub" id="bench-05-tok">vs 05: ~310 tok</span>
+      </div>
+      <div class="comp-bar-track">
+        <div class="comp-bar-baseline"></div>
+        <div id="comp-bar-fill" class="comp-bar-panlang" style="width:18%;"></div>
+      </div>
+    </div>
+
+    <div class="bench-cell">
+      <div class="bench-label"><span>TOTAL PREFILL (PROMPT + 2Q)</span><span>VS 05 (6Q)</span></div>
+      <div class="bench-val">
+        <span id="bench-total-tok">~148 tok</span>
+        <span class="bench-sub" id="bench-total-05">vs ~910 tok (−84%)</span>
+      </div>
+    </div>
+
+    <div class="bench-cell">
+      <div class="bench-label"><span>DECISION RTT · MODEL</span><span id="bench-mode-tag">LOCAL</span></div>
+      <div class="bench-val">
+        <span id="bench-rtt">0.2 ms</span>
+        <span class="bench-sub" id="bench-calls">0 live calls</span>
+      </div>
+    </div>
+
+    <div class="bench-cell">
+      <div class="bench-label"><span>SPECULATIVE PREFETCH</span><span id="bench-hit-rate">0H / 0A</span></div>
+      <div class="bench-val">
+        <span id="prefetch-badge" class="status-badge">STANDBY</span>
+      </div>
+    </div>
+
+    <div class="bench-cell">
+      <div class="bench-label"><span>OUTPUT TOKENS · LOCKS</span><span id="bench-forks">FORKS: 0</span></div>
+      <div class="bench-val">
+        <span style="color:var(--cyan);">0 out tok</span>
+        <span class="bench-sub" id="bench-locks">0 locked</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       3. MAIN COCKPIT WORKSPACE
+       ============================================================ -->
+  <main class="cockpit-main">
+
+    <!-- LEFT: LIVING PANLANG RIBBON (SCORE = LANGUAGE = INSTRUMENT) -->
+    <section class="stage-panel">
+
+      <!-- Direct 1-Line PanLang Seed & Motif Chips -->
+      <div class="seed-bar">
+        <span class="seed-label">PANLANG SEED &gt;</span>
+        <input
+          id="seed-input"
+          class="seed-input"
+          type="text"
+          spellcheck="false"
+          value="@i 0: 1 4-6 4: , | @VI 2: 4 6-8 t 6 | @VII 3 5-7 8: , 6-5 | @i 4-2 0:"
+          placeholder="Type PanLang e.g. 0: 4-6-8: , 6-4 1: and press Enter…"
+        />
+        <button id="btn-inject-seed" class="btn btn-primary" type="button">INJECT &amp; RIFF</button>
+        <div class="chip-row" id="motif-chips">
+          <button class="motif-chip" data-seed="@i 0: 1 4-6 4: , | @VI 2: 4 6-8 t 6 | @VII 3 5-7 8: , 6-5 | @i 4-2 0:" type="button">Kurd Bloom</button>
+          <button class="motif-chip" data-seed="@i 0: 4-6-8: , 6-4 1: | @VI ~26: 4-6 8: '7 ," type="button">Cascade 4-6-8:</button>
+          <button class="motif-chip" data-seed="@i 0 g 4 t 0-1 4-6 t | @VII 3 g 5-7 t 8 6-5 g" type="button">Tak-Gu Pulse</button>
+          <button class="motif-chip" data-seed="@i ~04: , '7: 6-4 , | @VI ~26: v '8: , 4:" type="button">Harmonic Mist</button>
+          <button class="motif-chip" data-seed="@i 0: ^ 1-3-4-6-8: , v 7-6-4: 0:" type="button">Caesura Sigh</button>
+        </div>
+      </div>
+
+      <!-- Graphic-Symbolic PanLang Ribbon Stage -->
+      <div class="ribbon-shell">
+        <aside class="pitch-ruler" aria-label="Pitch Degree Axis">
+          <div class="ruler-head">
+            <span class="arc-key">⌒ ATTN ARC</span>
+            <span class="arc-key lock">⌒ [LOCK]</span>
+            <span>SPAN = HORIZON</span>
+          </div>
+          <div class="ruler-lanes" id="pitch-ruler-lanes"></div>
+        </aside>
+
+        <div class="ribbon-scroll" id="ribbon-scroll">
+          <svg id="panlang-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+
+        <div class="ribbon-overlay-hint">
+          <span class="hint-pill"><b>Click</b> Audition + <span class="hi">[Lock]</span></span>
+          <span class="hint-pill"><b>Shift / Dbl-Click</b> <span class="hi">Scrub &amp; Fork</span></span>
+          <button id="btn-jump-live" class="jump-live-btn" type="button">LIVE CURSOR →</button>
+        </div>
+      </div>
+
+      <!-- Live Serialized PanLang Stream Strip -->
+      <div class="stream-strip">
+        <span class="stream-tag">LIVE GRAMMAR</span>
+        <div id="live-panlang-stream" class="stream-code"></div>
+        <button id="btn-copy-pl" class="btn" type="button" style="padding:3px 7px;font-size:10px;">COPY</button>
+        <button id="btn-clear-locks" class="btn" type="button" style="padding:3px 7px;font-size:10px;">UNLOCK ALL</button>
+      </div>
+
+      <!-- Tactile Direct-Play PanLang Key-Rail (Speak PanLang <3ms) -->
+      <div class="key-rail-wrap">
+        <div class="key-rail-head">
+          <span><b>SPEAK PANLANG LIVE (&lt;3ms):</b> Keys <b>0–8</b> or <b>A S D F V H J K L</b> · Hold &gt;220ms or tap <b>:</b> = Bloom · Fast &lt;165ms = <b>-</b> Cascade · <b>T</b> Tak · <b>G</b> Gu · <b>Space/,</b> Breath · <b>Shift</b> = <b>'</b> 2f₀ · <b>M</b> Mute</span>
+          <span id="gesture-readout" class="gesture-readout">READY — TAP OR PLAY ANY KEY</span>
+        </div>
+        <div class="key-rail" id="panlang-key-rail"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: ULTRA-MINIMAL 3-VECTOR ELECTRIC STEERING CONSOLE -->
+    <aside class="console-panel">
+      <div>
+        <div class="sec-head">
+          <span class="sec-title">VECTORS 1 &amp; 2 · ELECTRIC STEERING PAD</span>
+          <span class="sec-meta" id="pad-quad-label">BALANCED FLOW</span>
+        </div>
+      </div>
+
+      <div class="pad-wrap">
+        <div class="pad-stage" id="steer-pad-stage" title="Drag puck to steer Memory Horizon (X) and Harmonic Gravity (Y)">
+          <canvas id="steer-pad-canvas"></canvas>
+          <span class="pad-axis-label pad-axis-top">↑ MODAL SHIMMER · bVI / bVII / 2f₀</span>
+          <span class="pad-axis-label pad-axis-bot">↓ DING GROUND · i / iv / 0:</span>
+          <span class="pad-axis-label pad-axis-left">MICRO ECHO</span>
+          <span class="pad-axis-label pad-axis-right">MACRO LEAP</span>
+        </div>
+        <div class="vector-readout-row">
+          <div class="vec-box">
+            <span class="lbl">X · HORIZON</span>
+            <span class="val" id="val-horizon">0.44</span>
+          </div>
+          <div class="vec-box">
+            <span class="lbl">Y · GRAVITY</span>
+            <span class="val" id="val-gravity">0.52</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VECTOR 3: ELASTIC BREATH DIAL -->
+      <div>
+        <div class="sec-head" style="margin-bottom:8px;">
+          <span class="sec-title">VECTOR 3 · ELASTIC BREATH DIAL</span>
+          <span class="sec-meta" id="val-rubato-num">R:0.50</span>
+        </div>
+        <div class="dial-card">
+          <div class="dial-svg-wrap" id="breath-dial-wrap" title="Drag vertically or scroll to morph Pocket Groove ↔ Free Rubato">
+            <svg id="breath-dial-svg" viewBox="0 0 80 80" width="78" height="78"></svg>
+          </div>
+          <div class="dial-info">
+            <div class="dial-title">
+              <span>TEMPORAL ELASTICITY</span>
+              <span id="dial-mult-tag" style="color:var(--cyan);">:1.62×</span>
+            </div>
+            <div class="dial-mode" id="dial-mode-label">ORGANIC BREATH</div>
+            <div class="dial-desc" id="dial-desc-label">Agogic : blooms, fluid - cascades, natural , luftpause</div>
+            <div class="dial-pills">
+              <button class="dial-preset" data-rubato="0.10" type="button">POCKET</button>
+              <button class="dial-preset" data-rubato="0.50" type="button">FLOW</button>
+              <button class="dial-preset" data-rubato="0.92" type="button">RUBATO</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE DECISIONS TELEMETRY (SPACESHIP STEPPED BARS) -->
+      <div class="telemetry-card">
+        <div class="sec-head" style="padding-bottom:4px;">
+          <span class="sec-title">DECISION TELEMETRY · MOVE (6)</span>
+          <span class="sec-meta" id="tel-attn-span">AVG ARC: 6.2t</span>
+        </div>
+        <div class="meter-list" id="move-meters"></div>
+        <div class="deg-summary">
+          <span>FOCAL DEG</span>
+          <div class="deg-pills" id="deg-top-pills">
+            <span class="deg-pill top">0:D3</span>
+            <span class="deg-pill">4:D4</span>
+            <span class="deg-pill">6:F4</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============================================================
+       5. COLLAPSIBLE PAYLOAD & DECISIONS INSPECTOR DRAWER
+       ============================================================ -->
+  <section id="inspector-drawer" class="drawer" aria-label="PanLang Payload and Decisions JSON Inspector">
+    <div class="drawer-grid">
+      <div class="drawer-col">
+        <div class="sec-head">
+          <span class="sec-title">LIVE PANLANG PAYLOAD (TO GEMINI-DECISION-1)</span>
+          <span class="sec-meta" id="insp-pl-stats">~148 tok</span>
+        </div>
+        <pre id="insp-pl-json" class="code-pane panlang-pane"></pre>
+      </div>
+      <div class="drawer-col">
+        <div class="sec-head">
+          <span class="sec-title">EQUIVALENT 05 VERBOSE PROSE PROMPT (BASELINE)</span>
+          <span class="sec-meta" id="insp-05-stats">~910 tok</span>
+        </div>
+        <pre id="insp-05-text" class="code-pane"></pre>
+      </div>
+      <div class="drawer-col">
+        <div class="sec-head">
+          <span class="sec-title">DECISION RESPONSE &amp; SPECULATIVE PREFETCH LOG</span>
+          <span class="sec-meta" id="insp-res-meta">OFFLINE</span>
+        </div>
+        <pre id="insp-res-json" class="code-pane"></pre>
+        <div id="prefetch-log" class="prefetch-log"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       6. RESEARCH & PANLANG GRAMMAR SPECIFICATION
+       ============================================================ -->
+  <section class="spec-section">
+    <div class="spec-grid">
+      <div class="spec-card">
+        <h3>PanLang Expressive Micro-Grammar (EBNF)</h3>
+        <p>A reversible, token-dense musical language co-designed for human spatial sight-reading, direct live play, and minimum-prefill <span class="mono">gemini-decision-1</span> steering.</p>
+        <table class="spec-table">
+          <thead>
+            <tr><th>Token</th><th>Meaning</th><th>Acoustic / Temporal Behavior</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>0 .. 8</td><td>Scale degree</td><td>0 = Ding (^1); 1–8 ascending tone fields</td></tr>
+            <tr><td>:</td><td>Agogic stretch</td><td>Resonant bloom 1.45×–1.85× base beat (scaled by Breath Dial)</td></tr>
+            <tr><td>a-b-c</td><td>Coupled cascade</td><td>Swift coupled ornament 0.42×–0.56× beat; final note may bloom (4-6-8:)</td></tr>
+            <tr><td>,</td><td>Caesura breath</td><td>Luminous luftpause +0.40–0.80× open air for overtone decay</td></tr>
+            <tr><td>'7</td><td>2f₀ shimmer</td><td>Pure octave overtone harmonic excitation on degree 7</td></tr>
+            <tr><td>~04</td><td>Rolled dyad</td><td>32ms arpeggiated harmonic roll across two degrees</td></tr>
+            <tr><td>m3</td><td>Muted damp</td><td>Short woody damped strike (0.22× decay)</td></tr>
+            <tr><td>t / g / .</td><td>Perc / Rest</td><td>Tak rim slap · Gu 78 Hz cavity · rhythmic rest</td></tr>
+            <tr><td>@i..@VII</td><td>Harmonic tag</td><td>Modal center (@i, @III, @iv, @VI, @VII, @v)</td></tr>
+            <tr><td>^ / v</td><td>Inflection</td><td>Phrase accelerando (0.86×) / ritardando (1.20×)</td></tr>
+            <tr><td>[4-6]</td><td>Attention lock</td><td>User-pinned motif injected directly into Gemini context</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="spec-card">
+        <h3>Why ~80% Token Compression Slashes Decision Latency</h3>
+        <p><span class="mono">gemini-decision-1</span> emits <strong>0 output tokens</strong> (calibrated logprobs from a single forward pass), making end-to-end RTT almost purely a function of <strong>prefill token count</strong> and question criteria length.</p>
+        <p>Prototype <span class="mono">05</span> serialized musical context as ~310 tokens of English prose plus ~600 tokens across 6 verbose questions (~910 total prefill tokens). <span class="mono">PanLang</span> encodes pitch contour, harmonic function, locked motifs, organic rubato, and 3-vector steering in ~45–62 tokens, paired with a razor-tight 2-question suite (<span class="mono">move</span> + <span class="mono">deg</span>, ~95 criteria tokens).</p>
+        <p><strong>Speculative Prefetching:</strong> Queries launch 1.5 beats <em>before</em> each bar boundary so distributions arrive before they are consumed. Any live user gesture (2D pad drag, Breath Dial turn, live keystroke, lock, or fork) immediately cancels stale calls via <span class="mono">AbortController</span> and re-speculates.</p>
+      </div>
+
+      <div class="spec-card">
+        <h3>3-Vector Control Collapse &amp; Continuous Attention</h3>
+        <p><strong>25+ Knobs → 3 Tactile Vectors:</strong> Instead of exposing separate horizon weights, density sliders, chord selectors, cadence sliders, and sticking rules, the entire expressive space collapses to:</p>
+        <table class="spec-table">
+          <tbody>
+            <tr><td>X · Horizon</td><td>Short micro-ostinato ↔ Long macro thematic arcs</td></tr>
+            <tr><td>Y · Gravity</td><td>Ding tonic warmth (@i/@iv) ↔ Luminous shimmer (@VI/@VII, 2f₀)</td></tr>
+            <tr><td>R · Breath</td><td>Crisp Tak/Gu groove ↔ Spacious speech-like rubato</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top:8px;"><strong>Continuous Attention Arcs:</strong> Rather than discrete Micro/Short/Mid/Long buckets, SVG arcs directly connect influential past tokens to the live cursor—horizontal span natively encodes horizon distance, while stepped bar meters flash <span class="mono" style="color:var(--orange);">#ff5a1f</span> on attention shifts.</p>
+      </div>
+    </div>
+  </section>
+
+  <script type="module">
+    // =========================================================================
+    // 1. SCALES, PITCH THEORY & PAN GEOMETRY (from 05-handpan-attention-steering)
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        code: 'DKurd',
+        name: 'D Kurd (Aeolian)',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        chords: {
+          i:   [0, 1, 4, 6, 8],
+          III: [1, 3, 6, 8],
+          iv:  [0, 2, 4, 7],
+          v:   [1, 3, 5, 8],
+          VI:  [2, 4, 6],
+          VII: [3, 5, 7]
+        }
+      },
+      'd-amara': {
+        code: 'DAmara',
+        name: 'D Amara (Celtic Minor)',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        chords: {
+          i:   [0, 1, 3, 5, 7],
+          III: [1, 2, 5, 7, 8],
+          iv:  [0, 3, 6, 8],
+          v:   [1, 2, 4, 7],
+          VI:  [2, 5, 7],
+          VII: [2, 4, 6, 8]
+        }
+      },
+      'fs-pygmy': {
+        code: 'FsPygmy',
+        name: 'F# Pygmy (Dorian Pent.)',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        chords: {
+          i:   [0, 2, 3, 5, 7],
+          III: [2, 3, 4, 7, 8],
+          iv:  [0, 1, 5, 6],
+          v:   [1, 3, 4, 6, 8],
+          VI:  [2, 4, 5, 7],
+          VII: [1, 4, 6, 8]
+        }
+      },
+      'cs-hijaz': {
+        code: 'CsHijaz',
+        name: 'C# Hijaz (Phrygian Dom.)',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        chords: {
+          i:   [0, 1, 4, 6, 7],
+          III: [1, 3, 6, 7],
+          iv:  [0, 2, 4, 8],
+          v:   [1, 3, 5, 7],
+          VI:  [2, 4, 6, 8],
+          VII: [3, 5, 7]
+        }
+      },
+      'e-sabye': {
+        code: 'ESabye',
+        name: 'E Sabye (Major / Ionian)',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        chords: {
+          i:   [0, 1, 4, 6, 8],
+          III: [1, 3, 6, 8],
+          iv:  [0, 2, 4, 7],
+          v:   [1, 3, 5, 8],
+          VI:  [2, 4, 6],
+          VII: [3, 5, 7]
+        }
+      }
+    };
+
+    const CODE_TO_SCALE = Object.fromEntries(
+      Object.entries(SCALES).map(([k, v]) => [v.code.toLowerCase(), k])
+    );
+
+    const PAN_GEOMETRY = [
+      { hand: 'R', pan:  0.00 },
+      { hand: 'R', pan:  0.22 },
+      { hand: 'L', pan: -0.22 },
+      { hand: 'R', pan:  0.34 },
+      { hand: 'L', pan: -0.34 },
+      { hand: 'R', pan:  0.32 },
+      { hand: 'L', pan: -0.32 },
+      { hand: 'R', pan:  0.18 },
+      { hand: 'L', pan: -0.18 }
+    ];
+
+    const HARMONY_LIST = ['i', 'III', 'iv', 'VI', 'VII', 'v'];
+    const MOVE_KEYS = ['home', 'lift', 'echo', 'run', 'air', 'groove'];
+    const MOVE_CRITERIA = {
+      home:   'resolve Ding 0:',
+      lift:   'climb bVI/bVII high',
+      echo:   'repeat locked/recent motif',
+      run:    'fast cascade 4-6-8',
+      air:    'caesura breath & shimmer',
+      groove: 'syncopated Tak/Gu pulse'
+    };
+
+    // =========================================================================
+    // 2. YISHAMA COUPLED-BLOOM AUDIO ENGINE + STUDIO BANK LOADER + DETENT CLICKS
+    // =========================================================================
+    const PROFILES = {
+      stainless: { tau1: 0.56, tau2: 0.78, tau3: 1.15, f1Atk: 0.028, f2Bloom: 0.135, f3Bloom: 0.185, oct: 0.48, fifth: 0.30, p4: 0.11, beat: 0.85, skin: 0.14, body: 0.22, brightness: 4400 },
+      ember:     { tau1: 0.48, tau2: 0.74, tau3: 1.25, f1Atk: 0.020, f2Bloom: 0.105, f3Bloom: 0.155, oct: 0.56, fifth: 0.36, p4: 0.16, beat: 0.65, skin: 0.16, body: 0.16, brightness: 5800 },
+      nitrided:  { tau1: 0.36, tau2: 0.44, tau3: 0.55, f1Atk: 0.012, f2Bloom: 0.060, f3Bloom: 0.085, oct: 0.34, fifth: 0.18, p4: 0.06, beat: 0.35, skin: 0.24, body: 0.28, brightness: 3100 }
+    };
+
+    let audioCtx = null, dryGain = null, reverbSend = null, noiseBuffer = null;
+    const ENHARMONIC = { 'Db':'C#', 'D#':'Eb', 'Gb':'F#', 'Ab':'G#', 'A#':'Bb' };
+    const studioBanks = new Map();
+    const loadingBanks = new Set();
+    let activeScaleKey = 'd-kurd';
+    let activeBankId = 'yishama-stainless';
+    let activeProfileKey = 'stainless';
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11; comp.ratio.value = 3.5; comp.knee.value = 18;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.82;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createWarmRoomIR(audioCtx, 2.2, 2.9);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.28;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        noiseBuffer = createNoise(audioCtx, 0.35);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (activeBankId && !studioBanks.has(activeBankId) && !loadingBanks.has(activeBankId)) {
+        ensureStudioBank(activeBankId);
+      }
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createWarmRoomIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const t = i / len;
+          const env = Math.pow(1 - t, decay) * (i < 900 ? 0.65 : 1.0);
+          const w = (Math.random() * 2 - 1) * env;
+          lp = lp * 0.78 + w * 0.22;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    function canonicalNote(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      return m ? (ENHARMONIC[m[1]] || m[1]) + m[2] : note;
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    }
+
+    async function ensureStudioBank(bankId) {
+      if (!bankId || studioBanks.has(bankId) || loadingBanks.has(bankId)) return studioBanks.get(bankId) || null;
+      loadingBanks.add(bankId);
+      try {
+        if (!window.__HANDPAN_BANKS__?.[bankId]) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = `./soundbanks/${bankId}.bank.js`;
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Bank script unavailable'));
+            document.head.appendChild(s);
+          });
+        }
+        const raw = window.__HANDPAN_BANKS__?.[bankId];
+        if (!raw?.samples || !audioCtx) return null;
+        const map = new Map();
+        const entries = Object.entries(raw.samples);
+        for (let i = 0; i < entries.length; i += 8) {
+          const sl = entries.slice(i, i + 8);
+          const bufs = await Promise.all(sl.map(([, b64]) => audioCtx.decodeAudioData(b64ToBuf(b64))));
+          bufs.forEach((ab, k) => map.set(sl[k][0], ab));
+        }
+        studioBanks.set(bankId, map);
+        return map;
+      } catch (_) {
+        return null;
+      } finally {
+        loadingBanks.delete(bankId);
+      }
+    }
+
+    function playStudioBankBuffer(key, when, gainVal, panVal = 0) {
+      if (!activeBankId) return false;
+      const map = studioBanks.get(activeBankId);
+      const ab = map?.get(key);
+      if (!ab) return false;
+      const src = audioCtx.createBufferSource();
+      src.buffer = ab;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(gainVal, when);
+      if (panVal !== 0 && audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = panVal * 0.7;
+        src.connect(g); g.connect(sp); sp.connect(dryGain); sp.connect(reverbSend);
+      } else {
+        src.connect(g); g.connect(dryGain); g.connect(reverbSend);
+      }
+      src.start(when);
+      return true;
+    }
+
+    function scheduleTone(idx, when, opts = {}) {
+      if (!audioCtx) return;
+      const scale = SCALES[activeScaleKey];
+      const note = scale.notes[idx];
+      if (!note) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      const vel = clamp(opts.vel ?? 0.8, 0.08, 1.0);
+      const type = opts.type ?? 'N';
+
+      if (activeBankId && type !== 'M') {
+        const cNote = canonicalNote(note);
+        const key = type === 'H' ? `${cNote}|H|v0|r0` : `${cNote}|N|v${vel < 0.62 ? 0 : 1}|r0`;
+        const bakedV = type === 'H' ? 0.86 : (vel < 0.62 ? 0.42 : 0.94);
+        const gScale = clamp((vel / bakedV) * (type === 'g' ? 0.60 : 0.92), 0.14, 1.15);
+        if (playStudioBankBuffer(key, t0, gScale, PAN_GEOMETRY[idx]?.pan ?? 0)) return;
+      }
+
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+
+      let t1 = p.tau1 * pitchScale * (isDing ? 1.15 : 1.0);
+      let t2 = p.tau2 * pitchScale * (isDing ? 1.12 : 1.0);
+      let t3 = p.tau3 * pitchScale * (isDing ? 1.15 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { t1 *= 0.45; t2 *= 0.38; t3 *= 0.30; octMul = 0.42; fifthMul = 0.25; }
+      else if (type === 'H') { f0Mul = 0.07; octMul = 1.85; fifthMul = 1.0; t2 *= 1.15; }
+      else if (type === 'M') { t1 *= 0.22; t2 *= 0.18; t3 *= 0.15; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.56, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(10000, p.brightness * (0.65 + 0.50 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(850, cut * 0.52), t0 + t3 * 3.5);
+
+      const panner = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = PAN_GEOMETRY[idx]?.pan ?? 0;
+        vg.connect(lp); lp.connect(panner);
+        panner.connect(dryGain); panner.connect(reverbSend);
+      } else {
+        vg.connect(lp); lp.connect(dryGain); lp.connect(reverbSend);
+      }
+
+      function addBloomMode(hz, amp, riseSec, tauSec) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.003 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.05);
+        const totalDur = Math.min(5.2, riseSec + tauSec * 5.2);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + riseSec);
+        g.gain.setTargetAtTime(0.0001, t0 + riseSec, tauSec);
+        osc.connect(g); g.connect(vg);
+        osc.start(t0);
+        osc.stop(t0 + totalDur);
+      }
+
+      addBloomMode(freq, 0.60 * f0Mul, p.f1Atk, t1);
+      if (p.beat > 0.05 && f0Mul > 0.2) {
+        addBloomMode(freq + p.beat, 0.22 * f0Mul, p.f1Atk * 1.35, t1 * 0.96);
+      }
+      addBloomMode(freq * 2.001, p.oct * octMul * (0.55 + 0.55 * vel), p.f2Bloom, t2);
+      addBloomMode(freq * 2.999, p.fifth * fifthMul * (0.45 + 0.65 * vel), p.f3Bloom, t3);
+      addBloomMode(freq * 4.001, p.p4 * vel * (isDing ? 1.4 : 0.7), p.f3Bloom * 1.15, t2 * 0.75);
+
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = isDing ? 420 : 680;
+      bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.skin * vel * (type === 'g' ? 1.3 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(t0); noise.stop(t0 + 0.025);
+
+      if (isDing || idx <= 2) {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(isDing ? 98 : 92, t0);
+        bo.frequency.exponentialRampToValueAtTime(78, t0 + 0.08);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * (isDing ? 1.0 : 0.35), t0 + 0.008);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.24 : 0.12));
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.28);
+      }
+    }
+
+    function scheduleTak(when, vel = 0.78) {
+      if (!audioCtx) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|TAK', t0, vel * 0.82)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.54, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2650; bp.Q.value = 1.3;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.85, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.036);
+
+      [880, 1620].forEach((hz, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.87, t0 + 0.032);
+        g.gain.setValueAtTime(0.28 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.038);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.042);
+      });
+    }
+
+    function scheduleGu(when, vel = 0.84) {
+      if (!audioCtx) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|GU', t0, vel * 0.88)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.72, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(118, t0);
+      o.frequency.exponentialRampToValueAtTime(78, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.92, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // Subtle Spaceship-inspired mechanical detent click for 2D Pad & Breath Dial
+    let lastDetentTime = 0;
+    function playDetentClick(pitchHz = 2150, level = 0.032) {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const now = audioCtx.currentTime;
+      if (now - lastDetentTime < 0.028) return;
+      lastDetentTime = now;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(pitchHz, now);
+      o.frequency.exponentialRampToValueAtTime(pitchHz * 0.42, now + 0.009);
+      g.gain.setValueAtTime(level, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.011);
+      o.connect(g);
+      g.connect(dryGain);
+      o.start(now);
+      o.stop(now + 0.013);
+    }
+
+    function playPanLangTokenAudio(tok, when, rubato = 0.5) {
+      if (!audioCtx) return;
+      const t0 = when ?? (audioCtx.currentTime + 0.002);
+      const baseVel = tok.agogic ? 0.88 : (tok.coupled ? 0.66 : 0.78);
+      const vel = clamp(tok.vel ?? baseVel, 0.25, 1.0);
+      if (tok.kind === 'note') {
+        scheduleTone(tok.deg, t0, { vel, type: tok.art || 'N' });
+      } else if (tok.kind === 'dyad') {
+        const rollGap = lerp(0.024, 0.044, rubato);
+        scheduleTone(tok.deg, t0, { vel: vel * 0.82, type: 'N' });
+        scheduleTone(tok.deg2, t0 + rollGap, { vel: vel * 0.92, type: 'N' });
+      } else if (tok.kind === 'tak') {
+        scheduleTak(t0, vel);
+      } else if (tok.kind === 'gu') {
+        scheduleGu(t0, vel);
+      }
+    }
+
+    // =========================================================================
+    // 3. PANLANG EXPRESSIVE MICRO-GRAMMAR: REVERSIBLE PARSER & SERIALIZER
+    // =========================================================================
+    let nextTokUid = 1;
+    function makeToken(props) {
+      return {
+        id: nextTokUid++,
+        kind: 'note',         // 'note' | 'dyad' | 'tak' | 'gu' | 'rest' | 'breath'
+        deg: 0,               // 0..8 for note/dyad
+        deg2: null,           // 0..8 for dyad
+        art: 'N',             // 'N' | 'H' (') | 'M' (m)
+        agogic: false,        // ':' bloom stretch
+        coupled: false,       // true if linked to next token via '-'
+        leadInflection: null, // '^' | 'v' before this token/group
+        inflection: null,     // '^' | 'v' suffix on token
+        locked: false,        // inside [...]
+        source: 'seed',       // 'seed' | 'ai' | 'user'
+        attn: [],             // [{ sourceId, weight, reason }]
+        vel: null,
+        ...props
+      };
+    }
+
+    function normalizeHarm(raw) {
+      if (!raw) return 'i';
+      const cleaned = raw.replace(/^@/, '').replace(/^b(VI|VII)$/i, '$1');
+      const map = { i: 'i', iii: 'III', iv: 'iv', vi: 'VI', vii: 'VII', v: 'v' };
+      return map[cleaned.toLowerCase()] || 'i';
+    }
+
+    function parseAtom(raw, coupled, locked, source) {
+      let s = raw.trim();
+      if (!s) return null;
+
+      let inflection = null;
+      if (s.endsWith('^') || s.endsWith('v')) {
+        if (s.length > 1) {
+          inflection = s.slice(-1);
+          s = s.slice(0, -1);
+        }
+      }
+      let agogic = false;
+      if (s.endsWith(':')) {
+        agogic = true;
+        s = s.slice(0, -1);
+      }
+
+      if (s === ',') return makeToken({ kind: 'breath', deg: null, agogic, coupled: false, inflection, locked, source });
+      if (s === '.') return makeToken({ kind: 'rest',   deg: null, agogic, coupled: false, inflection, locked, source });
+      if (s === 't' || s === 'T') return makeToken({ kind: 'tak', deg: null, agogic, coupled, inflection, locked, source });
+      if (s === 'g' || s === 'G') return makeToken({ kind: 'gu',  deg: null, agogic, coupled, inflection, locked, source });
+
+      // Rolled dyad: ~04 or ~26
+      const dyadM = /^~([0-8])([0-8])$/.exec(s);
+      if (dyadM) {
+        return makeToken({
+          kind: 'dyad',
+          deg: parseInt(dyadM[1], 10),
+          deg2: parseInt(dyadM[2], 10),
+          art: 'N',
+          agogic,
+          coupled,
+          inflection,
+          locked,
+          source
+        });
+      }
+
+      // Single pitched note: optional ' or m prefix + digit 0..8
+      const noteM = /^(['m])?([0-8])$/.exec(s);
+      if (noteM) {
+        const art = noteM[1] === "'" ? 'H' : (noteM[1] === 'm' ? 'M' : 'N');
+        return makeToken({
+          kind: 'note',
+          deg: parseInt(noteM[2], 10),
+          art,
+          agogic,
+          coupled,
+          inflection,
+          locked,
+          source
+        });
+      }
+      return null;
+    }
+
+    function parsePanLang(text, defaultSource = 'seed') {
+      const result = { scaleKey: null, bpm: null, bars: [] };
+      const cleaned = (text || '').trim();
+      if (!cleaned) return result;
+
+      // Split into header & bar chunks separated by '|'
+      const segments = cleaned.split('|').map(s => s.trim()).filter(Boolean);
+      let barNum = 1;
+
+      for (const seg of segments) {
+        const rawWords = seg.split(/\s+/).filter(Boolean);
+        let harm = 'i';
+        let barInflection = null;
+        let pendingLeadInflection = null;
+        let inLock = false;
+        const tokens = [];
+        let onlyHeader = true;
+
+        for (let w of rawWords) {
+          // Header directives K:DKurd T:82 V:...
+          if (/^K:/i.test(w)) {
+            const sc = CODE_TO_SCALE[w.slice(2).toLowerCase()];
+            if (sc) result.scaleKey = sc;
+            continue;
+          }
+          if (/^T:\d+$/i.test(w)) {
+            result.bpm = clamp(parseInt(w.slice(2), 10), 48, 148);
+            continue;
+          }
+          if (/^V:/i.test(w)) continue;
+
+          onlyHeader = false;
+          if (w.startsWith('@')) {
+            harm = normalizeHarm(w);
+            continue;
+          }
+          if (w === '^' || w === 'v') {
+            if (tokens.length === 0) barInflection = w;
+            else pendingLeadInflection = w;
+            continue;
+          }
+
+          let startsLock = false, endsLock = false;
+          if (w.startsWith('[')) { startsLock = true; w = w.slice(1); }
+          if (w.endsWith(']'))   { endsLock = true;   w = w.slice(0, -1); }
+          if (startsLock) inLock = true;
+
+          if (w) {
+            const parts = w.split('-').filter(Boolean);
+            for (let p = 0; p < parts.length; p++) {
+              const isCoupled = p < parts.length - 1;
+              const tok = parseAtom(parts[p], isCoupled, inLock, defaultSource);
+              if (tok) {
+                if (p === 0 && pendingLeadInflection) {
+                  tok.leadInflection = pendingLeadInflection;
+                  pendingLeadInflection = null;
+                }
+                tokens.push(tok);
+              }
+            }
+          }
+          if (endsLock) inLock = false;
+        }
+
+        if (!onlyHeader && tokens.length > 0) {
+          result.bars.push({
+            index: barNum++,
+            harm,
+            inflection: barInflection,
+            attnLevel: 0,
+            prevAttnLevel: 0,
+            flashUntil: 0,
+            forkPoint: false,
+            tokens
+          });
+        }
+      }
+      return result;
+    }
+
+    function formatSingleToken(tok) {
+      let s = '';
+      if (tok.kind === 'breath') s = ',';
+      else if (tok.kind === 'rest') s = '.';
+      else if (tok.kind === 'tak') s = 't';
+      else if (tok.kind === 'gu') s = 'g';
+      else if (tok.kind === 'dyad') s = `~${tok.deg}${tok.deg2}`;
+      else {
+        const pre = tok.art === 'H' ? "'" : (tok.art === 'M' ? 'm' : '');
+        s = `${pre}${tok.deg}`;
+      }
+      if (tok.agogic) s += ':';
+      if (tok.inflection) s += tok.inflection;
+      return s;
+    }
+
+    function serializeBar(bar) {
+      const parts = [];
+      if (bar.harm) parts.push(`@${bar.harm}`);
+      if (bar.inflection) parts.push(bar.inflection);
+
+      let i = 0;
+      const toks = bar.tokens;
+      while (i < toks.length) {
+        // Group coupled cascade chains together, honoring lock brackets
+        const locked = !!toks[i].locked;
+        const groupWords = [];
+        while (i < toks.length && !!toks[i].locked === locked) {
+          if (toks[i].leadInflection) groupWords.push(toks[i].leadInflection);
+          let chain = formatSingleToken(toks[i]);
+          while (toks[i].coupled && i + 1 < toks.length && !!toks[i + 1].locked === locked) {
+            i++;
+            chain += '-' + formatSingleToken(toks[i]);
+          }
+          groupWords.push(chain);
+          i++;
+        }
+        if (locked) {
+          parts.push(`[${groupWords.join(' ')}]`);
+        } else {
+          parts.push(...groupWords);
+        }
+      }
+      return parts.join(' ');
+    }
+
+    function serializePanLang(bars, opts = {}) {
+      const includeHeader = opts.header !== false;
+      const scaleCode = SCALES[opts.scaleKey || activeScaleKey].code;
+      const bpmVal = opts.bpm ?? state.bpm;
+      const head = opts.vectors
+        ? `K:${scaleCode} T:${bpmVal} V:H${opts.vectors.horizon.toFixed(2)},G${opts.vectors.gravity.toFixed(2)},R${opts.vectors.rubato.toFixed(2)}`
+        : `K:${scaleCode} T:${bpmVal}`;
+      const body = bars.map(serializeBar).join(' | ');
+      if (!includeHeader) return body;
+      return body ? `${head} | ${body}` : head;
+    }
+
+    // Organic rubato duration calculation (seconds) for any token
+    function getTokenDurationSec(tok, barInflection, posRatio, bpm, rubato) {
+      const basePulse = (60 / bpm) * 0.5; // eighth-note singing pulse (~0.366s at 82 BPM)
+      const agogicMul  = lerp(1.42, 1.88, rubato);
+      const cascadeMul = lerp(0.54, 0.41, rubato);
+      const breathMul  = lerp(0.40, 0.78, rubato);
+
+      let mult = 1.0;
+      if (tok.kind === 'breath') mult = breathMul;
+      else if (tok.kind === 'rest') mult = 0.85;
+      else if (tok.coupled) mult = cascadeMul;
+      else if (tok.agogic) mult = agogicMul;
+      else if (tok.kind === 'dyad') mult = 1.15;
+
+      // Phrase-arch organic rubato (slight forward lean mid-bar, gentle breath near cadence)
+      const phraseCurve = Math.sin(posRatio * Math.PI); // 0 -> 1 -> 0
+      const archMod = 1.0 + rubato * (0.09 - 0.14 * phraseCurve);
+
+      // Explicit ^ (accel) or v (rit) inflection
+      let inflMod = 1.0;
+      const infl = tok.inflection || tok.leadInflection || barInflection;
+      if (infl === '^') inflMod = lerp(0.94, 0.84, rubato);
+      else if (infl === 'v') inflMod = lerp(1.08, 1.22, rubato);
+
+      return basePulse * mult * archMod * inflMod;
+    }
+
+    // =========================================================================
+    // 4. APPLICATION STATE & 3-VECTOR CONTROL MODEL
+    // =========================================================================
+    const ctrl = {
+      horizon: 0.44,   // X-axis [0..1]: Micro Echo <-> Macro Leap
+      gravity: 0.52,   // Y-axis [0..1]: Ding Ground <-> Modal Shimmer
+      rubato:  0.50,   // Dial   [0..1]: Pocket Groove <-> Free Rubato
+      shimmerMode: false,
+      muteMode: false
+    };
+
+    const state = {
+      bpm: 82,
+      playing: false,
+      bars: [],
+      playBarIdx: 0,
+      playTokIdx: 0,
+      activeTokId: null,
+      hoveredTokId: null,
+      playbackEpoch: 0,
+      stepTimer: null,
+      nextAudioTime: 0,
+      forkCount: 0,
+      userScrollLock: false,
+      lastLiveNoteTime: 0,
+      lastLiveTok: null,
+      heldKeys: new Map(), // key -> { tok, downAt }
+
+      // Decision / Inference distributions
+      moveProbs: { home: 0.24, lift: 0.20, echo: 0.22, run: 0.14, air: 0.12, groove: 0.08 },
+      prevMoveProbs: { home: 0.24, lift: 0.20, echo: 0.22, run: 0.14, air: 0.12, groove: 0.08 },
+      moveWinner: 'home',
+      degProbs: Array(9).fill(1 / 9),
+      aiGhost: { horizon: 0.44, gravity: 0.52 },
+      lastDecisionSource: 'LOCAL',
+      lastDecisionJson: null,
+      lastRttMs: 0.2,
+      liveCallCount: 0,
+      prefetchHits: 0,
+      prefetchAborts: 0,
+      prefetchedForBar: -1,
+      prefetchedResult: null,
+      prefetchInFlightBar: -1,
+      prefetchLog: []
+    };
+
+    let geminiApiKey = ''; // Strictly ephemeral memory-only!
+    let activeAbortController = null;
+    let steerDebounceTimer = null;
+
+    // =========================================================================
+    // 5. TOKEN ESTIMATOR & LIVE 05-BASELINE BENCHMARK
+    // =========================================================================
+    function estimateTokens(str) {
+      if (!str) return 0;
+      const chunks = str.match(/[A-Za-z0-9]+|[^\sA-Za-z0-9]/g) || [];
+      // Blend subword chunk count with chars/3.8 for realistic BPE estimate
+      return Math.max(1, Math.round(chunks.length * 0.62 + (str.length / 3.9) * 0.45));
+    }
+
+    function buildPanLangPrompt(barsSubset) {
+      const bars = barsSubset || state.bars;
+      const sc = SCALES[activeScaleKey];
+      const vec = `V:H${ctrl.horizon.toFixed(2)},G${ctrl.gravity.toFixed(2)},R${ctrl.rubato.toFixed(2)}`;
+      const windowBars = bars.length <= 4 ? bars : bars.slice(-3);
+      const seedPrefix = bars.length > 4 && bars[0]
+        ? `S:${serializeBar(bars[0]).slice(0, 26)} | `
+        : '';
+      const body = windowBars.map(serializeBar).join(' | ');
+      return `K:${sc.code} T:${state.bpm} ${vec}\n${seedPrefix}${body} | ->?`;
+    }
+
+    function buildPanLangQuestions() {
+      const sc = SCALES[activeScaleKey];
+      const degCriteria = Object.fromEntries(
+        sc.notes.map((n, i) => [`d${i}`, `${i}:${n}^${sc.degrees[i]}`])
+      );
+      return {
+        move: {
+          type: 'choice',
+          instructions: 'Next PanLang bar gesture',
+          criteria: MOVE_CRITERIA
+        },
+        deg: {
+          type: 'choice',
+          instructions: 'Focal tone degree 0-8',
+          criteria: degCriteria
+        }
+      };
+    }
+
+    // Faithful replica of 05-handpan-attention-steering.html lines 1638-1748 for real compression metrics
+    function buildBaseline05Equivalent() {
+      const sc = SCALES[activeScaleKey];
+      const allToks = state.bars.flatMap(b => b.tokens);
+      const seedStr = (state.bars[0]?.tokens || [])
+        .slice(0, 8)
+        .map(t => t.deg != null ? sc.notes[t.deg] : '·')
+        .join(' ') || 'establishing now';
+      const recent16 = allToks.slice(-16).map(t => {
+        if (t.deg != null) return `${sc.notes[t.deg]}(${PAN_GEOMETRY[t.deg].hand})`;
+        return t.kind === 'tak' ? 'Tak(R)' : (t.kind === 'gu' ? 'Gu(L)' : '·');
+      }).join(' ');
+      const last4 = allToks.slice(-4).map(t => {
+        const lbl = t.deg != null ? sc.notes[t.deg] : t.kind;
+        const h = t.deg != null ? PAN_GEOMETRY[t.deg].hand : 'R';
+        return `${lbl}[${h}]`;
+      }).join(' -> ') || 'none yet';
+      const hist = Array(9).fill(0);
+      let lastDeg = 0;
+      for (const t of allToks) {
+        if (t.deg != null) { hist[t.deg]++; lastDeg = t.deg; }
+      }
+      const pitchCounts = sc.notes.map((n, i) => `${n}:${hist[i]}`).join(' ');
+      const barChords = state.bars.slice(-4).map(b => b.harm).join(' -> ') || 'i';
+      const curBar = state.bars.length;
+
+      const prompt05 = [
+        `HANDPAN LIVE PERFORMANCE CONTEXT`,
+        `Scale: ${sc.name} (${sc.notes.map((n, i) => `${n}=^${sc.degrees[i]}`).join(', ')}) | Tempo: ${state.bpm} BPM`,
+        `Musical Goal: Balance expressive phrasing with Horizon=${ctrl.horizon.toFixed(2)}, Gravity=${ctrl.gravity.toFixed(2)}, Rubato=${ctrl.rubato.toFixed(2)}`,
+        `[LONG CONTEXT — Macro & Leitmotif]`,
+        `Section: Development (Total Bar ${curBar + 1}, Sentence #${Math.ceil((curBar + 1) / 4)}).`,
+        `Bar-1 Seed Motif DNA: ${seedStr}. Cumulative pitch counts: ${pitchCounts}.`,
+        `[MID CONTEXT — Current 4-Bar Sentence]`,
+        `Active Clause: Response (Bar ${(curBar % 4) + 1}/4, role=develop). Bar chords so far: ${barChords}.`,
+        `Last 2 bars (16 steps): ${recent16 || 'opening silence'}`,
+        `[SHORT / MICRO CONTEXT — Immediate Transition]`,
+        `Last 4 steps: ${last4}. Next step position: Bar ${(curBar % 4) + 1} step 1/8.`,
+        `Last pitched note: ${sc.notes[lastDeg]} (^${sc.degrees[lastDeg]}), Last hand: ${PAN_GEOMETRY[lastDeg].hand}.`
+      ].join('\n');
+
+      const q05 = {
+        attention_tier: {
+          type: 'choice',
+          instructions: 'Distribute attention across the 4 temporal context horizons to best shape the next 4-8 handpan steps.',
+          criteria: {
+            micro: 'Last 1-4 steps: smooth L/R zigzag sticking, stepwise momentum, immediate micro-echo',
+            short: 'Last 1-2 bars: repeat and lock into the recent ostinato rhythmic-melodic cell',
+            mid:   '4-bar sentence grammar & harmony: drive chord progression, call-and-response, phrase cadence',
+            long:  'Macro arc & original seed motif DNA: thematic recall, register contrast, large-scale narrative'
+          }
+        },
+        next_harmony: {
+          type: 'choice',
+          instructions: 'Which modal harmony should anchor the upcoming steps?',
+          criteria: {
+            i:    `Tonic home (${sc.chords.i.map(i => sc.notes[i]).join(',')}) — grounded, resolved`,
+            III:  `Relative bright lift (${sc.chords.III.map(i => sc.notes[i]).join(',')}) — open, warm`,
+            iv:   `Subdominant depth (${sc.chords.iv.map(i => sc.notes[i]).join(',')}) — contemplative`,
+            bVI:  `Emotional departure (${sc.chords.VI.map(i => sc.notes[i]).join(',')}) — poignant lift`,
+            bVII: `Modal tension (${sc.chords.VII.map(i => sc.notes[i]).join(',')}) — forward drive`,
+            v:    `Dominant suspension (${sc.chords.v.map(i => sc.notes[i]).join(',')}) — poised to resolve`
+          }
+        },
+        focal_note: {
+          type: 'choice',
+          instructions: `Which tone field on the ${sc.name} handpan should receive the strongest melodic pull over the next steps?`,
+          criteria: Object.fromEntries(sc.notes.map((n, i) => [`n${i}`, `Pull upcoming melody toward ${n} (${i === 0 ? 'Ding ' : ''}^${sc.degrees[i]}, ${PAN_GEOMETRY[i].hand} hand)`]))
+        },
+        contour: {
+          type: 'score',
+          instructions: 'Rate the ideal melodic register direction over the next phrase.',
+          criteria: ['0: Strongly descend toward the Ding tonic floor','1: Gently step downward toward mid-low register','2: Hover and weave around the current register','3: Gently climb upward in pitch','4: Lift boldly toward the upper rim notes']
+        },
+        energy: {
+          type: 'score',
+          instructions: 'Rate the ideal rhythmic density and percussive groove intensity (Tak/Gu/ghost notes).',
+          criteria: ['0: Sparse meditative stillness with breathing rests','1: Gentle flowing pulse, light ghost notes','2: Balanced melodic groove','3: Active syncopated groove with crisp Tak backbeats','4: High-energy kinetic cascades and rapid alternation']
+        },
+        cadence_pull: {
+          type: 'noul',
+          instructions: `Should the engine apply strong cadential resolution gravity toward the tonic Ding (${sc.notes[0]}) now?`,
+          criteria: { true_description: `Phrase is closing and needs grounding resolution to ${sc.notes[0]}`, false_description: 'Phrase should remain open, moving, or exploring non-tonic tones' }
+        }
+      };
+      return { prompt05, q05 };
+    }
+
+    function updateBenchmarkStrip(flashDelta = false) {
+      const plPrompt = buildPanLangPrompt();
+      const plQs = buildPanLangQuestions();
+      const plPayload = { model: 'gemini-decision-1', input: plPrompt, questions: plQs };
+      const { prompt05, q05 } = buildBaseline05Equivalent();
+
+      const plPromptTok = estimateTokens(plPrompt);
+      const plQTok      = estimateTokens(JSON.stringify(plQs));
+      const plTotalTok  = plPromptTok + plQTok;
+
+      const b05PromptTok = estimateTokens(prompt05);
+      const b05QTok      = estimateTokens(JSON.stringify(q05));
+      const b05TotalTok  = b05PromptTok + b05QTok;
+
+      const promptRed = clamp((1 - plPromptTok / Math.max(1, b05PromptTok)) * 100, 0, 99);
+      const totalRed  = clamp((1 - plTotalTok / Math.max(1, b05TotalTok)) * 100, 0, 99);
+
+      const pctEl = document.getElementById('bench-pct');
+      pctEl.textContent = `−${promptRed.toFixed(1)}%`;
+      if (flashDelta) {
+        pctEl.classList.add('flash');
+        setTimeout(() => pctEl.classList.remove('flash'), 340);
+      }
+
+      document.getElementById('bench-pl-tok').textContent = `~${plPromptTok} tok`;
+      document.getElementById('bench-05-tok').textContent = `vs 05: ~${b05PromptTok} tok`;
+      document.getElementById('comp-bar-fill').style.width = `${clamp((plPromptTok / Math.max(1, b05PromptTok)) * 100, 6, 100).toFixed(1)}%`;
+
+      document.getElementById('bench-total-tok').textContent = `~${plTotalTok} tok`;
+      document.getElementById('bench-total-05').textContent = `vs ~${b05TotalTok} tok (−${totalRed.toFixed(0)}%)`;
+
+      document.getElementById('bench-mode-tag').textContent = state.lastDecisionSource;
+      document.getElementById('bench-rtt').textContent = `${state.lastRttMs < 10 ? state.lastRttMs.toFixed(1) : Math.round(state.lastRttMs)} ms`;
+      document.getElementById('bench-calls').textContent = `${state.liveCallCount} live calls`;
+      document.getElementById('bench-hit-rate').textContent = `${state.prefetchHits}H / ${state.prefetchAborts}A`;
+      document.getElementById('bench-forks').textContent = `FORKS: ${state.forkCount}`;
+
+      const lockCount = state.bars.reduce((acc, b) => acc + b.tokens.filter(t => t.locked).length, 0);
+      document.getElementById('bench-locks').textContent = `${lockCount} locked`;
+
+      // Update inspector panes if open
+      const drawer = document.getElementById('inspector-drawer');
+      if (drawer.classList.contains('open')) {
+        document.getElementById('insp-pl-stats').textContent = `Prompt ~${plPromptTok}t + 2Q ~${plQTok}t = ~${plTotalTok}t`;
+        document.getElementById('insp-pl-json').textContent = JSON.stringify(plPayload, null, 2);
+        document.getElementById('insp-05-stats').textContent = `Prompt ~${b05PromptTok}t + 6Q ~${b05QTok}t = ~${b05TotalTok}t`;
+        document.getElementById('insp-05-text').textContent = prompt05 + '\n\n// + 6 verbose questions (' + b05QTok + ' est. tokens):\n' + Object.keys(q05).join(', ');
+        document.getElementById('insp-res-meta').textContent = `${state.lastDecisionSource} · ${Math.round(state.lastRttMs)}ms`;
+        document.getElementById('insp-res-json').textContent = JSON.stringify(
+          state.lastDecisionJson || { mode: 'local-panlang-inference', move: state.moveProbs, topDegs: getTopDegrees(3) },
+          null, 2
+        );
+      }
+    }
+
+    function logPrefetch(msg, cls = '') {
+      const ts = new Date().toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' });
+      state.prefetchLog.unshift({ ts, msg, cls });
+      if (state.prefetchLog.length > 18) state.prefetchLog.pop();
+      const box = document.getElementById('prefetch-log');
+      if (box) {
+        box.innerHTML = state.prefetchLog
+          .map(e => `<div class="${e.cls}">[${e.ts}] ${e.msg}</div>`)
+          .join('');
+      }
+    }
+
+    function setPrefetchBadge(text, cls = '') {
+      const el = document.getElementById('prefetch-badge');
+      el.textContent = text;
+      el.className = 'status-badge' + (cls ? ' ' + cls : '');
+    }
+
+    // =========================================================================
+    // 6. ULTRA-FAST GEMINI-DECISION-1 + SPECULATIVE PREFETCH + LOCAL INFERENCE
+    // =========================================================================
+    function softmaxObj(scores, temp = 1.0) {
+      const keys = Object.keys(scores);
+      const tau = Math.max(0.1, temp);
+      let maxV = -Infinity;
+      for (const k of keys) if (scores[k] > maxV) maxV = scores[k];
+      let sum = 0;
+      const out = {};
+      for (const k of keys) {
+        out[k] = Math.exp((scores[k] - maxV) / tau);
+        sum += out[k];
+      }
+      for (const k of keys) out[k] /= (sum || 1);
+      return out;
+    }
+
+    function localPanLangInference(targetBarIdx) {
+      const t0 = performance.now();
+      const H = ctrl.horizon;
+      const G = ctrl.gravity;
+      const R = ctrl.rubato;
+      const hasLocks = state.bars.some(b => b.tokens.some(t => t.locked));
+      const lastBar = state.bars[state.bars.length - 1];
+      const phrasePos = targetBarIdx % 4; // 0=open, 1=develop, 2=apex, 3=cadence
+
+      const moveScores = {
+        home:   (1 - G) * 1.6 + (phrasePos === 3 ? 1.35 : (phrasePos === 0 ? 0.55 : -0.25)) + (lastBar?.harm === 'VII' ? 0.9 : 0),
+        lift:   G * 1.7 + (phrasePos === 1 || phrasePos === 2 ? 0.75 : -0.15) + H * 0.45,
+        echo:   (1 - H) * 1.75 + (hasLocks ? 1.45 : 0.15) + (phrasePos === 1 ? 0.45 : 0),
+        run:    H * 0.85 + (1 - Math.abs(R - 0.48)) * 0.75 + (phrasePos === 2 ? 0.7 : 0),
+        air:    R * 1.85 + G * 0.65 - (1 - R) * 0.5,
+        groove: (1 - R) * 1.95 + (1 - G) * 0.45
+      };
+      const moveProbs = softmaxObj(moveScores, 0.72 + H * 0.35);
+
+      // Compute 9-degree focal pull from gravity + recent harmony + locks
+      const degLogits = Array(9).fill(0);
+      const targetCenter = lerp(1.1, 6.8, G);
+      for (let d = 0; d < 9; d++) {
+        degLogits[d] = -Math.pow((d - targetCenter) / 3.1, 2);
+      }
+      if (phrasePos === 3) degLogits[0] += 1.35;
+      // Pull gently toward locked degrees
+      for (const b of state.bars) {
+        for (const t of b.tokens) {
+          if (t.locked && t.deg != null) degLogits[t.deg] += 0.95;
+        }
+      }
+      // Convert to probabilities
+      const maxD = Math.max(...degLogits);
+      const exps = degLogits.map(x => Math.exp((x - maxD) / (0.85 + H * 0.4)));
+      const sumD = exps.reduce((a, b) => a + b, 0);
+      const degProbs = exps.map(x => x / sumD);
+
+      const dt = Math.max(0.1, performance.now() - t0);
+      return {
+        source: 'LOCAL',
+        rttMs: dt,
+        moveProbs,
+        degProbs,
+        raw: { engine: 'local-panlang-grammar', move: moveProbs, deg: Object.fromEntries(degProbs.map((p, i) => [`d${i}`, +p.toFixed(3)])) }
+      };
+    }
+
+    function applyDecisionResult(res) {
+      state.prevMoveProbs = { ...state.moveProbs };
+      state.moveProbs = { ...res.moveProbs };
+      state.degProbs = [...res.degProbs];
+      state.lastDecisionSource = res.source;
+      state.lastRttMs = res.rttMs;
+      state.lastDecisionJson = res.raw;
+
+      // Determine winning move
+      let bestK = 'home', bestV = -1;
+      for (const k of MOVE_KEYS) {
+        if ((state.moveProbs[k] || 0) > bestV) { bestV = state.moveProbs[k]; bestK = k; }
+      }
+      state.moveWinner = bestK;
+
+      // Compute AI Pull Ghost Reticle on 2D Pad from move + deg distributions
+      const p = state.moveProbs;
+      const aiH = clamp(0.18 * (p.echo || 0) + 0.35 * (p.home || 0) + 0.45 * (p.groove || 0) + 0.80 * (p.lift || 0) + 0.85 * (p.run || 0) + 0.65 * (p.air || 0), 0.08, 0.92);
+      let meanDeg = 0;
+      for (let i = 0; i < 9; i++) meanDeg += i * (state.degProbs[i] || 0);
+      const aiG = clamp(meanDeg / 8, 0.08, 0.92);
+      state.aiGhost.horizon = lerp(state.aiGhost.horizon, aiH, 0.65);
+      state.aiGhost.gravity = lerp(state.aiGhost.gravity, aiG, 0.65);
+
+      renderTelemetryMeters();
+      updateKeyRailProbs();
+      updateBenchmarkStrip(true);
+    }
+
+    function abortSpeculativePrefetch(reason) {
+      if (activeAbortController) {
+        activeAbortController.abort();
+        activeAbortController = null;
+        state.prefetchAborts++;
+        setPrefetchBadge(`ABORT → RE-SPEC`, 'abort');
+        logPrefetch(`Aborted in-flight request (${reason})`, 'ev-abort');
+      }
+      state.prefetchedForBar = -1;
+      state.prefetchedResult = null;
+      state.prefetchInFlightBar = -1;
+    }
+
+    async function runSpeculativePrefetch(targetBarIdx, reason = 'horizon-1.5b') {
+      if (state.prefetchInFlightBar === targetBarIdx || state.prefetchedForBar === targetBarIdx) return;
+
+      // Offline fast-path if no Gemini key
+      if (!geminiApiKey) {
+        const res = localPanLangInference(targetBarIdx);
+        state.prefetchedForBar = targetBarIdx;
+        state.prefetchedResult = res;
+        setPrefetchBadge('LOCAL READY', 'hit');
+        applyDecisionResult(res);
+        return;
+      }
+
+      // Cancel any superseded call
+      if (activeAbortController) {
+        activeAbortController.abort();
+        state.prefetchAborts++;
+      }
+
+      const controller = new AbortController();
+      activeAbortController = controller;
+      state.prefetchInFlightBar = targetBarIdx;
+      setPrefetchBadge(`PREFETCH B${targetBarIdx + 1}`, 'prefetch');
+      setApiDot('busy');
+      logPrefetch(`Speculative prefetch Bar ${targetBarIdx + 1} (${reason})`);
+
+      const payload = {
+        model: 'gemini-decision-1',
+        input: buildPanLangPrompt(),
+        questions: buildPanLangQuestions()
+      };
+
+      const t0 = performance.now();
+      try {
+        const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/decisions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': geminiApiKey
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const rttMs = Math.round(performance.now() - t0);
+        if (!resp.ok) {
+          const errTxt = await resp.text().catch(() => resp.statusText);
+          throw new Error(`HTTP ${resp.status}: ${errTxt.slice(0, 120)}`);
+        }
+
+        const data = await resp.json();
+        if (controller.signal.aborted) return;
+
+        const ans = data.answers || data.results || data;
+        const rawMove = ans?.move?.probabilities || ans?.move?.scores || null;
+        const rawDeg  = ans?.deg?.probabilities  || ans?.deg?.scores  || null;
+
+        const localFallback = localPanLangInference(targetBarIdx);
+        const moveProbs = {};
+        let mSum = 0;
+        for (const k of MOVE_KEYS) {
+          const v = rawMove && typeof rawMove[k] === 'number' ? rawMove[k] : localFallback.moveProbs[k];
+          moveProbs[k] = Math.max(0.001, v);
+          mSum += moveProbs[k];
+        }
+        for (const k of MOVE_KEYS) moveProbs[k] /= mSum;
+
+        const degProbs = Array(9).fill(0);
+        let dSum = 0;
+        for (let i = 0; i < 9; i++) {
+          const v = rawDeg && typeof rawDeg[`d${i}`] === 'number' ? rawDeg[`d${i}`] : localFallback.degProbs[i];
+          degProbs[i] = Math.max(0.001, v);
+          dSum += degProbs[i];
+        }
+        for (let i = 0; i < 9; i++) degProbs[i] /= dSum;
+
+        state.liveCallCount++;
+        const parsed = { source: 'GEMINI-DECISION-1', rttMs, moveProbs, degProbs, raw: data };
+        state.prefetchedForBar = targetBarIdx;
+        state.prefetchedResult = parsed;
+        state.prefetchInFlightBar = -1;
+        activeAbortController = null;
+
+        setApiDot('live');
+        setPrefetchBadge(`CACHED B${targetBarIdx + 1} (${rttMs}ms)`, 'hit');
+        logPrefetch(`Gemini arrived in ${rttMs}ms → win:${ans?.move?.choice || state.moveWinner}`, 'ev-hit');
+        applyDecisionResult(parsed);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        state.prefetchInFlightBar = -1;
+        activeAbortController = null;
+        setApiDot('err');
+        setPrefetchBadge('FALLBACK LOCAL', 'abort');
+        logPrefetch(`Gemini err: ${err.message}`, 'ev-err');
+        const fallback = localPanLangInference(targetBarIdx);
+        state.prefetchedForBar = targetBarIdx;
+        state.prefetchedResult = fallback;
+        applyDecisionResult(fallback);
+      }
+    }
+
+    function setApiDot(mode) {
+      const dot = document.getElementById('api-dot');
+      dot.className = 'api-dot' + (mode ? ' ' + mode : '');
+    }
+
+    // =========================================================================
+    // 7. PANLANG PHRASE GENERATOR (ATTN ARCS + 3-VECTOR + GEMINI BLEND)
+    // =========================================================================
+    function weightedPick(entries) {
+      const sum = entries.reduce((a, e) => a + Math.max(0, e.w), 0);
+      if (sum <= 0) return entries[0]?.v;
+      let r = Math.random() * sum;
+      for (const e of entries) {
+        r -= Math.max(0, e.w);
+        if (r <= 0) return e.v;
+      }
+      return entries[entries.length - 1]?.v;
+    }
+
+    function findLockedMotifTokens() {
+      const locked = [];
+      for (const b of state.bars) {
+        for (const t of b.tokens) {
+          if (t.locked) locked.push(t);
+        }
+      }
+      return locked;
+    }
+
+    function pickAttentionSources(targetDeg, move, lockedToks) {
+      const all = state.bars.flatMap(b => b.tokens);
+      if (all.length === 0) return [];
+      const total = all.length;
+      const H = ctrl.horizon; // 0 = near micro, 1 = far macro
+      const candidates = [];
+
+      for (let i = 0; i < total; i++) {
+        const t = all[i];
+        const dist = total - i; // 1 = most recent
+        // Continuous Gaussian preference in log-distance governed by Horizon vector X!
+        const targetDist = lerp(2.5, Math.min(28, Math.max(8, total * 0.85)), H);
+        const distScore = Math.exp(-Math.pow((Math.log(dist + 1) - Math.log(targetDist + 1)) / 0.85, 2));
+
+        let score = distScore * 0.65;
+        let reason = dist <= 5 ? 'micro' : (dist <= 14 ? 'motif' : 'seed');
+
+        if (t.locked) { score += 1.65; reason = 'lock'; }
+        if (t.source === 'user') { score += 0.55; if (reason !== 'lock') reason = 'user'; }
+        if (targetDeg != null && t.deg === targetDeg) { score += 0.45; }
+        if (move === 'echo' && dist >= 4 && dist <= 12) { score += 0.45; }
+
+        candidates.push({ sourceId: t.id, score, reason, barIdx: findTokenBarIndex(t.id) });
+      }
+
+      candidates.sort((a, b) => b.score - a.score);
+      const top = candidates.slice(0, 3);
+      const maxS = top[0]?.score || 1;
+      return top.map(c => ({
+        sourceId: c.sourceId,
+        weight: clamp(c.score / (maxS * 1.08), 0.22, 1.0),
+        reason: c.reason
+      }));
+    }
+
+    function findTokenBarIndex(tokId) {
+      for (let b = 0; b < state.bars.length; b++) {
+        if (state.bars[b].tokens.some(t => t.id === tokId)) return b;
+      }
+      return -1;
+    }
+
+    function chooseHarmForMove(move, prevHarm) {
+      const G = ctrl.gravity;
+      if (move === 'home') return Math.random() < 0.78 ? 'i' : 'iv';
+      if (move === 'lift') {
+        const opts = G > 0.55 ? ['VI', 'VII', 'III'] : ['III', 'VI', 'iv'];
+        return opts.find(h => h !== prevHarm) || opts[0];
+      }
+      if (move === 'air') return G > 0.5 ? (prevHarm === 'VI' ? 'III' : 'VI') : 'iv';
+      if (move === 'groove') return prevHarm === 'i' ? 'VII' : 'i';
+      if (move === 'run') return G > 0.5 ? 'VII' : 'III';
+      // echo: keep or subtle shift
+      return Math.random() < 0.6 ? prevHarm : (G > 0.5 ? 'VI' : 'i');
+    }
+
+    function pickDegreeFromChord(chordPool, preferHigh, lastDeg, degProbs) {
+      const entries = [];
+      for (let d = 0; d < 9; d++) {
+        const inChord = chordPool.includes(d);
+        const regBias = preferHigh ? (d / 8) * 1.1 : ((8 - d) / 8) * 1.1;
+        const stepSmooth = lastDeg != null ? Math.exp(-Math.abs(d - lastDeg) * 0.26) : 0.6;
+        // Ergonomic alternating hand bonus (programmatically deduced — Idea #3!)
+        const altBonus = (lastDeg != null && PAN_GEOMETRY[d].hand !== PAN_GEOMETRY[lastDeg].hand) ? 1.28 : 0.86;
+        const prob = (degProbs[d] || 0.11);
+        const w = (inChord ? 2.4 : 0.45) * (0.55 + regBias) * (0.45 + stepSmooth) * altBonus * (0.4 + prob * 4.2);
+        entries.push({ v: d, w });
+      }
+      return weightedPick(entries);
+    }
+
+    function generateNextBar(isFork = false) {
+      const targetBarIdx = state.bars.length;
+
+      // Consume prefetched decision if ready (ZERO STALL!), else fall back smoothly
+      let decision = null;
+      if (state.prefetchedForBar === targetBarIdx && state.prefetchedResult) {
+        decision = state.prefetchedResult;
+        state.prefetchedForBar = -1;
+        state.prefetchedResult = null;
+        state.prefetchHits++;
+        setPrefetchBadge(`CACHE HIT B${targetBarIdx + 1}`, 'hit');
+        logPrefetch(`Consumed prefetched decision for Bar ${targetBarIdx + 1} (0ms stall)`, 'ev-hit');
+      } else {
+        decision = localPanLangInference(targetBarIdx);
+        applyDecisionResult(decision);
+      }
+
+      const sc = SCALES[activeScaleKey];
+      const moveProbs = decision.moveProbs;
+      const degProbs  = decision.degProbs;
+      const H = ctrl.horizon;
+      const G = ctrl.gravity;
+      const R = ctrl.rubato;
+
+      // Sample move from calibrated probabilities (fork boosts novelty slightly)
+      const moveEntries = MOVE_KEYS.map(k => ({
+        v: k,
+        w: Math.pow(moveProbs[k] || 0.1, isFork ? 0.72 : 1.18)
+      }));
+      const move = weightedPick(moveEntries);
+
+      const prevBar = state.bars[state.bars.length - 1];
+      const prevHarm = prevBar?.harm || 'i';
+      const harm = chooseHarmForMove(move, prevHarm);
+      const pool = sc.chords[harm] || sc.chords.i;
+
+      const allToks = state.bars.flatMap(b => b.tokens);
+      const lastPitched = [...allToks].reverse().find(t => t.deg != null);
+      let curDeg = lastPitched ? lastPitched.deg : 0;
+      const lockedToks = findLockedMotifTokens();
+      const tokens = [];
+
+      // Choose focal apex degree from Gemini/local degProbs
+      const focalDeg = weightedPick(degProbs.map((p, i) => ({ v: i, w: Math.pow(p, 1.35) })));
+
+      // Phrase inflection marker (^ accel or v rit) when Rubato > 0.45
+      let barInflection = null;
+      if (R > 0.52 && (move === 'run' || move === 'lift') && Math.random() < 0.45) barInflection = '^';
+      else if (R > 0.55 && (move === 'air' || move === 'home') && Math.random() < 0.52) barInflection = 'v';
+
+      const emit = (props) => {
+        const t = makeToken({
+          source: 'ai',
+          attn: pickAttentionSources(props.deg ?? curDeg, move, lockedToks),
+          ...props
+        });
+        if (t.deg != null) curDeg = t.deg;
+        tokens.push(t);
+        return t;
+      };
+
+      if (move === 'echo' && (lockedToks.length > 0 || prevBar)) {
+        // Echo locked motif or recent cell with expressive variation
+        const srcMotif = lockedToks.length > 0
+          ? lockedToks.slice(0, 4)
+          : prevBar.tokens.filter(t => t.kind !== 'breath').slice(0, 4);
+        const shift = (H > 0.62 && Math.random() < 0.55) ? (G > 0.5 ? 1 : -1) : 0;
+
+        for (let i = 0; i < srcMotif.length; i++) {
+          const st = srcMotif[i];
+          const nd = st.deg != null ? clamp(st.deg + shift, 0, 8) : null;
+          emit({
+            kind: st.kind,
+            deg: nd,
+            deg2: st.deg2 != null ? clamp(st.deg2 + shift, 0, 8) : null,
+            art: (G > 0.72 && i === srcMotif.length - 1 && st.kind === 'note') ? 'H' : st.art,
+            agogic: st.agogic || (R > 0.65 && i === srcMotif.length - 1),
+            coupled: st.coupled && i < srcMotif.length - 1,
+            attn: [{ sourceId: st.id, weight: 1.0, reason: st.locked ? 'lock' : 'motif' }, ...pickAttentionSources(nd, 'echo', lockedToks).slice(0, 2)]
+          });
+        }
+        if (R > 0.48) emit({ kind: 'breath', deg: null });
+        const land = pickDegreeFromChord(pool, G > 0.5, curDeg, degProbs);
+        emit({ kind: 'note', deg: land, agogic: R > 0.35 });
+      } else if (move === 'run') {
+        // Expressive coupled cascade landing on focal bloom!
+        const root = pool[0] ?? 0;
+        emit({ kind: 'note', deg: root, agogic: R > 0.45 });
+        const dir = focalDeg >= curDeg ? 1 : -1;
+        const c1 = clamp(curDeg + dir, 1, 7);
+        const c2 = clamp(c1 + dir, 1, 8);
+        const c3 = clamp(focalDeg, 0, 8);
+        emit({ kind: 'note', deg: c1, coupled: true });
+        emit({ kind: 'note', deg: c2, coupled: true });
+        emit({ kind: 'note', deg: c3, agogic: true, art: (G > 0.75 && c3 >= 5) ? 'H' : 'N' });
+        if (R > 0.45) emit({ kind: 'breath', deg: null });
+        const tail1 = clamp(c3 - dir, 0, 8);
+        const tail2 = pickDegreeFromChord(pool, G > 0.45, tail1, degProbs);
+        emit({ kind: 'note', deg: tail1, coupled: R < 0.75 });
+        emit({ kind: 'note', deg: tail2, agogic: R > 0.5 });
+      } else if (move === 'air') {
+        // Luminous caesura breaths, rolled dyads & 2f0 shimmers
+        const d1 = pool[0] ?? 0;
+        const d2 = pool[Math.min(pool.length - 1, 2)] ?? 4;
+        emit({ kind: 'dyad', deg: d1, deg2: d2, agogic: true });
+        emit({ kind: 'breath', deg: null });
+        const hi = clamp(Math.max(4, focalDeg), 4, 8);
+        emit({ kind: 'note', deg: hi, art: 'H', agogic: R > 0.4 });
+        const stepBack = pickDegreeFromChord(pool, false, hi, degProbs);
+        emit({ kind: 'note', deg: clamp(hi - 1, 1, 8), coupled: true });
+        emit({ kind: 'note', deg: stepBack, agogic: true });
+        if (R > 0.55) emit({ kind: 'breath', deg: null });
+      } else if (move === 'groove') {
+        // Syncopated Tak/Gu organic pulse
+        const bass = harm === 'i' ? 0 : (pool[0] ?? 1);
+        const mid1 = pickDegreeFromChord(pool, G > 0.55, bass, degProbs);
+        const mid2 = pickDegreeFromChord(pool, G > 0.45, mid1, degProbs);
+        emit({ kind: 'note', deg: bass, agogic: R > 0.55 });
+        emit({ kind: 'gu', deg: null });
+        emit({ kind: 'note', deg: mid1, coupled: true });
+        emit({ kind: 'note', deg: mid2 });
+        emit({ kind: 'tak', deg: null });
+        emit({ kind: 'note', deg: pickDegreeFromChord(pool, G > 0.5, mid2, degProbs), art: Math.random() < 0.28 ? 'M' : 'N' });
+        emit({ kind: 'note', deg: clamp(focalDeg, 0, 8), coupled: R < 0.4 });
+        if (R < 0.45) emit({ kind: 'tak', deg: null });
+      } else if (move === 'lift') {
+        // Modal lift into bVI/bVII/III upper singing line
+        const base = pool[0] ?? 2;
+        emit({ kind: 'note', deg: base, agogic: true });
+        const up1 = pickDegreeFromChord(pool, true, base, degProbs);
+        const up2 = clamp(Math.max(up1 + 1, focalDeg), 3, 8);
+        emit({ kind: 'note', deg: up1, coupled: true });
+        emit({ kind: 'note', deg: up2, agogic: true, art: (G > 0.68 && Math.random() < 0.55) ? 'H' : 'N' });
+        if (R > 0.42) emit({ kind: 'breath', deg: null });
+        else emit({ kind: 'tak', deg: null });
+        const ans = pickDegreeFromChord(pool, G > 0.55, up2, degProbs);
+        emit({ kind: 'note', deg: ans });
+        emit({ kind: 'note', deg: pickDegreeFromChord(pool, false, ans, degProbs), agogic: R > 0.55 });
+      } else {
+        // 'home': Cadential grounding to Ding 0:
+        const top = pickDegreeFromChord(pool, G > 0.55, curDeg, degProbs);
+        const mid = clamp(Math.round((top + 1) / 2), 1, 6);
+        emit({ kind: 'note', deg: top, coupled: true });
+        emit({ kind: 'note', deg: mid });
+        if (R > 0.35) emit({ kind: 'note', deg: 1, coupled: true });
+        emit({ kind: 'note', deg: 0, agogic: true });
+        if (R > 0.32) emit({ kind: 'breath', deg: null });
+        else {
+          emit({ kind: 'note', deg: pool[1] ?? 1 });
+          emit({ kind: 'note', deg: 0, agogic: true });
+        }
+      }
+
+      const newBar = {
+        index: targetBarIdx + 1,
+        harm,
+        inflection: barInflection,
+        attnLevel: 0,
+        prevAttnLevel: 0,
+        flashUntil: 0,
+        forkPoint: isFork,
+        tokens
+      };
+      state.bars.push(newBar);
+      updateBarAttentionLevels(tokens[tokens.length - 1]);
+      renderRibbon(true);
+      renderLiveStreamTicker();
+      updateBenchmarkStrip(false);
+      return newBar;
+    }
+
+    function updateBarAttentionLevels(activeTok) {
+      const now = performance.now();
+      for (const b of state.bars) {
+        b.prevAttnLevel = b.attnLevel;
+        b.attnLevel *= 0.42; // smooth decay
+      }
+      if (!activeTok || !activeTok.attn?.length) return;
+      for (const a of activeTok.attn) {
+        const bi = findTokenBarIndex(a.sourceId);
+        if (bi >= 0 && state.bars[bi]) {
+          state.bars[bi].attnLevel = clamp(state.bars[bi].attnLevel + a.weight * 0.72, 0, 1);
+        }
+      }
+      for (const b of state.bars) {
+        if (b.attnLevel - b.prevAttnLevel > 0.08) {
+          b.flashUntil = now + 750;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 8. PLAYBACK ENGINE (ORGANIC CONTINUOUS RUBATO + SPECULATIVE TRIGGER)
+    // =========================================================================
+    function startPlayback() {
+      ensureAudio();
+      if (state.bars.length === 0) loadSeedText(document.getElementById('seed-input').value, false);
+      state.playing = true;
+      state.playbackEpoch++;
+      state.nextAudioTime = audioCtx.currentTime + 0.04;
+      updatePlayButton();
+      scheduleNextStep(state.playbackEpoch);
+    }
+
+    function stopPlayback() {
+      state.playing = false;
+      state.playbackEpoch++;
+      if (state.stepTimer) {
+        clearTimeout(state.stepTimer);
+        state.stepTimer = null;
+      }
+      updatePlayButton();
+    }
+
+    function updatePlayButton() {
+      const btn = document.getElementById('btn-play');
+      btn.textContent = state.playing ? '❚❚ PAUSE' : '▶ PLAY';
+      btn.classList.toggle('playing', state.playing);
+    }
+
+    function scheduleNextStep(epoch) {
+      if (!state.playing || epoch !== state.playbackEpoch) return;
+
+      // Ensure current bar exists
+      if (state.playBarIdx >= state.bars.length) {
+        generateNextBar(false);
+      }
+      let bar = state.bars[state.playBarIdx];
+      while (bar && bar.tokens.length === 0) {
+        state.playBarIdx++;
+        if (state.playBarIdx >= state.bars.length) generateNextBar(false);
+        bar = state.bars[state.playBarIdx];
+      }
+      if (!bar) return;
+
+      const tok = bar.tokens[state.playTokIdx];
+      const posRatio = bar.tokens.length > 1 ? state.playTokIdx / (bar.tokens.length - 1) : 0;
+      const durSec = getTokenDurationSec(tok, bar.inflection, posRatio, state.bpm, ctrl.rubato);
+
+      // Keep audio clock tight
+      const now = audioCtx.currentTime;
+      if (state.nextAudioTime < now + 0.004) state.nextAudioTime = now + 0.006;
+
+      playPanLangTokenAudio(tok, state.nextAudioTime, ctrl.rubato);
+      state.activeTokId = tok.id;
+      updateBarAttentionLevels(tok);
+
+      // Flash key-rail visual feedback on audio onset
+      const visualDelayMs = Math.max(0, (state.nextAudioTime - now) * 1000);
+      setTimeout(() => {
+        if (epoch !== state.playbackEpoch) return;
+        highlightSoundingToken(tok);
+        renderRibbon(false);
+      }, visualDelayMs);
+
+      // SPECULATIVE PREFETCH CHECK: ~1.5 beats before bar end on last generated bar!
+      if (state.playBarIdx === state.bars.length - 1) {
+        let remSec = durSec;
+        for (let j = state.playTokIdx + 1; j < bar.tokens.length; j++) {
+          remSec += getTokenDurationSec(bar.tokens[j], bar.inflection, j / Math.max(1, bar.tokens.length - 1), state.bpm, ctrl.rubato);
+        }
+        const prefetchLeadSec = (60 / state.bpm) * 0.5 * 1.6; // ~1.6 beats before boundary
+        if (remSec <= prefetchLeadSec) {
+          runSpeculativePrefetch(state.bars.length, 'horizon-1.5b');
+        }
+      }
+
+      // Advance cursor
+      state.nextAudioTime += durSec;
+      state.playTokIdx++;
+      if (state.playTokIdx >= bar.tokens.length) {
+        state.playTokIdx = 0;
+        state.playBarIdx++;
+      }
+
+      // Schedule next callback slightly ahead of nextAudioTime
+      const waitMs = Math.max(16, (state.nextAudioTime - audioCtx.currentTime - 0.025) * 1000);
+      state.stepTimer = setTimeout(() => scheduleNextStep(epoch), waitMs);
+    }
+
+    function highlightSoundingToken(tok) {
+      document.querySelectorAll('.pan-key.sounding').forEach(el => el.classList.remove('sounding'));
+      document.querySelectorAll('.ruler-btn.active').forEach(el => el.classList.remove('active'));
+      if (tok.deg != null) {
+        const k = document.querySelector(`.pan-key[data-deg="${tok.deg}"]`);
+        if (k) { k.classList.add('sounding'); setTimeout(() => k.classList.remove('sounding'), 210); }
+        const r = document.querySelector(`.ruler-btn[data-deg="${tok.deg}"]`);
+        if (r) { r.classList.add('active'); setTimeout(() => r.classList.remove('active'), 210); }
+      }
+      if (tok.deg2 != null) {
+        const k2 = document.querySelector(`.pan-key[data-deg="${tok.deg2}"]`);
+        if (k2) { k2.classList.add('sounding'); setTimeout(() => k2.classList.remove('sounding'), 210); }
+      }
+      if (tok.kind === 'tak' || tok.kind === 'gu' || tok.kind === 'breath') {
+        const kp = document.querySelector(`.pan-key[data-perc="${tok.kind}"]`);
+        if (kp) { kp.classList.add('sounding'); setTimeout(() => kp.classList.remove('sounding'), 180); }
+      }
+    }
+
+    // =========================================================================
+    // 9. DIRECT PLAY, LIVE PANLANG INJECTION, LOCK & SCRUB/FORK
+    // =========================================================================
+    function scrubAndForkAt(barIdx, tokIdx) {
+      ensureAudio();
+      abortSpeculativePrefetch('scrub-fork');
+      state.forkCount++;
+
+      // Slice history cleanly right after (barIdx, tokIdx)
+      state.bars = state.bars.slice(0, barIdx + 1);
+      const targetBar = state.bars[barIdx];
+      if (targetBar && tokIdx != null) {
+        targetBar.tokens = targetBar.tokens.slice(0, tokIdx + 1);
+        const lastT = targetBar.tokens[targetBar.tokens.length - 1];
+        if (lastT) lastT.coupled = false;
+      }
+
+      // Immediately generate a fresh forked continuation bar!
+      const newBar = generateNextBar(true);
+      state.playBarIdx = state.bars.length - 1;
+      state.playTokIdx = 0;
+      state.activeTokId = newBar.tokens[0]?.id ?? null;
+
+      setGestureReadout(`⑂ FORKED FROM BAR ${barIdx + 1} · NEW CONTINUATION`);
+      logPrefetch(`Scrub & Fork from Bar ${barIdx + 1} → generated alternate Bar ${newBar.index}`, 'ev-abort');
+
+      if (state.playing) {
+        state.playbackEpoch++;
+        if (state.stepTimer) clearTimeout(state.stepTimer);
+        state.nextAudioTime = audioCtx.currentTime + 0.03;
+        scheduleNextStep(state.playbackEpoch);
+      } else {
+        startPlayback();
+      }
+    }
+
+    function toggleTokenLock(tok) {
+      tok.locked = !tok.locked;
+      ensureAudio();
+      playPanLangTokenAudio(tok, audioCtx.currentTime + 0.002, ctrl.rubato);
+      highlightSoundingToken(tok);
+      abortSpeculativePrefetch('motif-lock');
+      setGestureReadout(tok.locked
+        ? `LOCKED [${formatSingleToken(tok)}] → INJECTED INTO PANLANG PROMPT`
+        : `UNLOCKED ${formatSingleToken(tok)}`);
+      renderRibbon(false);
+      renderLiveStreamTicker();
+      updateBenchmarkStrip(true);
+      if (state.playing) runSpeculativePrefetch(state.bars.length, 'lock-change');
+    }
+
+    function injectLiveStroke(kind, deg, art = 'N', holdKeyId = null) {
+      ensureAudio();
+      const nowPerf = performance.now();
+
+      // Immediate <3ms audio response!
+      const tempTok = { kind, deg, art, vel: 0.88 };
+      playPanLangTokenAudio(tempTok, audioCtx.currentTime + 0.002, ctrl.rubato);
+      highlightSoundingToken(tempTok);
+
+      // Ensure active bar exists to receive live PanLang speech
+      if (state.bars.length === 0) {
+        state.bars.push({
+          index: 1, harm: 'i', inflection: null, attnLevel: 0, prevAttnLevel: 0, flashUntil: 0, forkPoint: false, tokens: []
+        });
+      }
+      let targetBarIdx = state.playing ? Math.min(state.playBarIdx, state.bars.length - 1) : state.bars.length - 1;
+      let bar = state.bars[targetBarIdx];
+      if (!state.playing && bar.tokens.length >= 8) {
+        bar = {
+          index: state.bars.length + 1,
+          harm: chooseHarmForMove(ctrl.gravity > 0.55 ? 'lift' : 'home', bar.harm),
+          inflection: null, attnLevel: 0, prevAttnLevel: 0, flashUntil: 0, forkPoint: false, tokens: []
+        };
+        state.bars.push(bar);
+        targetBarIdx = state.bars.length - 1;
+      }
+
+      // Automatic rapid-tap Cascade detection (<165ms between pitched notes)
+      let formedCascade = false;
+      if (kind === 'note' && state.lastLiveTok && state.lastLiveTok.kind === 'note' && (nowPerf - state.lastLiveNoteTime) < 165) {
+        state.lastLiveTok.coupled = true;
+        state.lastLiveTok.agogic = false;
+        formedCascade = true;
+      }
+
+      const tok = makeToken({
+        kind,
+        deg,
+        art,
+        agogic: false,
+        coupled: false,
+        source: 'user',
+        attn: state.lastLiveTok ? [{ sourceId: state.lastLiveTok.id, weight: 0.9, reason: 'user' }] : []
+      });
+
+      if (state.playing) {
+        // Insert cleanly at playhead tip so AI hears and responds on the next bar!
+        const insertAt = clamp(state.playTokIdx, 0, bar.tokens.length);
+        bar.tokens.splice(insertAt, 0, tok);
+        state.playTokIdx = insertAt + 1;
+      } else {
+        bar.tokens.push(tok);
+      }
+
+      state.activeTokId = tok.id;
+      state.lastLiveNoteTime = nowPerf;
+      state.lastLiveTok = tok;
+
+      if (holdKeyId != null) {
+        state.heldKeys.set(holdKeyId, { tok, downAt: nowPerf });
+      }
+
+      const sc = SCALES[activeScaleKey];
+      const lbl = deg != null ? `${formatSingleToken(tok)} (${sc.notes[deg]})` : formatSingleToken(tok);
+      setGestureReadout(formedCascade ? `CASCADE COUPLED → -${lbl}` : `SPOKE LIVE → ${lbl}`);
+
+      abortSpeculativePrefetch('live-play');
+      renderRibbon(true);
+      renderLiveStreamTicker();
+      updateBenchmarkStrip(true);
+      if (state.playing) runSpeculativePrefetch(state.bars.length, 'live-user-input');
+      return tok;
+    }
+
+    function releaseLiveStroke(holdKeyId) {
+      const held = state.heldKeys.get(holdKeyId);
+      if (!held) return;
+      state.heldKeys.delete(holdKeyId);
+      const heldMs = performance.now() - held.downAt;
+      // Hold > 220ms automatically turns pitched note into agogic ':' bloom!
+      if (heldMs > 220 && held.tok.kind === 'note' && !held.tok.coupled) {
+        held.tok.agogic = true;
+        setGestureReadout(`AGOGIC BLOOM RECORDED → ${formatSingleToken(held.tok)} (${Math.round(heldMs)}ms)`);
+        renderRibbon(false);
+        renderLiveStreamTicker();
+        updateBenchmarkStrip(false);
+      }
+    }
+
+    function setGestureReadout(msg) {
+      const el = document.getElementById('gesture-readout');
+      if (el) el.textContent = msg;
+    }
+
+    function loadSeedText(text, autoPlay = false) {
+      const parsed = parsePanLang(text, 'seed');
+      if (parsed.scaleKey && SCALES[parsed.scaleKey]) {
+        activeScaleKey = parsed.scaleKey;
+        document.getElementById('scale-select').value = activeScaleKey;
+        buildPitchRuler();
+        buildKeyRail();
+      }
+      if (parsed.bpm) {
+        state.bpm = parsed.bpm;
+        document.getElementById('bpm-display').textContent = `T:${state.bpm}`;
+      }
+      if (parsed.bars.length === 0) return;
+
+      // Seed internal attention links so the ribbon immediately displays rich structural arcs!
+      const flat = [];
+      for (const b of parsed.bars) {
+        for (const t of b.tokens) {
+          if (flat.length > 0 && t.deg != null) {
+            const matches = flat
+              .map((prev, idx) => ({
+                id: prev.id,
+                dist: flat.length - idx,
+                same: prev.deg === t.deg ? 1 : 0,
+                step: prev.deg != null && Math.abs(prev.deg - t.deg) <= 2 ? 0.5 : 0
+              }))
+              .filter(m => m.same || m.step)
+              .sort((a, b2) => (b2.same + b2.step) - (a.same + a.step))
+              .slice(0, 2);
+            t.attn = matches.map(m => ({
+              sourceId: m.id,
+              weight: m.same ? 0.82 : 0.48,
+              reason: m.dist <= 4 ? 'micro' : 'motif'
+            }));
+          }
+          flat.push(t);
+        }
+      }
+
+      abortSpeculativePrefetch('seed-load');
+      state.bars = parsed.bars;
+      state.playBarIdx = 0;
+      state.playTokIdx = 0;
+      state.activeTokId = flat[flat.length - 1]?.id ?? null;
+      state.lastLiveTok = null;
+
+      updateBarAttentionLevels(flat[flat.length - 1]);
+      const localInit = localPanLangInference(state.bars.length);
+      applyDecisionResult(localInit);
+      renderRibbon(true);
+      renderLiveStreamTicker();
+      updateBenchmarkStrip(false);
+
+      if (autoPlay) {
+        if (state.playing) {
+          state.playbackEpoch++;
+          if (state.stepTimer) clearTimeout(state.stepTimer);
+          state.nextAudioTime = audioCtx.currentTime + 0.03;
+          scheduleNextStep(state.playbackEpoch);
+        } else {
+          startPlayback();
+        }
+      }
+    }
+
+    // =========================================================================
+    // 10. LIVING PANLANG SVG RIBBON RENDERER (CONTOUR + RUBATO WIDTH + ARCS)
+    // =========================================================================
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const CANOPY_H = 92;
+    const HEADER_H = 26;
+    const STAGE_TOP = CANOPY_H + HEADER_H; // 118
+    const STAGE_H = 242;
+    const TOTAL_H = STAGE_TOP + STAGE_H;   // 360
+
+    function degreeToY(deg) {
+      // 8 (top) -> STAGE_TOP + 24, 0 (Ding bottom) -> STAGE_TOP + STAGE_H - 28
+      return STAGE_TOP + STAGE_H - 28 - (deg / 8) * (STAGE_H - 56);
+    }
+
+    function tokenVisualY(tok) {
+      if (tok.kind === 'note') return degreeToY(tok.deg);
+      if (tok.kind === 'dyad') return (degreeToY(tok.deg) + degreeToY(tok.deg2)) * 0.5;
+      if (tok.kind === 'tak')  return STAGE_TOP + 18;
+      if (tok.kind === 'gu')   return STAGE_TOP + STAGE_H - 14;
+      return STAGE_TOP + STAGE_H * 0.5;
+    }
+
+    function tokenVisualWidth(tok) {
+      const R = ctrl.rubato;
+      if (tok.kind === 'breath') return Math.round(lerp(34, 60, R));
+      if (tok.kind === 'rest')   return 38;
+      if (tok.coupled)           return Math.round(lerp(34, 28, R));
+      if (tok.agogic)            return Math.round(lerp(74, 98, R));
+      if (tok.kind === 'dyad')   return 62;
+      return 50;
+    }
+
+    function svgEl(tag, attrs = {}, textContent = null) {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+      if (textContent != null) el.textContent = textContent;
+      return el;
+    }
+
+    function renderRibbon(autoFollow = false) {
+      const svg = document.getElementById('panlang-svg');
+      const sc = SCALES[activeScaleKey];
+      const nowPerf = performance.now();
+
+      // 1. Compute horizontal layout for every bar & token
+      const posMap = new Map(); // tokId -> { x, y, w, cx, cy, barIdx, tokIdx, tok }
+      const barRects = [];
+      let cursorX = 18;
+
+      for (let bIdx = 0; bIdx < state.bars.length; bIdx++) {
+        const bar = state.bars[bIdx];
+        const startX = cursorX;
+        cursorX += 10;
+
+        for (let tIdx = 0; tIdx < bar.tokens.length; tIdx++) {
+          const tok = bar.tokens[tIdx];
+          const w = tokenVisualWidth(tok);
+          const cx = cursorX + w * 0.5;
+          const cy = tokenVisualY(tok);
+          posMap.set(tok.id, { x: cursorX, y: cy, w, cx, cy, barIdx: bIdx, tokIdx: tIdx, tok });
+          const gap = tok.coupled ? 3 : 8;
+          cursorX += w + gap;
+        }
+        cursorX += 12;
+        barRects.push({ bar, bIdx, x: startX, w: Math.max(118, cursorX - startX) });
+        cursorX += 4;
+      }
+
+      const scrollEl = document.getElementById('ribbon-scroll');
+      const totalW = Math.max(scrollEl.clientWidth || 720, cursorX + 120);
+      svg.setAttribute('width', totalW);
+      svg.setAttribute('height', TOTAL_H);
+      svg.setAttribute('viewBox', `0 0 ${totalW} ${TOTAL_H}`);
+      svg.innerHTML = '';
+
+      // Defs for subtle glow
+      const defs = svgEl('defs');
+      defs.innerHTML = `
+        <filter id="glow-cyan" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="2.4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-orange" x="-35%" y="-35%" width="170%" height="170%">
+          <feGaussianBlur stdDeviation="2.8" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      `;
+      svg.appendChild(defs);
+
+      // 2. Background horizontal hairlines & canopy separator
+      svg.appendChild(svgEl('rect', { x: 0, y: 0, width: totalW, height: CANOPY_H, fill: '#080b10' }));
+      svg.appendChild(svgEl('rect', { x: 0, y: CANOPY_H, width: totalW, height: HEADER_H, fill: '#0d121a' }));
+      svg.appendChild(svgEl('line', { x1: 0, y1: CANOPY_H, x2: totalW, y2: CANOPY_H, stroke: '#1e2633', 'stroke-width': 1 }));
+      svg.appendChild(svgEl('line', { x1: 0, y1: STAGE_TOP, x2: totalW, y2: STAGE_TOP, stroke: '#1e2633', 'stroke-width': 1 }));
+
+      for (let d = 0; d < 9; d++) {
+        const ly = degreeToY(d);
+        svg.appendChild(svgEl('line', {
+          x1: 0, y1: ly, x2: totalW, y2: ly,
+          stroke: d === 0 ? 'rgba(56,189,248,0.22)' : 'rgba(30,38,51,0.72)',
+          'stroke-width': d === 0 ? 1 : 0.75,
+          'stroke-dasharray': d === 0 ? '' : '2 4'
+        }));
+      }
+
+      // 3. Bar dividers, harmonic headers, and Spaceship 10-segment stepped attention meters
+      for (const br of barRects) {
+        const isCurrentBar = state.playing && br.bIdx === state.playBarIdx;
+        if (isCurrentBar) {
+          svg.appendChild(svgEl('rect', {
+            x: br.x, y: STAGE_TOP, width: br.w, height: STAGE_H,
+            fill: 'rgba(56, 189, 248, 0.032)'
+          }));
+        }
+        // Vertical hairline divider
+        svg.appendChild(svgEl('line', {
+          x1: br.x, y1: CANOPY_H, x2: br.x, y2: TOTAL_H,
+          stroke: br.bar.forkPoint ? '#ff5a1f' : '#1e2633',
+          'stroke-width': br.bar.forkPoint ? 1.5 : 1,
+          'stroke-dasharray': br.bar.forkPoint ? '' : '3 3'
+        }));
+
+        // Bar label & harmonic tag (clickable to Scrub & Fork!)
+        const hdrG = svgEl('g', { class: 'bar-fork-hit' });
+        const bTag = `B${String(br.bar.index).padStart(2, '0')} @${br.bar.harm}${br.bar.inflection ? ' ' + br.bar.inflection : ''}${br.bar.forkPoint ? ' ⑂' : ''}`;
+        hdrG.appendChild(svgEl('text', {
+          x: br.x + 8, y: CANOPY_H + 16,
+          fill: br.bar.forkPoint ? '#ff5a1f' : (isCurrentBar ? '#f1f5f9' : '#38bdf8'),
+          'font-family': 'var(--mono)', 'font-size': 10, 'font-weight': 700
+        }, bTag));
+        hdrG.addEventListener('click', () => {
+          const lastIdx = Math.max(0, br.bar.tokens.length - 1);
+          scrubAndForkAt(br.bIdx, lastIdx);
+        });
+        const titleEl = svgEl('title', {}, `Click to Scrub & Fork from Bar ${br.bar.index}`);
+        hdrG.appendChild(titleEl);
+        svg.appendChild(hdrG);
+
+        // Spaceship 10-segment stepped attention strength meter right in each bar header!
+        const litSegs = Math.round(clamp(br.bar.attnLevel, 0, 1) * 10);
+        const isHotFlash = nowPerf < br.bar.flashUntil;
+        const meterX = br.x + br.w - 64;
+        const meterY = CANOPY_H + 9;
+        for (let s = 0; s < 10; s++) {
+          const isLit = s < litSegs;
+          const segHot = isLit && (isHotFlash || s >= 7);
+          svg.appendChild(svgEl('rect', {
+            x: meterX + s * 5.6,
+            y: meterY,
+            width: 4.2,
+            height: 8,
+            rx: 0.8,
+            fill: !isLit ? '#161d29' : (segHot ? '#ff5a1f' : '#38bdf8')
+          }));
+        }
+      }
+
+      // 4. Pitch-Contour Glowing Polyline connecting consecutive pitched tokens
+      const contourPts = [];
+      for (const b of state.bars) {
+        for (const t of b.tokens) {
+          if (t.deg != null) {
+            const p = posMap.get(t.id);
+            if (p) contourPts.push(`${p.cx.toFixed(1)},${p.cy.toFixed(1)}`);
+          }
+        }
+      }
+      if (contourPts.length > 1) {
+        svg.appendChild(svgEl('polyline', {
+          points: contourPts.join(' '),
+          fill: 'none',
+          stroke: '#38bdf8',
+          'stroke-width': 1.5,
+          'stroke-opacity': 0.36,
+          'stroke-linejoin': 'round',
+          filter: 'url(#glow-cyan)'
+        }));
+      }
+
+      // 5. Continuous Attention Connection Arcs (Span automatically encodes Horizon Distance!)
+      const focusId = state.hoveredTokId || state.activeTokId;
+      const focusPos = focusId ? posMap.get(focusId) : null;
+      const arcGroup = svgEl('g');
+      let avgSpanTokens = 0, arcCount = 0;
+
+      // Always draw live tethers from ALL [locked] tokens to the active tip, plus active token's attention arcs
+      if (focusPos) {
+        const drawnSources = new Set();
+        const arcsToDraw = [];
+
+        // Explicit attention sources of focus token
+        for (const a of (focusPos.tok.attn || [])) {
+          const sp = posMap.get(a.sourceId);
+          if (sp && sp.cx < focusPos.cx) {
+            arcsToDraw.push({ sp, tp: focusPos, weight: a.weight, hot: a.reason === 'lock' || a.reason === 'user' });
+            drawnSources.add(a.sourceId);
+          }
+        }
+
+        // Persistent orange tethers from locked tokens to active cursor
+        for (const b of state.bars) {
+          for (const t of b.tokens) {
+            if (t.locked && !drawnSources.has(t.id)) {
+              const sp = posMap.get(t.id);
+              if (sp && sp.cx !== focusPos.cx) {
+                arcsToDraw.push({ sp, tp: focusPos, weight: 0.92, hot: true });
+                drawnSources.add(t.id);
+              }
+            }
+          }
+        }
+
+        const allFlat = state.bars.flatMap(b => b.tokens);
+        const focusFlatIdx = allFlat.findIndex(t => t.id === focusPos.tok.id);
+
+        for (const arc of arcsToDraw) {
+          const dx = Math.abs(arc.tp.cx - arc.sp.cx);
+          // Smooth square-root arch height so short hops nest cleanly below long sweeping macro arcs!
+          const archLift = clamp(18 + Math.sqrt(dx) * 3.1, 20, CANOPY_H - 8);
+          const yBase = CANOPY_H - 2;
+          const yCtrl = CANOPY_H - archLift;
+          const midX = (arc.sp.cx + arc.tp.cx) * 0.5;
+          const dPath = `M ${arc.sp.cx.toFixed(1)} ${yBase} Q ${midX.toFixed(1)} ${yCtrl.toFixed(1)} ${arc.tp.cx.toFixed(1)} ${yBase}`;
+
+          const strokeCol = arc.hot ? '#ff5a1f' : '#38bdf8';
+          const sw = (1.1 + arc.weight * 1.9).toFixed(2);
+          arcGroup.appendChild(svgEl('path', {
+            d: dPath,
+            fill: 'none',
+            stroke: strokeCol,
+            'stroke-width': sw,
+            'stroke-opacity': (0.32 + arc.weight * 0.58).toFixed(2),
+            filter: arc.hot ? 'url(#glow-orange)' : 'url(#glow-cyan)',
+            class: arc.hot ? 'arc-live-flow' : ''
+          }));
+
+          // Vertical tether stem down to source token
+          arcGroup.appendChild(svgEl('line', {
+            x1: arc.sp.cx, y1: yBase, x2: arc.sp.cx, y2: arc.sp.cy - 13,
+            stroke: strokeCol, 'stroke-width': 0.85, 'stroke-opacity': 0.34, 'stroke-dasharray': '2 2'
+          }));
+          // Source anchor dot
+          arcGroup.appendChild(svgEl('circle', {
+            cx: arc.sp.cx, cy: yBase, r: 2.6, fill: strokeCol
+          }));
+
+          const srcIdx = allFlat.findIndex(t => t.id === arc.sp.tok.id);
+          if (srcIdx >= 0 && focusFlatIdx >= 0) {
+            avgSpanTokens += Math.abs(focusFlatIdx - srcIdx);
+            arcCount++;
+          }
+        }
+
+        // Active cursor landing needle
+        arcGroup.appendChild(svgEl('line', {
+          x1: focusPos.cx, y1: CANOPY_H - 2, x2: focusPos.cx, y2: TOTAL_H,
+          stroke: '#ff5a1f', 'stroke-width': 1.2, 'stroke-opacity': 0.55
+        }));
+        arcGroup.appendChild(svgEl('polygon', {
+          points: `${focusPos.cx - 4},${CANOPY_H - 1} ${focusPos.cx + 4},${CANOPY_H - 1} ${focusPos.cx},${CANOPY_H + 5}`,
+          fill: '#ff5a1f'
+        }));
+      }
+      svg.appendChild(arcGroup);
+
+      if (arcCount > 0) {
+        document.getElementById('tel-attn-span').textContent = `AVG ARC: ${(avgSpanTokens / arcCount).toFixed(1)}t`;
+      }
+
+      // 6. Coupled Cascade Ligatures ('-')
+      for (const b of state.bars) {
+        for (let i = 0; i < b.tokens.length - 1; i++) {
+          const t1 = b.tokens[i];
+          if (!t1.coupled) continue;
+          const p1 = posMap.get(t1.id);
+          const p2 = posMap.get(b.tokens[i + 1].id);
+          if (!p1 || !p2) continue;
+          const mx = (p1.cx + p2.cx) * 0.5;
+          const my = Math.max(p1.cy, p2.cy) + 18;
+          svg.appendChild(svgEl('path', {
+            d: `M ${p1.cx} ${p1.cy + 12} Q ${mx} ${my} ${p2.cx} ${p2.cy + 12}`,
+            fill: 'none',
+            stroke: '#38bdf8',
+            'stroke-width': 1.25,
+            'stroke-opacity': 0.72
+          }));
+        }
+      }
+
+      // 7. Render Every PanLang Token
+      for (const [tokId, p] of posMap.entries()) {
+        const tok = p.tok;
+        const isActive = tokId === state.activeTokId;
+        const isLocked = tok.locked;
+        const isFuture = state.playing && (p.barIdx > state.playBarIdx || (p.barIdx === state.playBarIdx && p.tokIdx > state.playTokIdx));
+
+        const g = svgEl('g', { class: 'tok-group', opacity: isFuture ? '0.66' : '1' });
+
+        if (tok.kind === 'breath') {
+          // Luminous open-air Caesura corridor
+          g.appendChild(svgEl('rect', {
+            x: p.x + 2, y: STAGE_TOP + 12, width: p.w - 4, height: STAGE_H - 24,
+            rx: 2,
+            fill: isActive ? 'rgba(255,90,31,0.09)' : 'rgba(56,189,248,0.04)',
+            stroke: isActive ? '#ff5a1f' : 'rgba(56,189,248,0.28)',
+            'stroke-width': 1,
+            'stroke-dasharray': '2 3',
+            class: 'tok-box'
+          }));
+          g.appendChild(svgEl('text', {
+            x: p.cx, y: STAGE_TOP + STAGE_H * 0.5 + 5,
+            'text-anchor': 'middle',
+            fill: isActive ? '#ff5a1f' : '#38bdf8',
+            'font-size': 15, class: 'tok-label'
+          }, ','));
+          g.appendChild(svgEl('text', {
+            x: p.cx, y: STAGE_TOP + STAGE_H * 0.5 + 18,
+            'text-anchor': 'middle', fill: '#52627a', class: 'tok-sub'
+          }, 'AIR'));
+        } else {
+          const boxH = tok.kind === 'dyad' ? 30 : 25;
+          const boxY = p.cy - boxH * 0.5;
+
+          // If dyad, draw glowing vertical harmonic spine between the two pitches
+          if (tok.kind === 'dyad') {
+            const y1 = degreeToY(tok.deg);
+            const y2 = degreeToY(tok.deg2);
+            g.appendChild(svgEl('line', {
+              x1: p.cx, y1, x2: p.cx, y2,
+              stroke: isActive ? '#ff5a1f' : '#38bdf8',
+              'stroke-width': 2.2, 'stroke-opacity': 0.72
+            }));
+            g.appendChild(svgEl('circle', { cx: p.cx, cy: y1, r: 3.2, fill: '#38bdf8' }));
+            g.appendChild(svgEl('circle', { cx: p.cx, cy: y2, r: 3.2, fill: '#38bdf8' }));
+          }
+
+          // If 2f0 shimmer harmonic ('), draw delicate cyan overtone halo above token
+          if (tok.art === 'H') {
+            g.appendChild(svgEl('ellipse', {
+              cx: p.cx, cy: boxY - 6, rx: p.w * 0.34, ry: 3.5,
+              fill: 'none', stroke: '#38bdf8', 'stroke-width': 1.1, 'stroke-opacity': 0.75,
+              filter: 'url(#glow-cyan)'
+            }));
+          }
+
+          // Agogic ':' resonant bloom trailing waves inside wide capsule
+          if (tok.agogic) {
+            for (let r = 1; r <= 2; r++) {
+              g.appendChild(svgEl('line', {
+                x1: p.x + p.w - 8 - r * 7, y1: boxY + 5,
+                x2: p.x + p.w - 8 - r * 7, y2: boxY + boxH - 5,
+                stroke: isActive ? '#ff5a1f' : '#38bdf8',
+                'stroke-width': 1.2,
+                'stroke-opacity': (0.55 - r * 0.16).toFixed(2)
+              }));
+            }
+          }
+
+          // Token body capsule
+          const fillCol = isActive
+            ? 'rgba(255, 90, 31, 0.24)'
+            : (isLocked ? 'rgba(255, 90, 31, 0.13)' : (tok.kind === 'tak' || tok.kind === 'gu' ? '#0d131d' : '#121a26'));
+          const strokeCol = isActive
+            ? '#ff5a1f'
+            : (isLocked ? '#ff5a1f' : (tok.agogic ? '#38bdf8' : '#2b384d'));
+
+          g.appendChild(svgEl('rect', {
+            x: p.x, y: boxY, width: p.w, height: boxH, rx: 3,
+            fill: fillCol,
+            stroke: strokeCol,
+            'stroke-width': isActive || isLocked ? 1.5 : 1,
+            filter: isActive ? 'url(#glow-orange)' : '',
+            class: 'tok-box'
+          }));
+
+          // Locked motif [ ] crisp corner brackets
+          if (isLocked) {
+            g.appendChild(svgEl('path', {
+              d: `M ${p.x + 5} ${boxY - 3} L ${p.x - 2} ${boxY - 3} L ${p.x - 2} ${boxY + boxH + 3} L ${p.x + 5} ${boxY + boxH + 3}`,
+              fill: 'none', stroke: '#ff5a1f', 'stroke-width': 1.4
+            }));
+            g.appendChild(svgEl('path', {
+              d: `M ${p.x + p.w - 5} ${boxY - 3} L ${p.x + p.w + 2} ${boxY - 3} L ${p.x + p.w + 2} ${boxY + boxH + 3} L ${p.x + p.w - 5} ${boxY + boxH + 3}`,
+              fill: 'none', stroke: '#ff5a1f', 'stroke-width': 1.4
+            }));
+          }
+
+          // User authorship corner pip
+          if (tok.source === 'user') {
+            g.appendChild(svgEl('circle', {
+              cx: p.x + 5, cy: boxY + 5, r: 2.2, fill: '#ff5a1f'
+            }));
+          }
+
+          // Crisp PanLang glyph text
+          const glyph = formatSingleToken(tok);
+          g.appendChild(svgEl('text', {
+            x: p.agogic ? p.x + 12 : p.cx,
+            y: p.cy + 4,
+            'text-anchor': tok.agogic ? 'start' : 'middle',
+            fill: isActive ? '#ffffff' : (isLocked ? '#ffceb8' : '#f1f5f9'),
+            'font-size': tok.coupled ? 11 : 12.5,
+            class: 'tok-label'
+          }, glyph));
+
+          // Subtle note name sub-tag for wide/normal pitched tokens
+          if (tok.kind === 'note' && !tok.coupled) {
+            g.appendChild(svgEl('text', {
+              x: p.agogic ? p.x + p.w - 26 : p.cx,
+              y: tok.agogic ? p.cy + 3.5 : boxY - 4,
+              'text-anchor': 'middle',
+              fill: isActive ? '#ff5a1f' : '#64768f',
+              class: 'tok-sub'
+            }, sc.notes[tok.deg]));
+          }
+        }
+
+        // Direct Manipulation Interactions: Click = Audition+Lock, Shift/Dbl-Click = Scrub & Fork
+        g.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          if (ev.shiftKey) {
+            scrubAndForkAt(p.barIdx, p.tokIdx);
+          } else {
+            toggleTokenLock(tok);
+          }
+        });
+        g.addEventListener('dblclick', (ev) => {
+          ev.stopPropagation();
+          scrubAndForkAt(p.barIdx, p.tokIdx);
+        });
+        g.addEventListener('mouseenter', () => {
+          state.hoveredTokId = tokId;
+          renderRibbon(false);
+        });
+        g.addEventListener('mouseleave', () => {
+          if (state.hoveredTokId === tokId) {
+            state.hoveredTokId = null;
+            renderRibbon(false);
+          }
+        });
+
+        svg.appendChild(g);
+      }
+
+      // Smart horizontal auto-scroll to keep live cursor framed
+      if ((autoFollow || state.playing) && !state.userScrollLock && focusPos) {
+        const targetScroll = Math.max(0, focusPos.cx - scrollEl.clientWidth * 0.72);
+        scrollEl.scrollTo({ left: targetScroll, behavior: autoFollow ? 'smooth' : 'auto' });
+      }
+    }
+
+    function renderLiveStreamTicker() {
+      const el = document.getElementById('live-panlang-stream');
+      const sc = SCALES[activeScaleKey];
+      const parts = [`<span class="pl-hdr">K:${sc.code} T:${state.bpm}</span>`];
+      for (const bar of state.bars) {
+        parts.push('<span class="pl-bar">|</span>');
+        parts.push(`<span class="pl-harm">@${bar.harm}</span>`);
+        if (bar.inflection) parts.push(`<span class="pl-op">${bar.inflection}</span>`);
+        let i = 0;
+        const toks = bar.tokens;
+        while (i < toks.length) {
+          const locked = !!toks[i].locked;
+          const group = [];
+          while (i < toks.length && !!toks[i].locked === locked) {
+            let chain = formatSingleToken(toks[i]);
+            let hasUser = toks[i].source === 'user';
+            while (toks[i].coupled && i + 1 < toks.length && !!toks[i + 1].locked === locked) {
+              i++;
+              chain += '-' + formatSingleToken(toks[i]);
+              if (toks[i].source === 'user') hasUser = true;
+            }
+            group.push(hasUser ? `<span class="pl-user">${chain}</span>` : chain);
+            i++;
+          }
+          if (locked) parts.push(`<span class="pl-lock">[${group.join(' ')}]</span>`);
+          else parts.push(group.join(' '));
+        }
+      }
+      el.innerHTML = parts.join(' ');
+      el.scrollLeft = el.scrollWidth;
+    }
+
+    // =========================================================================
+    // 11. PITCH RULER & LINEAR TACTILE KEY-RAIL
+    // =========================================================================
+    function buildPitchRuler() {
+      const container = document.getElementById('pitch-ruler-lanes');
+      const sc = SCALES[activeScaleKey];
+      container.innerHTML = '';
+      for (let d = 8; d >= 0; d--) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ruler-btn';
+        btn.dataset.deg = d;
+        const yInStage = degreeToY(d) - STAGE_TOP;
+        btn.style.top = `${yInStage}px`;
+        btn.innerHTML = `<span class="deg-num">${d}</span><span>${sc.notes[d]}</span>`;
+        btn.addEventListener('pointerdown', () => {
+          injectLiveStroke('note', d, ctrl.shimmerMode ? 'H' : 'N', `ruler-${d}`);
+        });
+        btn.addEventListener('pointerup', () => releaseLiveStroke(`ruler-${d}`));
+        btn.addEventListener('pointerleave', () => releaseLiveStroke(`ruler-${d}`));
+        container.appendChild(btn);
+      }
+    }
+
+    const ALPHA_KEYS = ['A', 'S', 'D', 'F', 'V', 'H', 'J', 'K', 'L'];
+    function buildKeyRail() {
+      const rail = document.getElementById('panlang-key-rail');
+      const sc = SCALES[activeScaleKey];
+      rail.innerHTML = '';
+
+      for (let d = 0; d < 9; d++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pan-key' + (d === 0 ? ' ding' : '');
+        btn.dataset.deg = d;
+        btn.innerHTML = `
+          <span class="pk-deg">${d}</span>
+          <span class="pk-note">${sc.notes[d]}</span>
+          <span class="pk-kbd">${d}/${ALPHA_KEYS[d]}</span>
+          <div class="pk-prob-bar"><div class="pk-prob-fill" id="pk-prob-${d}"></div></div>
+        `;
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          btn.classList.add('pressed');
+          injectLiveStroke('note', d, (e.shiftKey || ctrl.shimmerMode) ? 'H' : 'N', `btn-${d}`);
+        });
+        const end = () => { btn.classList.remove('pressed'); releaseLiveStroke(`btn-${d}`); };
+        btn.addEventListener('pointerup', end);
+        btn.addEventListener('pointerleave', end);
+        btn.addEventListener('pointercancel', end);
+        rail.appendChild(btn);
+      }
+
+      const sep = document.createElement('div');
+      sep.className = 'rail-sep';
+      rail.appendChild(sep);
+
+      const extras = [
+        { perc: 'tak',    glyph: 't', sub: 'TAK',   kbd: 'T',     action: () => injectLiveStroke('tak', null) },
+        { perc: 'gu',     glyph: 'g', sub: 'GU',    kbd: 'G',     action: () => injectLiveStroke('gu', null) },
+        { perc: 'breath', glyph: ',', sub: 'AIR',   kbd: 'SPACE', action: () => injectLiveStroke('breath', null) },
+        { perc: 'harm',   glyph: "'", sub: '2f₀',   kbd: 'SHIFT', toggle: true }
+      ];
+
+      for (const ex of extras) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'pan-key perc' + (ex.toggle && ctrl.shimmerMode ? ' toggle-on' : '');
+        btn.dataset.perc = ex.perc;
+        btn.innerHTML = `
+          <span class="pk-deg">${ex.glyph}</span>
+          <span class="pk-note">${ex.sub}</span>
+          <span class="pk-kbd">${ex.kbd}</span>
+        `;
+        if (ex.toggle) {
+          btn.addEventListener('click', () => {
+            ctrl.shimmerMode = !ctrl.shimmerMode;
+            btn.classList.toggle('toggle-on', ctrl.shimmerMode);
+            setGestureReadout(ctrl.shimmerMode ? "2f₀ OVERTONE SHIMMER ON (')" : 'NORMAL STRIKE MODE');
+          });
+        } else {
+          btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            btn.classList.add('pressed');
+            ex.action();
+          });
+          const end = () => btn.classList.remove('pressed');
+          btn.addEventListener('pointerup', end);
+          btn.addEventListener('pointerleave', end);
+        }
+        rail.appendChild(btn);
+      }
+      updateKeyRailProbs();
+    }
+
+    function updateKeyRailProbs() {
+      const maxP = Math.max(...state.degProbs, 0.01);
+      for (let d = 0; d < 9; d++) {
+        const fill = document.getElementById(`pk-prob-${d}`);
+        if (fill) fill.style.width = `${Math.round((state.degProbs[d] / maxP) * 100)}%`;
+        const keyBtn = document.querySelector(`.pan-key[data-deg="${d}"]`);
+        if (keyBtn) keyBtn.classList.toggle('ai-pull', state.degProbs[d] >= maxP * 0.85);
+      }
+    }
+
+    // =========================================================================
+    // 12. 2D ELECTRIC STEERING PAD (SPRING PUCK + DETENTS + AI GHOST VECTOR)
+    // =========================================================================
+    const padTrail = [];
+    let padDragging = false;
+    let lastDetentCell = '';
+
+    function getQuadrantLabel(h, g) {
+      if (h < 0.42 && g < 0.42) return 'OSTINATO DING LOCK';
+      if (h < 0.42 && g >= 0.58) return 'SHIMMER LOOP';
+      if (h >= 0.58 && g < 0.42) return 'DEEP MACRO DRIFT';
+      if (h >= 0.58 && g >= 0.58) return 'LUMINOUS EXPLORATION';
+      return 'BALANCED FLOW';
+    }
+
+    function onSteerChanged(source = 'pad') {
+      document.getElementById('val-horizon').textContent = ctrl.horizon.toFixed(2);
+      document.getElementById('val-gravity').textContent = ctrl.gravity.toFixed(2);
+      document.getElementById('pad-quad-label').textContent = getQuadrantLabel(ctrl.horizon, ctrl.gravity);
+
+      abortSpeculativePrefetch(`steer-${source}`);
+      if (steerDebounceTimer) clearTimeout(steerDebounceTimer);
+      steerDebounceTimer = setTimeout(() => {
+        runSpeculativePrefetch(state.bars.length, `steer-${source}`);
+      }, 95);
+    }
+
+    function initSteerPad() {
+      const stage = document.getElementById('steer-pad-stage');
+      const canvas = document.getElementById('steer-pad-canvas');
+      const ctx = canvas.getContext('2d');
+
+      function updateFromPointer(e) {
+        const rect = stage.getBoundingClientRect();
+        const x = clamp((e.clientX - rect.left) / rect.width, 0.04, 0.96);
+        const y = clamp(1 - (e.clientY - rect.top) / rect.height, 0.04, 0.96);
+        ctrl.horizon = x;
+        ctrl.gravity = y;
+
+        // Mechanical 4x4 detent micro-clicks
+        const cell = `${Math.floor(x * 5)},${Math.floor(y * 5)}`;
+        if (cell !== lastDetentCell) {
+          lastDetentCell = cell;
+          playDetentClick(1700 + y * 950, 0.032);
+        }
+
+        padTrail.push({ x, y, life: 1.0 });
+        if (padTrail.length > 26) padTrail.shift();
+        onSteerChanged('pad');
+      }
+
+      stage.addEventListener('pointerdown', (e) => {
+        ensureAudio();
+        padDragging = true;
+        stage.setPointerCapture(e.pointerId);
+        document.getElementById('val-horizon').classList.add('hot');
+        document.getElementById('val-gravity').classList.add('hot');
+        updateFromPointer(e);
+      });
+      stage.addEventListener('pointermove', (e) => {
+        if (!padDragging) return;
+        updateFromPointer(e);
+      });
+      const stopDrag = () => {
+        if (!padDragging) return;
+        padDragging = false;
+        document.getElementById('val-horizon').classList.remove('hot');
+        document.getElementById('val-gravity').classList.remove('hot');
+      };
+      stage.addEventListener('pointerup', stopDrag);
+      stage.addEventListener('pointercancel', stopDrag);
+
+      function drawPad() {
+        const dpr = window.devicePixelRatio || 1;
+        const w = stage.clientWidth || 300;
+        const h = stage.clientHeight || 260;
+        if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+          canvas.width = Math.round(w * dpr);
+          canvas.height = Math.round(h * dpr);
+        }
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        // Subtle 5x5 detent drafting grid
+        ctx.strokeStyle = 'rgba(30, 38, 51, 0.85)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 5; i++) {
+          const gx = (w / 5) * i;
+          const gy = (h / 5) * i;
+          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+        }
+
+        // Polar crosshair & concentric telemetry rings
+        const cx = w * 0.5, cy = h * 0.5;
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.14)';
+        ctx.setLineDash([3, 4]);
+        for (const r of [0.22, 0.40]) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, Math.min(w, h) * r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.strokeStyle = 'rgba(45, 57, 76, 0.9)';
+        ctx.beginPath(); ctx.moveTo(cx, 18); ctx.lineTo(cx, h - 18); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(18, cy); ctx.lineTo(w - 18, cy); ctx.stroke();
+
+        // Puck & AI Ghost coordinates
+        const px = ctrl.horizon * w;
+        const py = (1 - ctrl.gravity) * h;
+        const ax = state.aiGhost.horizon * w;
+        const ay = (1 - state.aiGhost.gravity) * h;
+
+        // Electric drag trace
+        for (let i = 0; i < padTrail.length; i++) {
+          padTrail[i].life -= 0.032;
+        }
+        while (padTrail.length && padTrail[0].life <= 0) padTrail.shift();
+        if (padTrail.length > 1) {
+          for (let i = 1; i < padTrail.length; i++) {
+            const p0 = padTrail[i - 1], p1 = padTrail[i];
+            ctx.strokeStyle = `rgba(255, 90, 31, ${(p1.life * 0.72).toFixed(2)})`;
+            ctx.lineWidth = 1.5 + p1.life * 1.8;
+            ctx.beginPath();
+            ctx.moveTo(p0.x * w, (1 - p0.y) * h);
+            ctx.lineTo(p1.x * w, (1 - p1.y) * h);
+            ctx.stroke();
+          }
+        }
+
+        // Vector tether between User Puck and AI Pull Ghost Reticle
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ax, ay); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // AI Pull Ghost Reticle (#38bdf8)
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.arc(ax, ay, 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.beginPath(); ctx.arc(ax, ay, 3, 0, Math.PI * 2); ctx.fill();
+
+        // Active crosshair projection lines for User Puck
+        ctx.strokeStyle = padDragging ? 'rgba(255, 90, 31, 0.48)' : 'rgba(241, 245, 249, 0.16)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke();
+
+        // Tactile User Steering Puck (#ff5a1f active / #f1f5f9 idle)
+        const puckCol = padDragging ? '#ff5a1f' : '#f1f5f9';
+        ctx.shadowColor = padDragging ? 'rgba(255, 90, 31, 0.75)' : 'rgba(56, 189, 248, 0.45)';
+        ctx.shadowBlur = padDragging ? 14 : 8;
+        ctx.fillStyle = '#0a0d12';
+        ctx.strokeStyle = puckCol;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.arc(px, py, padDragging ? 10.5 : 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ff5a1f';
+        ctx.beginPath(); ctx.arc(px, py, 3.2, 0, Math.PI * 2); ctx.fill();
+
+        ctx.restore();
+        requestAnimationFrame(drawPad);
+      }
+      requestAnimationFrame(drawPad);
+    }
+
+    // =========================================================================
+    // 13. VECTOR 3: ELASTIC BREATH DIAL (POCKET GROOVE <-> FREE RUBATO)
+    // =========================================================================
+    let lastDialTick = -1;
+    function renderBreathDial() {
+      const svg = document.getElementById('breath-dial-svg');
+      const r = ctrl.rubato;
+      const startDeg = 135;
+      const sweepDeg = 270;
+      const valDeg = startDeg + r * sweepDeg;
+
+      function polar(cx, cy, rad, deg) {
+        const a = (deg * Math.PI) / 180;
+        return { x: cx + rad * Math.cos(a), y: cy + rad * Math.sin(a) };
+      }
+      function arcPath(rad, d0, d1) {
+        const p0 = polar(40, 40, rad, d0);
+        const p1 = polar(40, 40, rad, d1);
+        const large = (d1 - d0) > 180 ? 1 : 0;
+        return `M ${p0.x.toFixed(2)} ${p0.y.toFixed(2)} A ${rad} ${rad} 0 ${large} 1 ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`;
+      }
+
+      let ticks = '';
+      for (let i = 0; i <= 12; i++) {
+        const d = startDeg + (i / 12) * sweepDeg;
+        const pIn = polar(40, 40, 31, d);
+        const pOut = polar(40, 40, 36, d);
+        const lit = (i / 12) <= r + 0.01;
+        ticks += `<line x1="${pIn.x.toFixed(1)}" y1="${pIn.y.toFixed(1)}" x2="${pOut.x.toFixed(1)}" y2="${pOut.y.toFixed(1)}" stroke="${lit ? '#38bdf8' : '#253042'}" stroke-width="1.3"/>`;
+      }
+      const ptr = polar(40, 40, 22, valDeg);
+      const activeArc = r > 0.01 ? `<path d="${arcPath(26, startDeg, valDeg)}" fill="none" stroke="#ff5a1f" stroke-width="3.2" stroke-linecap="round"/>` : '';
+
+      svg.innerHTML = `
+        ${ticks}
+        <path d="${arcPath(26, startDeg, startDeg + sweepDeg)}" fill="none" stroke="#1b2432" stroke-width="3.2" stroke-linecap="round"/>
+        ${activeArc}
+        <circle cx="40" cy="40" r="18" fill="#0f141c" stroke="#2d394c" stroke-width="1.2"/>
+        <line x1="40" y1="40" x2="${ptr.x.toFixed(1)}" y2="${ptr.y.toFixed(1)}" stroke="#f1f5f9" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="40" cy="40" r="3" fill="#ff5a1f"/>
+      `;
+
+      const agogicMul = lerp(1.42, 1.88, r).toFixed(2);
+      document.getElementById('val-rubato-num').textContent = `R:${r.toFixed(2)}`;
+      document.getElementById('dial-mult-tag').textContent = `:${agogicMul}×`;
+
+      let mode = 'ORGANIC BREATH';
+      let desc = 'Agogic : blooms, fluid - cascades, natural , luftpause';
+      if (r < 0.30) {
+        mode = 'POCKET GROOVE';
+        desc = 'Tight syncopated pulse, crisp Tak/Gu pocket, minimal drift';
+      } else if (r > 0.72) {
+        mode = 'FREE RUBATO';
+        desc = 'Lush 1.85× blooms, wide , caesuras, ^/v speech inflection';
+      }
+      document.getElementById('dial-mode-label').textContent = mode;
+      document.getElementById('dial-desc-label').textContent = desc;
+    }
+
+    function setRubato(val) {
+      ctrl.rubato = clamp(val, 0, 1);
+      const tick = Math.round(ctrl.rubato * 12);
+      if (tick !== lastDialTick) {
+        lastDialTick = tick;
+        playDetentClick(1450 + tick * 85, 0.028);
+      }
+      renderBreathDial();
+      renderRibbon(false);
+      onSteerChanged('breath');
+    }
+
+    function initBreathDial() {
+      const wrap = document.getElementById('breath-dial-wrap');
+      let dragging = false, startY = 0, startVal = 0;
+
+      wrap.addEventListener('pointerdown', (e) => {
+        ensureAudio();
+        dragging = true;
+        startY = e.clientY;
+        startVal = ctrl.rubato;
+        wrap.setPointerCapture(e.pointerId);
+      });
+      wrap.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const delta = (startY - e.clientY) / 140;
+        setRubato(startVal + delta);
+      });
+      const end = () => { dragging = false; };
+      wrap.addEventListener('pointerup', end);
+      wrap.addEventListener('pointercancel', end);
+      wrap.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        ensureAudio();
+        setRubato(ctrl.rubato + (e.deltaY < 0 ? 0.06 : -0.06));
+      }, { passive: false });
+
+      document.querySelectorAll('.dial-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+          ensureAudio();
+          setRubato(parseFloat(btn.dataset.rubato));
+        });
+      });
+
+      renderBreathDial();
+    }
+
+    // =========================================================================
+    // 14. SPACESHIP STEPPED TELEMETRY METERS
+    // =========================================================================
+    function getTopDegrees(n = 3) {
+      const sc = SCALES[activeScaleKey];
+      return state.degProbs
+        .map((p, i) => ({ i, note: sc.notes[i], p }))
+        .sort((a, b) => b.p - a.p)
+        .slice(0, n);
+    }
+
+    function renderTelemetryMeters() {
+      const container = document.getElementById('move-meters');
+      container.innerHTML = '';
+
+      for (const k of MOVE_KEYS) {
+        const p = state.moveProbs[k] || 0;
+        const prev = state.prevMoveProbs[k] || 0;
+        const deltaUp = (p - prev) > 0.03;
+        const isWin = k === state.moveWinner;
+        const lit = Math.round(clamp(p / 0.45, 0, 1) * 10);
+
+        const row = document.createElement('div');
+        row.className = 'meter-row';
+        let segs = '';
+        for (let s = 0; s < 10; s++) {
+          const isOn = s < lit;
+          const isHot = isOn && (isWin || (deltaUp && s >= Math.max(0, lit - 3)));
+          segs += `<div class="step-seg${isHot ? ' hot' : (isOn ? ' on' : '')}"></div>`;
+        }
+        row.innerHTML = `
+          <span class="meter-name${isWin ? ' win' : ''}">${k}</span>
+          <div class="step-bar">${segs}</div>
+          <span class="meter-pct${isWin ? ' win' : ''}">${Math.round(p * 100)}%</span>
+        `;
+        container.appendChild(row);
+      }
+
+      const pillsEl = document.getElementById('deg-top-pills');
+      const top3 = getTopDegrees(3);
+      pillsEl.innerHTML = top3.map((d, idx) =>
+        `<span class="deg-pill${idx === 0 ? ' top' : ''}">${d.i}:${d.note} ${Math.round(d.p * 100)}%</span>`
+      ).join('');
+    }
+
+    // =========================================================================
+    // 15. KEYBOARD SPEAK-PANLANG & UI EVENT BINDINGS
+    // =========================================================================
+    const KEY_TO_DEG = {
+      '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8,
+      'a': 0, 's': 1, 'd': 2, 'f': 3, 'v': 4, 'h': 5, 'j': 6, 'k': 7, 'l': 8
+    };
+
+    function isTypingTarget(el) {
+      return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (isTypingTarget(document.activeElement)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+
+      if (e.repeat) return;
+
+      if (k === 't') {
+        e.preventDefault();
+        injectLiveStroke('tak', null);
+        return;
+      }
+      if (k === 'g') {
+        e.preventDefault();
+        injectLiveStroke('gu', null);
+        return;
+      }
+      if (k === ',' || e.code === 'Space') {
+        e.preventDefault();
+        injectLiveStroke('breath', null);
+        return;
+      }
+      if (e.key === ':') {
+        e.preventDefault();
+        if (state.lastLiveTok && state.lastLiveTok.kind === 'note') {
+          state.lastLiveTok.agogic = true;
+          state.lastLiveTok.coupled = false;
+          setGestureReadout(`STRETCHED → ${formatSingleToken(state.lastLiveTok)}`);
+          renderRibbon(false);
+          renderLiveStreamTicker();
+          updateBenchmarkStrip(false);
+        }
+        return;
+      }
+      if (k === 'm') {
+        e.preventDefault();
+        ctrl.muteMode = !ctrl.muteMode;
+        if (ctrl.muteMode) ctrl.shimmerMode = false;
+        setGestureReadout(ctrl.muteMode ? 'MUTED DAMP MODE ON (m)' : 'NORMAL STRIKE MODE');
+        return;
+      }
+      if (k in KEY_TO_DEG) {
+        e.preventDefault();
+        const deg = KEY_TO_DEG[k];
+        const art = (e.shiftKey || ctrl.shimmerMode) ? 'H' : (ctrl.muteMode ? 'M' : 'N');
+        const btn = document.querySelector(`.pan-key[data-deg="${deg}"]`);
+        if (btn) btn.classList.add('pressed');
+        injectLiveStroke('note', deg, art, `kbd-${k}`);
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if (k in KEY_TO_DEG) {
+        const deg = KEY_TO_DEG[k];
+        const btn = document.querySelector(`.pan-key[data-deg="${deg}"]`);
+        if (btn) btn.classList.remove('pressed');
+        releaseLiveStroke(`kbd-${k}`);
+      }
+    });
+
+    function initBindings() {
+      // Scale & Bank selectors
+      document.getElementById('scale-select').addEventListener('change', (e) => {
+        activeScaleKey = e.target.value;
+        buildPitchRuler();
+        buildKeyRail();
+        renderRibbon(false);
+        renderLiveStreamTicker();
+        renderTelemetryMeters();
+        updateBenchmarkStrip(true);
+      });
+
+      document.getElementById('bank-select').addEventListener('change', (e) => {
+        const v = e.target.value;
+        if (v.startsWith('dsp-')) {
+          activeBankId = null;
+          activeProfileKey = v.slice(4);
+        } else {
+          activeBankId = v;
+          activeProfileKey = v.replace('yishama-', '');
+          ensureAudio();
+          ensureStudioBank(activeBankId);
+        }
+      });
+
+      // Tempo buttons
+      document.getElementById('bpm-down').addEventListener('click', () => {
+        state.bpm = clamp(state.bpm - 4, 52, 138);
+        document.getElementById('bpm-display').textContent = `T:${state.bpm}`;
+        renderLiveStreamTicker();
+        updateBenchmarkStrip(false);
+      });
+      document.getElementById('bpm-up').addEventListener('click', () => {
+        state.bpm = clamp(state.bpm + 4, 52, 138);
+        document.getElementById('bpm-display').textContent = `T:${state.bpm}`;
+        renderLiveStreamTicker();
+        updateBenchmarkStrip(false);
+      });
+
+      // Transport
+      document.getElementById('btn-play').addEventListener('click', () => {
+        if (state.playing) stopPlayback();
+        else startPlayback();
+      });
+
+      document.getElementById('btn-fork-now').addEventListener('click', () => {
+        const bi = clamp(state.playBarIdx, 0, Math.max(0, state.bars.length - 1));
+        const b = state.bars[bi];
+        const ti = b ? clamp(state.playTokIdx - 1, 0, Math.max(0, b.tokens.length - 1)) : 0;
+        scrubAndForkAt(bi, ti);
+      });
+
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        stopPlayback();
+        loadSeedText(document.getElementById('seed-input').value, false);
+        setGestureReadout('RIBBON RESET TO SEED');
+      });
+
+      // Ephemeral API Key (memory only)
+      const apiInput = document.getElementById('api-key-input');
+      apiInput.addEventListener('input', (e) => {
+        geminiApiKey = e.target.value.trim();
+        setApiDot(geminiApiKey ? 'live' : '');
+        if (!geminiApiKey) {
+          state.lastDecisionSource = 'LOCAL';
+          setPrefetchBadge('LOCAL READY', 'hit');
+          updateBenchmarkStrip(false);
+        }
+      });
+      document.getElementById('btn-api-test').addEventListener('click', () => {
+        geminiApiKey = apiInput.value.trim();
+        if (!geminiApiKey) {
+          setGestureReadout('ENTER GEMINI API KEY FOR LIVE GEMINI-DECISION-1 (OFFLINE ENGINE ACTIVE)');
+          const res = localPanLangInference(state.bars.length);
+          applyDecisionResult(res);
+          return;
+        }
+        state.prefetchedForBar = -1;
+        state.prefetchInFlightBar = -1;
+        runSpeculativePrefetch(state.bars.length, 'manual-ping');
+      });
+
+      // Inspector Drawer toggle
+      document.getElementById('btn-inspector').addEventListener('click', () => {
+        const d = document.getElementById('inspector-drawer');
+        d.classList.toggle('open');
+        updateBenchmarkStrip(false);
+      });
+
+      // PanLang Seed Input & Motif Chips
+      const seedInput = document.getElementById('seed-input');
+      document.getElementById('btn-inject-seed').addEventListener('click', () => {
+        ensureAudio();
+        loadSeedText(seedInput.value, true);
+        setGestureReadout('INJECTED PANLANG SEED → PLAYING & RIFFING');
+      });
+      seedInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          ensureAudio();
+          loadSeedText(seedInput.value, true);
+          seedInput.blur();
+          setGestureReadout('INJECTED PANLANG SEED → PLAYING & RIFFING');
+        }
+      });
+      document.querySelectorAll('.motif-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          ensureAudio();
+          seedInput.value = chip.dataset.seed;
+          loadSeedText(chip.dataset.seed, true);
+          setGestureReadout(`LOADED MOTIF: ${chip.textContent.toUpperCase()}`);
+        });
+      });
+
+      // Stream Copy & Unlock All
+      document.getElementById('btn-copy-pl').addEventListener('click', async () => {
+        const txt = serializePanLang(state.bars, { header: true });
+        try {
+          await navigator.clipboard.writeText(txt);
+          setGestureReadout('COPIED LIVE PANLANG STREAM TO CLIPBOARD');
+        } catch (_) {
+          setGestureReadout(txt.slice(0, 68));
+        }
+      });
+      document.getElementById('btn-clear-locks').addEventListener('click', () => {
+        for (const b of state.bars) for (const t of b.tokens) t.locked = false;
+        abortSpeculativePrefetch('clear-locks');
+        renderRibbon(false);
+        renderLiveStreamTicker();
+        updateBenchmarkStrip(false);
+        setGestureReadout('ALL ATTENTION LOCKS CLEARED');
+      });
+
+      // Smart Ribbon Scroll Follow
+      const scrollEl = document.getElementById('ribbon-scroll');
+      const jumpBtn = document.getElementById('btn-jump-live');
+      scrollEl.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          scrollEl.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+        state.userScrollLock = true;
+        jumpBtn.classList.add('visible');
+      }, { passive: false });
+      jumpBtn.addEventListener('click', () => {
+        state.userScrollLock = false;
+        jumpBtn.classList.remove('visible');
+        renderRibbon(true);
+      });
+    }
+
+    // =========================================================================
+    // 16. BOOTSTRAP COCKPIT
+    // =========================================================================
+    buildPitchRuler();
+    buildKeyRail();
+    initSteerPad();
+    initBreathDial();
+    initBindings();
+    loadSeedText(document.getElementById('seed-input').value, false);
+    logPrefetch('PanLang Cockpit ready · Offline grammar inference active (0.2ms)');
+  </script>
+</body>
+</html>

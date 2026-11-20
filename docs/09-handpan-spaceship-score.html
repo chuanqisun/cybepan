@@ -1,0 +1,3713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>09 — Spaceship Living Score & Electric Vector Steering</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #070708;
+      --surface-elev: rgba(9, 9, 11, 0.94);
+      --ink-1: #ffffff;
+      --ink-2: rgba(255, 255, 255, 0.64);
+      --ink-3: rgba(255, 255, 255, 0.40);
+      --ink-4: rgba(255, 255, 255, 0.22);
+      --ink-5: rgba(255, 255, 255, 0.10);
+      --signal: #ff5a1f;
+      --signal-soft: rgba(255, 90, 31, 0.22);
+      --mono: ui-monospace, "JetBrains Mono", Menlo, Consolas, "SF Mono", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink-1);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    /* =====================================================================
+       COCKPIT SHELL
+       ===================================================================== */
+    #app {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      background: var(--bg);
+    }
+
+    /* Top 40px Slim Cockpit Bar */
+    #topbar {
+      height: 40px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      gap: 12px;
+      border-bottom: 1px solid var(--ink-5);
+      background: #000000;
+      z-index: 30;
+    }
+
+    .bar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      letter-spacing: 0.09em;
+      font-size: 11px;
+      color: var(--ink-2);
+      text-transform: uppercase;
+      white-space: nowrap;
+      padding-right: 6px;
+      border-right: 1px solid var(--ink-5);
+    }
+    .brand strong {
+      color: var(--ink-1);
+      font-weight: 600;
+    }
+
+    .btn, .sel {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      color: var(--ink-2);
+      border: 1px solid var(--ink-4);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .btn:hover, .sel:hover {
+      border-color: var(--ink-2);
+      color: var(--ink-1);
+    }
+    .btn:focus-visible, .sel:focus-visible {
+      outline: 1px solid var(--signal);
+      outline-offset: 1px;
+    }
+
+    .sel {
+      padding-right: 22px;
+      background-image: linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.45) 50%),
+                        linear-gradient(135deg, rgba(255,255,255,0.45) 50%, transparent 50%);
+      background-position: calc(100% - 11px) 10px, calc(100% - 7px) 10px;
+      background-size: 4px 4px, 4px 4px;
+      background-repeat: no-repeat;
+    }
+    .sel option {
+      background: #0a0a0c;
+      color: #ffffff;
+    }
+
+    .btn-play {
+      min-width: 82px;
+      justify-content: center;
+      color: var(--ink-1);
+      border-color: var(--ink-3);
+    }
+    .btn-play.active {
+      border-color: var(--ink-1);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .btn-play .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ink-3);
+      transition: background 180ms ease, box-shadow 180ms ease;
+    }
+    .btn-play.active .dot {
+      background: var(--ink-1);
+    }
+    .btn-play.hot .dot {
+      background: var(--signal);
+      box-shadow: 0 0 8px var(--signal);
+    }
+
+    .pill-btn {
+      border-radius: 13px;
+      padding: 0 11px;
+    }
+    .pill-btn.open {
+      color: var(--ink-1);
+      border-color: var(--ink-1);
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .pill-btn.signal-pulse {
+      border-color: var(--signal);
+      color: var(--signal);
+    }
+
+    .micro-tag {
+      font-size: 9.5px;
+      letter-spacing: 0.06em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      padding: 2px 5px;
+      border: 1px solid var(--ink-5);
+      border-radius: 2px;
+    }
+    .micro-tag.ready { color: var(--ink-2); border-color: var(--ink-4); }
+    .micro-tag.hot { color: var(--signal); border-color: var(--signal); }
+
+    .live-telemetry {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--ink-3);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      overflow: hidden;
+    }
+    .live-telemetry .kv {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .live-telemetry .val {
+      color: var(--ink-2);
+    }
+    .live-telemetry .val.strong {
+      color: var(--ink-1);
+    }
+
+    /* =====================================================================
+       HERO LIVING SCORE STAGE (~84-88vh)
+       ===================================================================== */
+    #stage-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      width: 100%;
+      min-height: 0;
+      background: #000000;
+      overflow: hidden;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    #score-canvas, #score-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #score-canvas { pointer-events: none; z-index: 1; }
+    #score-svg    { pointer-events: none; z-index: 2; }
+
+    /* Minimal floating onboarding cue (fades out once notes appear) */
+    #stage-hint {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-64%, -50%);
+      pointer-events: none;
+      z-index: 4;
+      text-align: left;
+      max-width: 420px;
+      transition: opacity 420ms ease;
+    }
+    #stage-hint.hidden { opacity: 0; }
+    #stage-hint .hint-kicker {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    #stage-hint .hint-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink-1);
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+    #stage-hint .hint-list {
+      font-size: 11px;
+      color: var(--ink-3);
+      line-height: 1.75;
+    }
+    #stage-hint .hint-list span {
+      color: var(--ink-2);
+    }
+
+    /* =====================================================================
+       BOTTOM SPACESHIP ATTENTION & TELEMETRY RULER RAIL (~66px)
+       ===================================================================== */
+    #bottom-rail {
+      height: 66px;
+      min-height: 66px;
+      border-top: 1px solid var(--ink-5);
+      background: #000000;
+      display: grid;
+      grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
+      align-items: center;
+      padding: 0 14px;
+      gap: 16px;
+      z-index: 25;
+    }
+
+    .rail-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .rail-kicker {
+      font-size: 9.5px;
+      letter-spacing: 0.10em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+    }
+    .keys-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--ink-3);
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .keys-strip kbd {
+      font-family: var(--mono);
+      font-size: 9.5px;
+      color: var(--ink-2);
+      border: 1px solid var(--ink-4);
+      padding: 0 4px;
+      border-radius: 2px;
+      margin-right: 3px;
+    }
+
+    /* 10-Segment Stepped Attention Strength Meters */
+    #attn-meters {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px;
+      border-left: 1px solid var(--ink-5);
+      border-right: 1px solid var(--ink-5);
+      height: 100%;
+    }
+
+    .meter-col {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 68px;
+    }
+    .meter-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 9.5px;
+      letter-spacing: 0.06em;
+      color: var(--ink-3);
+    }
+    .meter-head .m-val {
+      color: var(--ink-2);
+      font-size: 10px;
+    }
+    .meter-cells {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 2px;
+      height: 12px;
+      align-items: stretch;
+    }
+    .meter-cells .seg {
+      background: var(--ink-5);
+      border-radius: 1px;
+      transition: background 120ms linear;
+    }
+    .meter-sub {
+      font-size: 8.5px;
+      letter-spacing: 0.05em;
+      color: var(--ink-4);
+      text-transform: uppercase;
+    }
+
+    .rail-right {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .vec-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 9px;
+      border: 1px solid var(--ink-5);
+      border-radius: 2px;
+      font-size: 10.5px;
+      color: var(--ink-3);
+      background: transparent;
+      white-space: nowrap;
+      transition: border-color 180ms ease, color 180ms ease;
+    }
+    .vec-chip.active {
+      border-color: var(--ink-3);
+      color: var(--ink-1);
+    }
+    .vec-chip.hot {
+      border-color: var(--signal);
+      color: var(--signal);
+    }
+    .vec-chip .chip-x {
+      cursor: pointer;
+      color: var(--ink-3);
+      padding: 0 2px;
+      margin-left: 2px;
+      display: none;
+    }
+    .vec-chip.active .chip-x { display: inline; }
+    .vec-chip .chip-x:hover { color: var(--signal); }
+
+    /* =====================================================================
+       SLIDE-OVER DRAWERS (GEMINI / PANLANG & NOTES)
+       ===================================================================== */
+    .drawer {
+      position: fixed;
+      top: 40px;
+      right: 0;
+      bottom: 66px;
+      width: 390px;
+      max-width: calc(100vw - 16px);
+      background: var(--surface-elev);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-left: 1px solid var(--ink-4);
+      z-index: 40;
+      transform: translateX(102%);
+      transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: text;
+    }
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--ink-5);
+    }
+    .drawer-title {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-1);
+      font-weight: 600;
+    }
+    .drawer-close {
+      background: transparent;
+      border: 1px solid var(--ink-4);
+      color: var(--ink-2);
+      width: 24px;
+      height: 24px;
+      border-radius: 2px;
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+    }
+    .drawer-close:hover { border-color: var(--ink-1); color: var(--ink-1); }
+
+    .drawer-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .d-section {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--ink-5);
+    }
+    .d-section:last-child { border-bottom: none; padding-bottom: 4px; }
+
+    .d-label {
+      font-size: 10px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .d-label .badge {
+      font-size: 9.5px;
+      color: var(--ink-2);
+      border: 1px solid var(--ink-4);
+      padding: 1px 6px;
+      border-radius: 2px;
+    }
+    .d-label .badge.ok  { color: var(--ink-1); border-color: var(--ink-2); }
+    .d-label .badge.hot { color: var(--signal); border-color: var(--signal); }
+
+    .d-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .d-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 28px;
+      background: #000000;
+      border: 1px solid var(--ink-4);
+      border-radius: 2px;
+      color: var(--ink-1);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 0 9px;
+      outline: none;
+    }
+    .d-input:focus { border-color: var(--signal); }
+    .d-input::placeholder { color: var(--ink-4); }
+
+    .d-note {
+      font-size: 10.5px;
+      line-height: 1.55;
+      color: var(--ink-3);
+    }
+    .d-note strong { color: var(--ink-2); font-weight: 600; }
+
+    .code-box {
+      background: #000000;
+      border: 1px solid var(--ink-5);
+      border-radius: 2px;
+      padding: 9px 10px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--ink-1);
+      word-break: break-word;
+      white-space: pre-wrap;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .code-box.dim { color: var(--ink-2); font-size: 10px; }
+
+    .prob-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .prob-row {
+      display: grid;
+      grid-template-columns: 64px 1fr 36px;
+      align-items: center;
+      gap: 8px;
+      font-size: 10.5px;
+    }
+    .prob-row .p-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .prob-row .p-track {
+      height: 5px;
+      background: var(--ink-5);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .prob-row .p-fill {
+      height: 100%;
+      background: var(--ink-2);
+      transition: width 200ms ease, background 250ms ease;
+    }
+    .prob-row.win .p-name { color: var(--ink-1); }
+    .prob-row.win .p-fill { background: var(--ink-1); }
+    .prob-row.hot .p-fill { background: var(--signal); }
+    .prob-row .p-pct { text-align: right; color: var(--ink-3); font-size: 10px; }
+
+    /* Notes Monograph Typography */
+    .notes-block h3 {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-1);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .notes-block p {
+      font-size: 11px;
+      line-height: 1.62;
+      color: var(--ink-2);
+      margin-bottom: 8px;
+    }
+    .notes-block code {
+      color: var(--ink-1);
+      background: rgba(255, 255, 255, 0.07);
+      padding: 1px 4px;
+      border-radius: 2px;
+      font-size: 10.5px;
+    }
+    .notes-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10.5px;
+      margin-top: 4px;
+    }
+    .notes-table td {
+      padding: 5px 6px;
+      border-bottom: 1px solid var(--ink-5);
+      vertical-align: top;
+      color: var(--ink-2);
+    }
+    .notes-table td:first-child {
+      color: var(--ink-1);
+      white-space: nowrap;
+      width: 112px;
+    }
+
+    @media (max-width: 1040px) {
+      .live-telemetry { display: none; }
+      #bottom-rail { grid-template-columns: auto 1fr; }
+      .rail-left { display: none; }
+    }
+    @media (max-width: 720px) {
+      .brand span { display: none; }
+      #attn-meters { gap: 6px; padding: 0 6px; }
+      .meter-col { min-width: 48px; }
+      .rail-right { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- =================================================================
+         TOP SLIM 40px COCKPIT BAR
+         ================================================================= -->
+    <header id="topbar">
+      <div class="bar-group">
+        <div class="brand"><strong>09</strong> <span>SPACESHIP SCORE</span></div>
+        <button id="btn-play" class="btn btn-play" type="button" title="Toggle Autonomous Flow (Space)">
+          <span class="dot"></span>
+          <span id="btn-play-label">PLAY</span>
+        </button>
+        <select id="sel-scale" class="sel" aria-label="Handpan Scale">
+          <option value="d-kurd">D Kurd (Aeolian)</option>
+          <option value="d-amara">D Amara (Celtic)</option>
+          <option value="fs-pygmy">F# Pygmy (Dorian)</option>
+          <option value="cs-hijaz">C# Hijaz (Phrygian)</option>
+          <option value="e-sabye">E Sabye (Major)</option>
+        </select>
+        <select id="sel-timbre" class="sel" aria-label="Timbre Engine">
+          <option value="bank:yishama-stainless">Stainless · Studio</option>
+          <option value="bank:yishama-ember">Ember · Studio</option>
+          <option value="bank:yishama-nitrided">Nitrided · Studio</option>
+          <option value="dsp:stainless">Stainless · Live DSP</option>
+          <option value="dsp:ember">Ember · Live DSP</option>
+          <option value="dsp:nitrided">Nitrided · Live DSP</option>
+          <option value="dsp:ceramic">Ceramic · Live DSP</option>
+        </select>
+        <span id="timbre-badge" class="micro-tag">DSP</span>
+      </div>
+
+      <div class="live-telemetry">
+        <span class="kv">CHORD <span id="tel-chord" class="val strong">@i</span></span>
+        <span class="kv">FLOW <span id="tel-flow" class="val">76 BPM · arch</span></span>
+        <span class="kv">ARCH <span id="tel-phase" class="val">00%</span></span>
+      </div>
+
+      <div class="bar-group">
+        <button id="btn-gemini" class="btn pill-btn" type="button">
+          <span>Gemini / PanLang</span>
+          <span id="gem-top-status" style="color:var(--ink-3);font-size:10px;">LOCAL</span>
+        </button>
+        <button id="btn-notes" class="btn pill-btn" type="button">Notes</button>
+      </div>
+    </header>
+
+    <!-- =================================================================
+         HERO LIVING ELASTIC SPATIAL SCORE (UNIFIED SCORE = INSTRUMENT)
+         ================================================================= -->
+    <main id="stage-wrap">
+      <canvas id="score-canvas"></canvas>
+      <svg id="score-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+
+      <div id="stage-hint">
+        <div class="hint-kicker">LIVING ELASTIC SCORE · DIRECT MANIPULATION</div>
+        <div class="hint-title">The score is both the instrument and the steering console.</div>
+        <div class="hint-list">
+          <div><span>CLICK / GLIDE ANY LANE</span> or press <span>1–9</span> (<span>A–L</span>) — play live notes &amp; entrain the engine</div>
+          <div><span>DRAG HARM / TIME KNOBS</span> (or pull right from Playhead) — open Radial Protractor Steering Fan</div>
+          <div><span>DRAG PLAYHEAD BACKWARD</span> — rewind time with mechanical detents &amp; branch a new fork</div>
+          <div><span>CLICK OR SWEEP PAST NOTES</span> — lock continuous attention onto a note or motif span</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- =================================================================
+         BOTTOM SPACESHIP ATTENTION RULER & VECTOR TELEMETRY RAIL
+         ================================================================= -->
+    <footer id="bottom-rail">
+      <div class="rail-left">
+        <div class="rail-kicker">DIRECT AGENCY · INSTRUMENT SURFACE</div>
+        <div class="keys-strip">
+          <span><kbd>1-9</kbd>tones</span>
+          <span><kbd>⇧</kbd>2f₀ harm</span>
+          <span><kbd>T</kbd>tak</span>
+          <span><kbd>B</kbd>gu</span>
+          <span><kbd>SPACE</kbd>flow</span>
+          <span><kbd>,</kbd>breath</span>
+        </div>
+      </div>
+
+      <div id="attn-meters" aria-label="Continuous Attention Horizon Strength"></div>
+
+      <div class="rail-right">
+        <div id="chip-vec-a" class="vec-chip" title="Double-click or click × to release Harmonic Vector">
+          <span id="chip-vec-a-text">HARM · NEUTRAL</span>
+          <span id="chip-vec-a-x" class="chip-x">×</span>
+        </div>
+        <div id="chip-vec-b" class="vec-chip" title="Double-click or click × to release Time/Texture Vector">
+          <span id="chip-vec-b-text">TIME · NEUTRAL</span>
+          <span id="chip-vec-b-x" class="chip-x">×</span>
+        </div>
+        <div id="chip-lock" class="vec-chip" title="Click × to release Locked Motif">
+          <span id="chip-lock-text">LOCK · OFF</span>
+          <span id="chip-lock-x" class="chip-x">×</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ===================================================================
+       SLIDE-OVER DRAWER 1: GEMINI DECISIONS / PANLANG CONSOLE
+       =================================================================== -->
+  <aside id="drawer-gemini" class="drawer" aria-label="Gemini PanLang Steering">
+    <div class="drawer-head">
+      <span class="drawer-title">Gemini Decisions · PanLang</span>
+      <button id="close-gemini" class="drawer-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="d-section">
+        <div class="d-label">
+          <span>API KEY (MEMORY-ONLY)</span>
+          <span id="gem-status-badge" class="badge">LOCAL ENGINE</span>
+        </div>
+        <div class="d-row">
+          <input
+            id="gem-api-key"
+            class="d-input"
+            type="password"
+            placeholder="AIza… (never stored)"
+            autocomplete="new-password"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+          />
+          <button id="btn-gem-clear" class="btn" type="button">Clear</button>
+        </div>
+        <div class="d-row">
+          <select id="sel-gem-cadence" class="sel" style="flex:1;">
+            <option value="phrase">Auto: Phrase Boundary</option>
+            <option value="6">Auto: Every 6 Notes</option>
+            <option value="manual">Manual Query Only</option>
+          </select>
+          <button id="btn-gem-query" class="btn" type="button">Query Now</button>
+        </div>
+        <div class="d-note">
+          Calls <strong>POST v1beta/decisions</strong> with <code>gemini-decision-1</code> and <code>AbortController</code> cancellation on timeline rewind/fork. Without a key, continuous local attention runs seamlessly.
+        </div>
+      </div>
+
+      <div class="d-section">
+        <div class="d-label">
+          <span>LIVE PANLANG WIRE</span>
+          <span id="gem-token-meta" class="badge">~0 tok</span>
+        </div>
+        <div id="panlang-preview" class="code-box">DKurd @i ~76 | 0:</div>
+      </div>
+
+      <div class="d-section">
+        <div class="d-label">
+          <span>3-QUESTION DECISION OUTPUT</span>
+          <span id="gem-lat-meta" class="badge">—</span>
+        </div>
+        <div style="font-size:10px;color:var(--ink-3);letter-spacing:0.06em;">NEXT MOVE</div>
+        <div id="prob-move" class="prob-list"></div>
+        <div style="font-size:10px;color:var(--ink-3);letter-spacing:0.06em;margin-top:6px;">HARMONIC COLOR</div>
+        <div id="prob-harm" class="prob-list"></div>
+        <div style="font-size:10px;color:var(--ink-3);letter-spacing:0.06em;margin-top:6px;">FOCAL DEGREE (TOP 4)</div>
+        <div id="prob-focal" class="prob-list"></div>
+      </div>
+
+      <div class="d-section">
+        <div class="d-label">
+          <span>RAW DECISIONS JSON</span>
+          <span id="gem-call-count" class="badge">#0</span>
+        </div>
+        <pre id="gem-raw-json" class="code-box dim">No live Gemini Decisions response yet.
+Enter an API key above and press Play or Query Now.</pre>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===================================================================
+       SLIDE-OVER DRAWER 2: RESEARCH & ARCHITECTURE NOTES
+       =================================================================== -->
+  <aside id="drawer-notes" class="drawer" aria-label="Architecture and Research Notes">
+    <div class="drawer-head">
+      <span class="drawer-title">Architecture &amp; Research Notes</span>
+      <button id="close-notes" class="drawer-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="d-section notes-block">
+        <h3>1. Spaceship Visual Discipline</h3>
+        <p>
+          Adapted from <code>chuanqisun/spaceship</code>: pure obsidian <code>#000000</code>, a 5-step white ink hierarchy, monospace tabular numerals, and a single electric signal color (<code>#ff5a1f</code>) reserved exclusively for what is actively changing right now — cooling smoothly over ~450ms back into crisp monochrome ink.
+        </p>
+      </div>
+
+      <div class="d-section notes-block">
+        <h3>2. Unified Score = Instrument Surface</h3>
+        <p>
+          Replaces the literal circular handpan drawing with an <strong>Elastic Spatial Score</strong> where Y encodes the 9 scale degrees (Ding <code>^1</code> bottom to <code>^5'</code> top, plus rim <code>Tak ×</code> and cavity <code>Gu ◇</code>) and X encodes <strong>real physical time</strong>. Clicking or gliding across lanes strikes with <code>&lt;5ms</code> latency, injects your note into the living score, and entrains the engine's tempo and harmony (Comparator Agency).
+        </p>
+      </div>
+
+      <div class="d-section notes-block">
+        <h3>3. Organic Tempo (Todd + KTH Rubato)</h3>
+        <p>
+          Eliminates rigid eighth-note metronome grids. Every inter-onset interval is synthesized continuously from <strong>Todd phrase-arch kinematics</strong> (accelerando toward phrase apex, expressive ritardando into cadence), <strong>KTH breath caesuras</strong> (<code>luftpause</code> +25%–75% after wide leaps or cadences), <strong>agogic root lingering</strong>, and tight <strong>40–65ms grace cascades</strong> that visibly cluster on the score.
+        </p>
+      </div>
+
+      <div class="d-section notes-block">
+        <h3>4. Continuous Attention &amp; Vector Steering</h3>
+        <p>
+          Replaces discrete Micro/Short/Mid/Long sliders with <strong>continuous SVG Bezier attention arcs</strong> from influential past notes directly to the playhead — arc span naturally encodes temporal distance while stroke weight encodes attention pull. Click any past note or drag-sweep 2–6 notes to <strong>Lock Attention</strong> onto that motif.
+        </p>
+        <p>
+          Drag the tethered <code>HARM</code> / <code>TIME</code> knobs (or pull right from the Playhead) to open the <strong>Radial Graduated Protractor Fan HUD</strong> with physical ruler ticks drawn along the tether line and dry stereo-panned mechanical detent micro-clicks.
+        </p>
+      </div>
+
+      <div class="d-section notes-block">
+        <h3>5. PanLang &amp; Fast Gemini Decisions</h3>
+        <p>
+          Compresses live musical memory into a hyper-dense symbolic grammar (e.g., <code>DKurd @i ~76 | 0: 4-6 4: , | @bVI *2: 6-8 t | LOCK: 4-6-8</code>) paired with a tight 3-question suite (<code>next_move</code>, <code>harmonic_color</code>, <code>focal_deg</code>) via <code>v1beta/decisions</code> and instant <code>AbortController</code> cancellation whenever you scrub backward to fork history.
+        </p>
+      </div>
+
+      <div class="d-section notes-block">
+        <h3>Controls &amp; Gestures</h3>
+        <table class="notes-table">
+          <tr><td>Click / Glide</td><td>Strike lanes live (&lt;5ms); Shift/Right-click for <code>2f₀</code> shimmer</td></tr>
+          <tr><td>Keys 1–9 / A–L</td><td>Direct tone strike; <code>T</code> Tak rim, <code>B</code> Gu bass, <code>,</code> breath</td></tr>
+          <tr><td>Drag Playhead ←</td><td>Rewind time with ratchet clicks, prune future &amp; fork</td></tr>
+          <tr><td>Drag HARM/TIME</td><td>Open Radial Protractor Fan; drag inside center or dbl-click to unlatch</td></tr>
+          <tr><td>Click / Sweep Past</td><td>Lock attention to a note or 2–6 note motif; click again to release</td></tr>
+        </table>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // =========================================================================
+    // 1. CONSTANTS, SCALES & PHYSICAL STEREO GEOMETRY
+    // =========================================================================
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const SIGNAL_HEX = '#ff5a1f';
+    const SIGNAL_DECAY_MS = 450;
+
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (Aeolian)',
+        shortTag: 'DKurd',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      },
+      'd-amara': {
+        name: 'D Amara (Celtic Minor)',
+        shortTag: 'DAmara',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        chords: {
+          i:    [0, 1, 3, 5, 7],
+          III:  [1, 2, 5, 7, 8],
+          iv:   [0, 3, 6, 8],
+          v:    [1, 2, 4, 7],
+          bVI:  [2, 5, 7],
+          bVII: [2, 4, 6, 8]
+        }
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (Dorian Pent.)',
+        shortTag: 'FsPyg',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        chords: {
+          i:    [0, 2, 3, 5, 7],
+          III:  [2, 3, 4, 7, 8],
+          iv:   [0, 1, 5, 6],
+          v:    [1, 3, 4, 6, 8],
+          bVI:  [2, 4, 5, 7],
+          bVII: [1, 4, 6, 8]
+        }
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (Phrygian Dom.)',
+        shortTag: 'CsHij',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        chords: {
+          i:    [0, 1, 4, 6, 7],
+          III:  [1, 3, 6, 7],
+          iv:   [0, 2, 4, 8],
+          v:    [1, 3, 5, 7],
+          bVI:  [2, 4, 6, 8],
+          bVII: [3, 5, 7]
+        }
+      },
+      'e-sabye': {
+        name: 'E Sabye (Major / Ionian)',
+        shortTag: 'ESab',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      }
+    };
+
+    const LANE_PAN  = [0.00, 0.22, -0.22, 0.34, -0.34, 0.32, -0.32, 0.18, -0.18];
+    const LANE_HAND = ['R',  'R',  'L',   'R',  'L',   'R',  'L',   'R',  'L'];
+
+    const HARMONY_NEXT = {
+      i:    [{ v: 'i', w: 0.26 }, { v: 'bVI', w: 0.28 }, { v: 'bVII', w: 0.22 }, { v: 'III', w: 0.14 }, { v: 'iv', w: 0.10 }],
+      III:  [{ v: 'i', w: 0.26 }, { v: 'bVII', w: 0.26 }, { v: 'bVI', w: 0.24 }, { v: 'iv', w: 0.14 }, { v: 'v', w: 0.10 }],
+      iv:   [{ v: 'i', w: 0.36 }, { v: 'bVII', w: 0.24 }, { v: 'v', w: 0.20 }, { v: 'bVI', w: 0.20 }],
+      v:    [{ v: 'i', w: 0.48 }, { v: 'bVI', w: 0.24 }, { v: 'bVII', w: 0.16 }, { v: 'III', w: 0.12 }],
+      bVI:  [{ v: 'bVII', w: 0.38 }, { v: 'i', w: 0.28 }, { v: 'III', w: 0.20 }, { v: 'iv', w: 0.14 }],
+      bVII: [{ v: 'i', w: 0.44 }, { v: 'bVI', w: 0.22 }, { v: 'III', w: 0.20 }, { v: 'v', w: 0.14 }]
+    };
+
+    // Spaceship Radial Steering Sectors (bottom +deg -> top -deg matches Y-axis pitch/energy polarity)
+    const VEC_A_SECTORS = [
+      { id: 'ground',  label: 'Ding Ground (i)',     short: 'GROUND i',    tag: 'ground',  angleDeg:  65, chord: 'i',    contour: -0.92, shimmer: 0.00, cadence: 0.90 },
+      { id: 'deep',    label: 'Deep (iv)',           short: 'DEEP iv',     tag: 'deep',    angleDeg:  39, chord: 'iv',   contour: -0.35, shimmer: 0.08, cadence: 0.35 },
+      { id: 'warm',    label: 'Warm (III)',          short: 'WARM III',    tag: 'warm',    angleDeg:  13, chord: 'III',  contour:  0.15, shimmer: 0.22, cadence: 0.20 },
+      { id: 'lift',    label: 'Poignant Lift (bVI)', short: 'LIFT bVI',    tag: 'lift',    angleDeg: -13, chord: 'bVI',  contour:  0.46, shimmer: 0.30, cadence: 0.12 },
+      { id: 'drive',   label: 'Tension Drive (bVII)',short: 'DRIVE bVII',  tag: 'drive',   angleDeg: -39, chord: 'bVII', contour:  0.65, shimmer: 0.36, cadence: 0.10 },
+      { id: 'shimmer', label: 'High Shimmer (2f₀)',  short: 'SHIMMER 2f₀', tag: 'shimmer', angleDeg: -65, chord: 'III',  contour:  0.95, shimmer: 0.96, cadence: 0.05 }
+    ];
+
+    const VEC_B_SECTORS = [
+      { id: 'still',   label: 'Still Breath',    short: 'STILL',    tag: 'still',   angleDeg:  60, bpmOffset: -19, rubato: 0.72, caesura: 0.92, perc: 0.03, cascade: 0.04, dyad: 0.14 },
+      { id: 'rubato',  label: 'Rubato Arch',     short: 'RUBATO',   tag: 'rubato',  angleDeg:  30, bpmOffset:  -6, rubato: 1.00, caesura: 0.56, perc: 0.10, cascade: 0.18, dyad: 0.24 },
+      { id: 'groove',  label: 'Pocket Groove',   short: 'POCKET',   tag: 'groove',  angleDeg:   0, bpmOffset:  +9, rubato: 0.22, caesura: 0.16, perc: 0.34, cascade: 0.15, dyad: 0.16 },
+      { id: 'tak',     label: 'Tak Syncopation', short: 'TAK SYNC', tag: 'tak',     angleDeg: -30, bpmOffset: +15, rubato: 0.16, caesura: 0.12, perc: 0.86, cascade: 0.22, dyad: 0.10 },
+      { id: 'cascade', label: 'Grace Cascades',  short: 'CASCADES', tag: 'cascade', angleDeg: -60, bpmOffset: +17, rubato: 0.45, caesura: 0.38, perc: 0.24, cascade: 0.94, dyad: 0.42 }
+    ];
+
+    const HORIZON_BUCKETS = [
+      { id: 'immed',  label: 'IMMED',  sub: '0–1.5s',  lo: 0,     hi: 1500 },
+      { id: 'cell',   label: 'CELL',   sub: '1.5–4s',  lo: 1500,  hi: 4000 },
+      { id: 'phrase', label: 'PHRASE', sub: '4–8s',    lo: 4000,  hi: 8000 },
+      { id: 'clause', label: 'CLAUSE', sub: '8–14s',   lo: 8000,  hi: 14000 },
+      { id: 'arc',    label: 'ARC',    sub: '14–28s',  lo: 14000, hi: 28000 },
+      { id: 'lock',   label: 'LOCK',   sub: 'MOTIF',   lo: -1,    hi: -1 }
+    ];
+
+    // =========================================================================
+    // 2. YISHAMA COUPLED-BLOOM AUDIO ENGINE + STUDIO SOUNDBANKS + DETENT AUDIO
+    // =========================================================================
+    const PROFILES = {
+      stainless: { tau1: 0.56, tau2: 0.78, tau3: 1.15, f1Atk: 0.028, f2Bloom: 0.135, f3Bloom: 0.185, oct: 0.48, fifth: 0.30, p4: 0.11, beat: 0.85, skin: 0.14, body: 0.22, brightness: 4400 },
+      ember:     { tau1: 0.48, tau2: 0.74, tau3: 1.25, f1Atk: 0.020, f2Bloom: 0.105, f3Bloom: 0.155, oct: 0.56, fifth: 0.36, p4: 0.16, beat: 0.65, skin: 0.16, body: 0.16, brightness: 5800 },
+      nitrided:  { tau1: 0.36, tau2: 0.44, tau3: 0.55, f1Atk: 0.012, f2Bloom: 0.060, f3Bloom: 0.085, oct: 0.34, fifth: 0.18, p4: 0.06, beat: 0.35, skin: 0.24, body: 0.28, brightness: 3100 },
+      ceramic:   { tau1: 0.30, tau2: 0.32, tau3: 0.35, f1Atk: 0.014, f2Bloom: 0.050, f3Bloom: 0.060, oct: 0.20, fifth: 0.09, p4: 0.03, beat: 0.20, skin: 0.28, body: 0.38, brightness: 2000 }
+    };
+
+    const ENHARMONIC = { 'Db': 'C#', 'D#': 'Eb', 'Gb': 'F#', 'Ab': 'G#', 'A#': 'Bb' };
+    const studioBanks = new Map();
+    const bankLoading = new Map();
+
+    let audioCtx = null, dryGain = null, reverbSend = null, uiBus = null, noiseBuffer = null;
+    let activeScaleKey = 'd-kurd';
+    let activeBankId = 'yishama-stainless';
+    let activeProfileKey = 'stainless';
+
+    function canonicalNote(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      return m ? (ENHARMONIC[m[1]] || m[1]) + m[2] : note;
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createWarmRoomIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const t = i / len;
+          const env = Math.pow(1 - t, decay) * (i < 900 ? 0.65 : 1.0);
+          const w = (Math.random() * 2 - 1) * env;
+          lp = lp * 0.78 + w * 0.22;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    function updateTimbreBadge(text, cls) {
+      const el = document.getElementById('timbre-badge');
+      el.textContent = text;
+      el.className = 'micro-tag' + (cls ? ' ' + cls : '');
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11;
+        comp.ratio.value = 3.5;
+        comp.knee.value = 18;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.82;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createWarmRoomIR(audioCtx, 2.2, 2.9);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.29;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        // Dedicated ultra-clean dry UI detent bus (bypasses room reverb)
+        uiBus = audioCtx.createGain();
+        uiBus.gain.value = 0.20;
+        uiBus.connect(comp);
+
+        noiseBuffer = createNoise(audioCtx, 0.35);
+
+        if (activeBankId) ensureStudioBank(activeBankId);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    async function ensureStudioBank(bankId) {
+      if (!bankId) {
+        updateTimbreBadge('DSP', '');
+        return null;
+      }
+      if (studioBanks.has(bankId)) {
+        if (activeBankId === bankId) updateTimbreBadge('STUDIO', 'ready');
+        return studioBanks.get(bankId);
+      }
+      if (bankLoading.has(bankId)) return bankLoading.get(bankId);
+
+      updateTimbreBadge('LOAD…', 'hot');
+      const promise = (async () => {
+        try {
+          if (!window.__HANDPAN_BANKS__ || !window.__HANDPAN_BANKS__[bankId]) {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = `./soundbanks/${bankId}.bank.js`;
+              s.onload = resolve;
+              s.onerror = () => reject(new Error('Bank unavailable'));
+              document.head.appendChild(s);
+            });
+          }
+          const raw = window.__HANDPAN_BANKS__ && window.__HANDPAN_BANKS__[bankId];
+          if (!raw || !raw.samples || !audioCtx) {
+            if (activeBankId === bankId) updateTimbreBadge('DSP', '');
+            return null;
+          }
+          const map = new Map();
+          const entries = Object.entries(raw.samples);
+          for (let i = 0; i < entries.length; i += 8) {
+            const sl = entries.slice(i, i + 8);
+            const bufs = await Promise.all(sl.map(([, b64]) => audioCtx.decodeAudioData(b64ToBuf(b64))));
+            bufs.forEach((ab, k) => map.set(sl[k][0], ab));
+          }
+          studioBanks.set(bankId, map);
+          if (activeBankId === bankId) updateTimbreBadge('STUDIO', 'ready');
+          return map;
+        } catch (_) {
+          if (activeBankId === bankId) updateTimbreBadge('DSP', '');
+          return null;
+        } finally {
+          bankLoading.delete(bankId);
+        }
+      })();
+      bankLoading.set(bankId, promise);
+      return promise;
+    }
+
+    function playStudioBankBuffer(key, when, gainVal, panVal = 0) {
+      if (!activeBankId) return false;
+      const map = studioBanks.get(activeBankId);
+      const ab = map && map.get(key);
+      if (!ab) return false;
+      const src = audioCtx.createBufferSource();
+      src.buffer = ab;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(gainVal, when);
+      if (panVal !== 0 && audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = panVal * 0.72;
+        src.connect(g); g.connect(sp); sp.connect(dryGain); sp.connect(reverbSend);
+      } else {
+        src.connect(g); g.connect(dryGain); g.connect(reverbSend);
+      }
+      src.start(when);
+      return true;
+    }
+
+    function scheduleTone(idx, when, opts = {}) {
+      ensureAudio();
+      const sc = SCALES[activeScaleKey];
+      const note = sc.notes[idx];
+      if (!note) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      const vel = clamp(opts.vel ?? 0.82, 0.08, 1.0);
+      const type = opts.type ?? 'N';
+      const pan = LANE_PAN[idx] ?? 0;
+
+      if (activeBankId && type !== 'M') {
+        const cNote = canonicalNote(note);
+        const key = type === 'H' ? `${cNote}|H|v0|r0` : `${cNote}|N|v${vel < 0.62 ? 0 : 1}|r0`;
+        const bakedV = type === 'H' ? 0.86 : (vel < 0.62 ? 0.42 : 0.94);
+        const gScale = clamp((vel / bakedV) * (type === 'g' ? 0.58 : 0.92), 0.14, 1.16);
+        if (playStudioBankBuffer(key, t0, gScale, pan)) return;
+      }
+
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+
+      let t1 = p.tau1 * pitchScale * (isDing ? 1.15 : 1.0);
+      let t2 = p.tau2 * pitchScale * (isDing ? 1.12 : 1.0);
+      let t3 = p.tau3 * pitchScale * (isDing ? 1.15 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { t1 *= 0.45; t2 *= 0.38; t3 *= 0.30; octMul = 0.42; fifthMul = 0.25; }
+      else if (type === 'H') { f0Mul = 0.07; octMul = 1.85; fifthMul = 1.0; t2 *= 1.15; }
+      else if (type === 'M') { t1 *= 0.22; t2 *= 0.18; t3 *= 0.15; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.56, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(10000, p.brightness * (0.65 + 0.50 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(850, cut * 0.52), t0 + t3 * 3.5);
+
+      if (audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = pan;
+        vg.connect(lp); lp.connect(sp);
+        sp.connect(dryGain); sp.connect(reverbSend);
+      } else {
+        vg.connect(lp); lp.connect(dryGain); lp.connect(reverbSend);
+      }
+
+      function addBloomMode(hz, amp, riseSec, tauSec) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.003 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.05);
+
+        const totalDur = Math.min(5.2, riseSec + tauSec * 5.2);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + riseSec);
+        g.gain.setTargetAtTime(0.0001, t0 + riseSec, tauSec);
+
+        osc.connect(g); g.connect(vg);
+        osc.start(t0);
+        osc.stop(t0 + totalDur);
+      }
+
+      addBloomMode(freq, 0.60 * f0Mul, p.f1Atk, t1);
+      if (p.beat > 0.05 && f0Mul > 0.2) {
+        addBloomMode(freq + p.beat, 0.22 * f0Mul, p.f1Atk * 1.35, t1 * 0.96);
+      }
+      addBloomMode(freq * 2.001, p.oct * octMul * (0.55 + 0.55 * vel), p.f2Bloom, t2);
+      addBloomMode(freq * 2.999, p.fifth * fifthMul * (0.45 + 0.65 * vel), p.f3Bloom, t3);
+      addBloomMode(freq * 4.001, p.p4 * vel * (isDing ? 1.4 : 0.7), p.f3Bloom * 1.15, t2 * 0.75);
+
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = isDing ? 420 : 680;
+      bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.skin * vel * (type === 'g' ? 1.3 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(t0); noise.stop(t0 + 0.025);
+
+      if (isDing || idx <= 2) {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(isDing ? 98 : 92, t0);
+        bo.frequency.exponentialRampToValueAtTime(78, t0 + 0.08);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * (isDing ? 1.0 : 0.35), t0 + 0.008);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.24 : 0.12));
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.28);
+      }
+    }
+
+    function scheduleTak(when, vel = 0.78) {
+      ensureAudio();
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|TAK', t0, vel * 0.82, 0.16)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.54, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2650; bp.Q.value = 1.3;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.85, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.036);
+
+      [880, 1620].forEach((hz, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.87, t0 + 0.032);
+        g.gain.setValueAtTime(0.28 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.038);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.042);
+      });
+    }
+
+    function scheduleGu(when, vel = 0.84) {
+      ensureAudio();
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|GU', t0, vel * 0.88, -0.06)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.70, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(118, t0);
+      o.frequency.exponentialRampToValueAtTime(78, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.92, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // --- Spaceship Tactile Mechanical Detent Audio (subtle, crisp, stereo-panned) ---
+    function routeUi(node, panVal = 0) {
+      if (audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = clamp(panVal, -0.85, 0.85);
+        node.connect(sp);
+        sp.connect(uiBus);
+      } else {
+        node.connect(uiBus);
+      }
+    }
+
+    function playDetentTick(panVal = 0.25, intensity = 0.5) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2600 + intensity * 1400;
+      bp.Q.value = 3.2;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.32 + intensity * 0.24, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.007);
+      n.connect(bp); bp.connect(g); routeUi(g, panVal);
+      n.start(t0); n.stop(t0 + 0.01);
+    }
+
+    function playSectorDetent(panVal = 0.3, sectorIdx = 0) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      playDetentTick(panVal, 0.85);
+      // Faint scale-tuned upper pentatonic pip
+      const sc = SCALES[activeScaleKey];
+      const degIdx = clamp(sectorIdx + 2, 1, 8);
+      const baseHz = noteToFreq(sc.notes[degIdx]) * 2;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(baseHz, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.16, t0 + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.042);
+      o.connect(g); routeUi(g, panVal);
+      o.start(t0); o.stop(t0 + 0.048);
+    }
+
+    function playUnlatchClick(panVal = 0.15) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(640, t0);
+      o.frequency.exponentialRampToValueAtTime(220, t0 + 0.022);
+      g.gain.setValueAtTime(0.34, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.026);
+      o.connect(g); routeUi(g, panVal);
+      o.start(t0); o.stop(t0 + 0.032);
+    }
+
+    function playLockLatch(panVal = -0.2) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(520, t0);
+      o.frequency.exponentialRampToValueAtTime(1040, t0 + 0.028);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.24, t0 + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.055);
+      o.connect(g); routeUi(g, panVal);
+      o.start(t0); o.stop(t0 + 0.062);
+    }
+
+    function playScrubRatchet(panVal = -0.3, laneIdx = 4) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      // Crisp film-sprocket tick + whisper of crossed pitch
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1900 + laneIdx * 180;
+      bp.Q.value = 4.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.42, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.009);
+      n.connect(bp); bp.connect(ng); routeUi(ng, panVal);
+      n.start(t0); n.stop(t0 + 0.012);
+
+      const sc = SCALES[activeScaleKey];
+      const hz = noteToFreq(sc.notes[clamp(laneIdx ?? 4, 0, 8)]);
+      const o = audioCtx.createOscillator();
+      const og = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(hz * 2, t0);
+      og.gain.setValueAtTime(0.11, t0);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.022);
+      o.connect(og); routeUi(og, panVal);
+      o.start(t0); o.stop(t0 + 0.026);
+    }
+
+    // =========================================================================
+    // 3. CORE PERFORMANCE STATE, STEERING VECTORS & CONTINUOUS ATTENTION
+    // =========================================================================
+    let nextNoteId = 1;
+
+    const state = {
+      playing: false,
+      scoreMs: 0,
+      lastFramePerf: performance.now(),
+      nextGenScoreMs: 120,
+      notes: [],          // { id, tMs, lane, lane2?, kind:'N'|'harm'|'dyad'|'ghost'|'tak'|'gu', vel, hand, source:'auto'|'user', chord, ioiMs, breathAfter, createdPerf }
+      forkMarks: [],      // { tMs, createdPerf }
+      chord: 'i',
+      phraseStep: 0,
+      phraseLen: 9,
+      phraseCount: 0,
+      lastPitch: 0,
+      lastHand: 'R',
+      baseBpm: 76,
+      liveBpm: 76,
+      lastUserStrikePerf: 0,
+      lastUserScoreMs: -9999,
+      userIoiEma: 320,
+      lockedIds: [],      // ordered IDs of locked motif notes
+      lockCursor: 0,
+      lockFlashPerf: 0,
+      activeArcs: [],     // { noteId, weight, flashPerf, isLock }
+      lastProbs: Array(9).fill(1 / 9),
+      futurePreview: [],  // predicted next 2 ghost nodes
+      cascadeQueue: [],   // pending rapid 40-62ms grace notes
+      pendingBreathMs: 0,
+      notesSinceGemini: 0,
+      laneFlashPerf: Array(9).fill(0),
+      takFlashPerf: 0,
+      guFlashPerf: 0,
+      playheadFlashPerf: 0,
+      hoverLane: -1,
+      hoverNoteId: null
+    };
+
+    // Steering Vectors (Spaceship Radial Protractor HUD)
+    const vecA = {
+      key: 'A',
+      name: 'HARM',
+      strength: 0,          // 0..1
+      angleDeg: -13,        // -65 (top Shimmer) .. +65 (bottom Ground)
+      sector: 3,
+      hotPerf: 0,
+      lastRulerStep: -1
+    };
+
+    const vecB = {
+      key: 'B',
+      name: 'TIME',
+      strength: 0,          // 0..1
+      angleDeg: 30,         // -60 (top Cascades) .. +60 (bottom Still)
+      sector: 1,
+      hotPerf: 0,
+      lastRulerStep: -1
+    };
+
+    // Gemini Decisions API State (memory-only API key!)
+    const gemini = {
+      apiKey: '',
+      cadence: 'phrase',
+      inFlight: false,
+      abortCtrl: null,
+      callCount: 0,
+      lastLatencyMs: null,
+      lastInputTokens: null,
+      lastPulsePerf: 0,
+      moveProbs: null,      // { echo, lift, cascade, breathe, resolve }
+      harmProbs: null,      // { i, III, iv, bVI, bVII, v }
+      focalBias: Array(9).fill(0),
+      focalProbs: null,
+      rawJson: null
+    };
+
+    // Stepped Attention Meters State (6 buckets x 10 segments with orange gain/loss heat)
+    const meterState = HORIZON_BUCKETS.map(b => ({
+      ...b,
+      value: 0,
+      steps: 0,
+      cells: Array.from({ length: 10 }, () => ({ changedPerf: 0, dir: 0 }))
+    }));
+
+    // =========================================================================
+    // 4. MATH, CONTINUOUS ATTENTION KERNEL & ORGANIC TEMPO ENGINE
+    // =========================================================================
+    function softmax(logits, temp = 0.85) {
+      const tau = Math.max(0.08, temp);
+      let mx = -Infinity;
+      for (const x of logits) if (x > mx) mx = x;
+      let sum = 0;
+      const exps = logits.map(x => {
+        const e = Math.exp((x - mx) / tau);
+        sum += e;
+        return e;
+      });
+      return exps.map(e => e / (sum || 1));
+    }
+
+    function sampleProbs(probs) {
+      let r = Math.random();
+      for (let i = 0; i < probs.length; i++) {
+        r -= probs[i];
+        if (r <= 0) return i;
+      }
+      return probs.length - 1;
+    }
+
+    function sampleWeighted(items) {
+      const tot = items.reduce((s, x) => s + Math.max(0, x.w), 0);
+      let r = Math.random() * (tot || 1);
+      for (const it of items) {
+        r -= Math.max(0, it.w);
+        if (r <= 0) return it.v;
+      }
+      return items[items.length - 1].v;
+    }
+
+    // Smooth angular interpolation across a sector array
+    function interpSectors(sectors, angleDeg) {
+      // Sectors are ordered from bottom (+deg) to top (-deg)
+      const hi = sectors[0].angleDeg;
+      const lo = sectors[sectors.length - 1].angleDeg;
+      const a = clamp(angleDeg, lo, hi);
+      for (let i = 0; i < sectors.length - 1; i++) {
+        const s0 = sectors[i], s1 = sectors[i + 1];
+        if (a <= s0.angleDeg && a >= s1.angleDeg) {
+          const span = s0.angleDeg - s1.angleDeg || 1;
+          const t = (s0.angleDeg - a) / span;
+          return { s0, s1, t };
+        }
+      }
+      const last = sectors[sectors.length - 1];
+      return { s0: last, s1: last, t: 0 };
+    }
+
+    function nearestSectorIdx(sectors, angleDeg) {
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < sectors.length; i++) {
+        const d = Math.abs(sectors[i].angleDeg - angleDeg);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return best;
+    }
+
+    function getVecAParams() {
+      const s = vecA.strength;
+      if (s <= 0.02) {
+        return { strength: 0, contour: 0, shimmer: 0.14, cadence: 0.25, chordWeights: null };
+      }
+      const { s0, s1, t } = interpSectors(VEC_A_SECTORS, vecA.angleDeg);
+      const chordWeights = {};
+      chordWeights[s0.chord] = (chordWeights[s0.chord] || 0) + (1 - t);
+      chordWeights[s1.chord] = (chordWeights[s1.chord] || 0) + t;
+      return {
+        strength: s,
+        contour: lerp(s0.contour, s1.contour, t) * s,
+        shimmer: lerp(0.14, lerp(s0.shimmer, s1.shimmer, t), s),
+        cadence: lerp(0.25, lerp(s0.cadence, s1.cadence, t), s),
+        chordWeights
+      };
+    }
+
+    function getVecBParams() {
+      const s = vecB.strength;
+      // Default organic neutral: gentle expressive rubato handpan flow
+      const def = { bpmOffset: 0, rubato: 0.62, caesura: 0.42, perc: 0.18, cascade: 0.22, dyad: 0.18 };
+      if (s <= 0.02) return def;
+      const { s0, s1, t } = interpSectors(VEC_B_SECTORS, vecB.angleDeg);
+      return {
+        bpmOffset: lerp(def.bpmOffset, lerp(s0.bpmOffset, s1.bpmOffset, t), s),
+        rubato:    lerp(def.rubato,    lerp(s0.rubato,    s1.rubato,    t), s),
+        caesura:   lerp(def.caesura,   lerp(s0.caesura,   s1.caesura,   t), s),
+        perc:      lerp(def.perc,      lerp(s0.perc,      s1.perc,      t), s),
+        cascade:   lerp(def.cascade,   lerp(s0.cascade,   s1.cascade,   t), s),
+        dyad:      lerp(def.dyad,      lerp(s0.dyad,      s1.dyad,      t), s)
+      };
+    }
+
+    function computeAttentionAndProbs(refTimeMs) {
+      const sc = SCALES[activeScaleKey];
+      const va = getVecAParams();
+      const chordPool = sc.chords[state.chord] || [0, 4, 6];
+      const lockedSet = new Set(state.lockedIds);
+
+      // Candidate pitched past notes in 28s continuous horizon
+      const pitched = [];
+      for (let i = state.notes.length - 1; i >= 0; i--) {
+        const n = state.notes[i];
+        if (n.lane == null) continue;
+        const dt = refTimeMs - n.tMs;
+        if (dt < 0) continue;
+        if (dt > 28000 && !lockedSet.has(n.id)) break;
+        pitched.push({ note: n, dt, idxInAll: i });
+        if (pitched.length >= 44) break;
+      }
+
+      // Compute continuous attention weight w_i for each past note
+      const rawWeights = [];
+      let weightSum = 0;
+      for (let k = 0; k < pitched.length; k++) {
+        const { note, dt } = pitched[k];
+        // Continuous multi-band power-law temporal kernel (no discrete sliders!)
+        const microK  = Math.exp(-dt / 1200) * 1.15;
+        const shortK  = Math.exp(-Math.pow((dt - 3000) / 2100, 2)) * 0.72;
+        const phraseK = Math.exp(-Math.pow((dt - 7200) / 3600, 2)) * 0.56;
+        const longK   = Math.exp(-dt / 19000) * 0.28;
+
+        let w = microK + shortK + phraseK + longK;
+        // Harmonic resonance with active chord
+        if (chordPool.includes(note.lane)) w *= 1.32;
+        // Musician direct-play agency boost
+        if (note.source === 'user') w *= 1.65;
+        // Agogic / accented structural weight
+        if (note.vel > 0.78 || note.lane === 0) w *= 1.18;
+        // Attention Lock strong continuous tether
+        const isLock = lockedSet.has(note.id);
+        if (isLock) w = Math.max(w, 0.9) * 4.2;
+
+        rawWeights.push({ note, dt, w, isLock, idxInAll: pitched[k].idxInAll });
+        weightSum += w;
+      }
+
+      const normWeights = rawWeights.map(r => ({
+        ...r,
+        wn: weightSum > 0 ? r.w / weightSum : 0
+      }));
+
+      // Aggregate into 9-lane continuous attention logits
+      const logits = Array(9).fill(0);
+      for (const r of normWeights) {
+        // Direct harmonic echo
+        logits[r.note.lane] += r.wn * 1.15;
+        // Successor transition vote (self-attention continuation!)
+        const nextEv = state.notes[r.idxInAll + 1];
+        if (nextEv && nextEv.lane != null) {
+          logits[nextEv.lane] += r.wn * 2.10;
+        }
+        // Stepwise melodic neighbor aura
+        if (r.note.lane > 0) logits[r.note.lane - 1] += r.wn * 0.48;
+        if (r.note.lane < 8) logits[r.note.lane + 1] += r.wn * 0.48;
+      }
+
+      // Base musical grammar: chord pool + smooth voice-leading + L/R alternation comfort
+      for (let j = 0; j < 9; j++) {
+        if (chordPool.includes(j)) logits[j] += 1.05;
+        const dist = Math.abs(j - state.lastPitch);
+        if (dist === 0) logits[j] -= 0.55;         // avoid mechanical same-note hammering
+        else if (dist <= 2) logits[j] += 0.62;     // lyrical stepwise motion
+        else if (dist <= 4) logits[j] += 0.22;
+        if (LANE_HAND[j] !== state.lastHand) logits[j] += 0.28; // natural R/L sticking
+
+        // Vector A: continuous register contour & harmonic gravity
+        const normPos = (j - 4) / 4; // -1 Ding .. +1 top
+        logits[j] += va.contour * normPos * 2.15;
+        if (va.chordWeights) {
+          for (const [cName, cw] of Object.entries(va.chordWeights)) {
+            if ((sc.chords[cName] || []).includes(j)) {
+              logits[j] += cw * va.strength * 1.45;
+            }
+          }
+        }
+        // Cadential Ding gravity near end of phrase
+        const phraseProgress = state.phraseStep / Math.max(1, state.phraseLen);
+        if (j === 0) {
+          logits[j] += (phraseProgress > 0.78 ? 1.55 : -0.1) + (va.cadence - 0.25) * 1.8;
+        }
+        if (j === 4 && phraseProgress > 0.78) logits[j] += 0.55;
+
+        // Gemini Decisions focal-note & harmony bias
+        if (gemini.callCount > 0) {
+          logits[j] += gemini.focalBias[j] * 1.05;
+          if (gemini.harmProbs) {
+            for (const [cName, hp] of Object.entries(gemini.harmProbs)) {
+              if ((sc.chords[cName] || []).includes(j)) logits[j] += hp * 0.85;
+            }
+          }
+        }
+      }
+
+      // Locked Motif Sequential Continuation Pull!
+      if (state.lockedIds.length > 0) {
+        const lockedNotes = state.lockedIds
+          .map(id => state.notes.find(n => n.id === id))
+          .filter(n => n && n.lane != null);
+        if (lockedNotes.length > 0) {
+          const targetNote = lockedNotes[state.lockCursor % lockedNotes.length];
+          let targetLane = targetNote.lane;
+          // If Vector A pushes upward lift/shimmer while locked, allow subtle lyrical transposition
+          if (va.strength > 0.55 && va.contour > 0.45 && targetLane <= 6) {
+            targetLane = clamp(targetLane + 1, 0, 8);
+          }
+          logits[targetLane] += 2.65;
+          // Also lightly echo next note in locked sequence
+          if (lockedNotes.length > 1) {
+            const nextLocked = lockedNotes[(state.lockCursor + 1) % lockedNotes.length];
+            logits[nextLocked.lane] += 0.55;
+          }
+        }
+      }
+
+      // Gemini next_move directional tilt
+      if (gemini.moveProbs) {
+        const mp = gemini.moveProbs;
+        if ((mp.resolve || 0) > 0.35) { logits[0] += mp.resolve * 1.6; logits[4] += mp.resolve * 0.6; }
+        if ((mp.lift || 0) > 0.35) { logits[6] += mp.lift * 0.9; logits[7] += mp.lift * 1.1; logits[8] += mp.lift * 1.25; }
+      }
+
+      const probs = softmax(logits, 0.86);
+
+      // Select top 7 influential arcs (plus all locked notes) for continuous visualization
+      const sorted = [...normWeights].sort((a, b) => b.wn - a.wn);
+      const picked = [];
+      const seen = new Set();
+      for (const item of sorted) {
+        if (item.isLock || (picked.length < 7 && item.wn > 0.032)) {
+          picked.push(item);
+          seen.add(item.note.id);
+        }
+        if (picked.length >= 10) break;
+      }
+
+      // Compute horizon bucket shares for bottom Spaceship stepped meters
+      const bucketTotals = Array(HORIZON_BUCKETS.length).fill(0);
+      for (const r of normWeights) {
+        if (r.isLock) {
+          bucketTotals[5] += r.wn;
+        } else {
+          for (let b = 0; b < 5; b++) {
+            if (r.dt >= HORIZON_BUCKETS[b].lo && r.dt < HORIZON_BUCKETS[b].hi) {
+              bucketTotals[b] += r.wn;
+              break;
+            }
+          }
+        }
+      }
+
+      return { probs, arcs: picked, bucketTotals };
+    }
+
+    function updateSteppedMeters(bucketTotals, nowPerf) {
+      // Scale bucket shares generously so active horizons fill 4-9 cells dynamically
+      for (let i = 0; i < meterState.length; i++) {
+        const ms = meterState[i];
+        const raw = bucketTotals[i] || 0;
+        const scaled = i === 5
+          ? clamp(raw * 1.45, 0, 1)
+          : clamp(Math.pow(raw * 2.35, 0.82), 0, 1);
+        ms.value = ms.value * 0.55 + scaled * 0.45;
+        const newSteps = clamp(Math.round(ms.value * 10), 0, 10);
+        if (newSteps !== ms.steps) {
+          const lo = Math.min(ms.steps, newSteps);
+          const hi = Math.max(ms.steps, newSteps);
+          const dir = newSteps > ms.steps ? 1 : -1;
+          for (let c = lo; c < hi; c++) {
+            ms.cells[c].changedPerf = nowPerf;
+            ms.cells[c].dir = dir;
+          }
+          ms.steps = newSteps;
+        }
+      }
+    }
+
+    // Organic Handpan Inter-Onset Scheduler (Todd Phrase-Arch + KTH Caesura + Agogic Accent)
+    function computeOrganicIoiMs(chosenLane, prevLane, kind, phrasePos, vb) {
+      // Effective base BPM adapts subtly to Vector B + user live entrainment
+      const effBpm = clamp(state.baseBpm + vb.bpmOffset, 50, 118);
+      state.liveBpm = state.liveBpm * 0.72 + effBpm * 0.28;
+      const basePulseMs = (60000 / state.liveBpm) * 0.5; // organic eighth reference (~340-520ms)
+
+      // 1. Todd Phrase-Arch Kinematics: accelerando toward phi=0.56, ritardando landing at phi->1.0
+      const apex = 0.56;
+      const archCurve = phrasePos <= apex
+        ? -Math.sin((phrasePos / apex) * Math.PI * 0.5) * 0.19
+        : Math.pow((phrasePos - apex) / (1 - apex), 1.65) * 0.44;
+      const archMul = 1 + archCurve * (0.35 + vb.rubato * 0.95);
+
+      // 2. Rhythmic phrasing proportion (not uniform 1:1!)
+      let durMul = 1.0;
+      if (kind === 'ghost') durMul = 0.66;
+      else if (kind === 'tak' || kind === 'gu') durMul = 0.74 + Math.random() * 0.22;
+      else {
+        // Choose natural musical spacing: nimble pulse, standard beat, or singing long tone
+        const r = Math.random();
+        if (r < 0.28 - vb.caesura * 0.15) durMul = 0.72;
+        else if (r < 0.74) durMul = 1.04;
+        else durMul = 1.48;
+      }
+
+      // 3. Agogic Accent: linger slightly on Ding (^1), octave (^1'), and poignant ^b6/^b7 peaks
+      const sc = SCALES[activeScaleKey];
+      const deg = chosenLane != null ? sc.degrees[chosenLane] : '';
+      let agogicMul = 1.0;
+      if (chosenLane === 0 || deg === 'b6' || deg === 'b7' || kind === 'harm' || kind === 'dyad') {
+        agogicMul = 1.14 + vb.rubato * 0.14;
+      }
+
+      // 4. KTH Breath Caesura (luftpause): +25% to +75% open space after wide leaps or phrase endings
+      let caesuraMul = 1.0;
+      let breathAfter = false;
+      const leap = (chosenLane != null && prevLane != null) ? Math.abs(chosenLane - prevLane) : 0;
+      const isPhraseEnd = phrasePos >= 0.89;
+      const gemBreathe = (gemini.moveProbs && (gemini.moveProbs.breathe || 0) > 0.34) ? 0.28 : 0;
+
+      if (isPhraseEnd || (leap >= 4 && Math.random() < 0.42 + vb.caesura * 0.45) || Math.random() < vb.caesura * 0.22 + gemBreathe) {
+        caesuraMul = 1.28 + Math.random() * 0.46 + vb.caesura * 0.32;
+        breathAfter = true;
+      }
+
+      // 5. Micro-timing human breath jitter (±3.5%)
+      const microJitter = 1 + (Math.random() - 0.5) * 0.07;
+
+      const ioi = clamp(basePulseMs * archMul * durMul * agogicMul * caesuraMul * microJitter, 145, 1380);
+      return { ioiMs: ioi, breathAfter };
+    }
+
+    function computeFutureGhostPreview() {
+      const vb = getVecBParams();
+      const baseMs = clamp((60000 / state.liveBpm) * 0.5, 220, 620);
+      const indexed = state.lastProbs.map((p, lane) => ({ p, lane })).sort((a, b) => b.p - a.p);
+      const top = indexed.slice(0, 3);
+      const spacingMul = vb.cascade > 0.6 ? 0.45 : (vb.caesura > 0.65 ? 1.45 : 0.92);
+      state.futurePreview = top.map((item, rank) => ({
+        lane: item.lane,
+        prob: item.p,
+        dtMs: baseMs * spacingMul * (0.85 + rank * 0.55)
+      }));
+    }
+
+    function advanceChord() {
+      const va = getVecAParams();
+      if (va.strength > 0.35 && va.chordWeights) {
+        const entries = Object.entries(va.chordWeights).map(([v, w]) => ({ v, w }));
+        state.chord = sampleWeighted(entries);
+      } else if (gemini.callCount > 0 && gemini.harmProbs && Math.random() < 0.72) {
+        const entries = Object.entries(gemini.harmProbs).map(([v, w]) => ({ v, w }));
+        state.chord = sampleWeighted(entries);
+      } else {
+        const nexts = HARMONY_NEXT[state.chord] || HARMONY_NEXT.i;
+        state.chord = sampleWeighted(nexts);
+      }
+      document.getElementById('tel-chord').textContent = '@' + state.chord;
+    }
+
+    // =========================================================================
+    // 5. NOTE GENERATION, LIVE MUSICIAN INJECTION & TIMELINE FORKING
+    // =========================================================================
+    function recordNoteEvent(ev) {
+      state.notes.push(ev);
+      if (state.notes.length > 220) {
+        const removed = state.notes.shift();
+        if (state.lockedIds.includes(removed.id)) {
+          state.lockedIds = state.lockedIds.filter(id => id !== removed.id);
+          syncLockChip();
+        }
+      }
+      // Hide initial onboarding hint smoothly
+      const hint = document.getElementById('stage-hint');
+      if (hint && !hint.classList.contains('hidden')) hint.classList.add('hidden');
+    }
+
+    function triggerAudioForEvent(ev, whenAudio) {
+      if (ev.kind === 'tak') {
+        scheduleTak(whenAudio, ev.vel);
+      } else if (ev.kind === 'gu') {
+        scheduleGu(whenAudio, ev.vel);
+      } else if (ev.kind === 'dyad' && ev.lane2 != null) {
+        scheduleTone(ev.lane, whenAudio, { vel: ev.vel * 0.94, type: 'N' });
+        scheduleTone(ev.lane2, whenAudio + 0.028, { vel: ev.vel * 0.88, type: 'N' });
+      } else {
+        const tMap = ev.kind === 'harm' ? 'H' : (ev.kind === 'ghost' ? 'g' : 'N');
+        scheduleTone(ev.lane, whenAudio, { vel: ev.vel, type: tMap });
+      }
+    }
+
+    // Direct <5ms Musician Live Strike (Agency + Entrainment!)
+    function strikeUserLane(laneOrPerc, opts = {}) {
+      ensureAudio();
+      const nowPerf = performance.now();
+
+      // If autonomous flow is paused, advance scoreMs organically so solo notes spread in real physical time!
+      if (!state.playing && state.notes.length > 0) {
+        const realGap = nowPerf - (state.lastUserStrikePerf || nowPerf);
+        const advance = clamp(realGap, 42, 1150);
+        state.scoreMs += advance;
+      }
+
+      // Entrain organic tempo from user's recent inter-onset spacing
+      if (state.lastUserStrikePerf > 0) {
+        const userGap = nowPerf - state.lastUserStrikePerf;
+        if (userGap > 140 && userGap < 1100) {
+          state.userIoiEma = state.userIoiEma * 0.65 + userGap * 0.35;
+          const inferredBpm = clamp(30000 / state.userIoiEma, 54, 114);
+          state.baseBpm = state.baseBpm * 0.72 + inferredBpm * 0.28;
+        }
+      }
+      state.lastUserStrikePerf = nowPerf;
+      state.lastUserScoreMs = state.scoreMs;
+      state.playheadFlashPerf = nowPerf;
+
+      const isTak = laneOrPerc === 'tak';
+      const isGu = laneOrPerc === 'gu';
+      const lane = (isTak || isGu) ? null : clamp(laneOrPerc, 0, 8);
+      const kind = isTak ? 'tak' : (isGu ? 'gu' : (opts.harm ? 'harm' : 'N'));
+      const vel = clamp(opts.vel ?? 0.86, 0.25, 1.0);
+
+      // Instant <5ms audio firing
+      const tNow = audioCtx.currentTime + 0.002;
+      const ev = {
+        id: nextNoteId++,
+        tMs: state.scoreMs,
+        lane,
+        kind,
+        vel,
+        hand: lane != null ? LANE_HAND[lane] : (isTak ? 'R' : 'L'),
+        source: 'user',
+        chord: state.chord,
+        ioiMs: 280,
+        breathAfter: false,
+        createdPerf: nowPerf
+      };
+      triggerAudioForEvent(ev, tNow);
+      recordNoteEvent(ev);
+
+      if (isTak) state.takFlashPerf = nowPerf;
+      else if (isGu) state.guFlashPerf = nowPerf;
+      else {
+        state.laneFlashPerf[lane] = nowPerf;
+        state.lastPitch = lane;
+        state.lastHand = LANE_HAND[lane];
+        // Harmonically entrain active chord if user strikes a tone outside current chord
+        const sc = SCALES[activeScaleKey];
+        if (!(sc.chords[state.chord] || []).includes(lane)) {
+          for (const [cName, pool] of Object.entries(sc.chords)) {
+            if (pool.includes(lane)) {
+              state.chord = cName;
+              document.getElementById('tel-chord').textContent = '@' + state.chord;
+              break;
+            }
+          }
+        }
+      }
+
+      // Entrain autonomous engine: yield gracefully so companion responds rather than interrupting!
+      if (state.playing) {
+        state.cascadeQueue.length = 0;
+        const yieldMs = clamp(state.userIoiEma * 0.88, 220, 480);
+        state.nextGenScoreMs = Math.max(state.nextGenScoreMs, state.scoreMs + yieldMs);
+      }
+
+      // Recompute live continuous attention immediately so arcs & meters snap to user stroke!
+      const res = computeAttentionAndProbs(state.scoreMs + 1);
+      state.lastProbs = res.probs;
+      state.activeArcs = res.arcs.map(a => ({
+        noteId: a.note.id,
+        weight: a.wn,
+        isLock: a.isLock,
+        flashPerf: a.note.id === ev.id ? nowPerf : 0
+      }));
+      updateSteppedMeters(res.bucketTotals, nowPerf);
+      computeFutureGhostPreview();
+      updatePanLangPreview();
+    }
+
+    function injectBreathCaesura() {
+      const nowPerf = performance.now();
+      state.playheadFlashPerf = nowPerf;
+      playDetentTick(0, 0.35);
+      if (state.notes.length > 0) {
+        state.notes[state.notes.length - 1].breathAfter = true;
+      }
+      if (state.playing) {
+        state.cascadeQueue.length = 0;
+        state.nextGenScoreMs = Math.max(state.nextGenScoreMs, state.scoreMs + 640);
+      }
+    }
+
+    function stepAutonomousEngine(nowPerf) {
+      const sc = SCALES[activeScaleKey];
+      const va = getVecAParams();
+      const vb = getVecBParams();
+
+      // 1. Drain rapid ornamental grace cascade queue (38-62ms physical spacing!)
+      if (state.cascadeQueue.length > 0) {
+        const nextC = state.cascadeQueue.shift();
+        const isLastInCascade = state.cascadeQueue.length === 0;
+        const ev = {
+          id: nextNoteId++,
+          tMs: state.scoreMs,
+          lane: nextC.lane,
+          kind: nextC.kind,
+          vel: nextC.vel,
+          hand: LANE_HAND[nextC.lane],
+          source: 'auto',
+          chord: state.chord,
+          ioiMs: isLastInCascade ? nextC.tailIoiMs : nextC.gapMs,
+          breathAfter: isLastInCascade && nextC.breathAfter,
+          createdPerf: nowPerf
+        };
+        triggerAudioForEvent(ev, audioCtx.currentTime + 0.004);
+        recordNoteEvent(ev);
+        state.laneFlashPerf[ev.lane] = nowPerf;
+        state.lastPitch = ev.lane;
+        state.lastHand = ev.hand;
+        state.playheadFlashPerf = nowPerf;
+        state.nextGenScoreMs = state.scoreMs + (isLastInCascade ? nextC.tailIoiMs : nextC.gapMs);
+        updatePanLangPreview();
+        return;
+      }
+
+      // 2. Phrase structure & chord evolution
+      if (state.phraseStep >= state.phraseLen) {
+        state.phraseStep = 0;
+        state.phraseLen = 7 + Math.floor(Math.random() * 5); // organic 7-11 event phrases
+        state.phraseCount++;
+        advanceChord();
+        if (gemini.apiKey && gemini.cadence === 'phrase') {
+          queryGeminiDecisions();
+        }
+      }
+      const phrasePos = state.phraseStep / Math.max(1, state.phraseLen - 1);
+
+      // 3. Continuous Attention Distribution
+      const attn = computeAttentionAndProbs(state.scoreMs);
+      state.lastProbs = attn.probs;
+      updateSteppedMeters(attn.bucketTotals, nowPerf);
+
+      // 4. Decide Event Articulation (Percussion vs Cascade vs Dyad vs Harmonic vs Melodic)
+      const gemMove = gemini.moveProbs || {};
+      const pTak = clamp(vb.perc * 0.24, 0, 0.26);
+      const pGu  = clamp(vb.perc * 0.14, 0, 0.16);
+      const pCasc = clamp(vb.cascade * 0.28 + (gemMove.cascade || 0) * 0.22, 0.02, 0.38);
+
+      const roll = Math.random();
+      let ev = null;
+
+      if (state.phraseStep > 0 && roll < pTak) {
+        const { ioiMs, breathAfter } = computeOrganicIoiMs(null, state.lastPitch, 'tak', phrasePos, vb);
+        ev = {
+          id: nextNoteId++,
+          tMs: state.scoreMs,
+          lane: null,
+          kind: 'tak',
+          vel: 0.62 + Math.random() * 0.24,
+          hand: state.lastHand === 'R' ? 'L' : 'R',
+          source: 'auto',
+          chord: state.chord,
+          ioiMs,
+          breathAfter,
+          createdPerf: nowPerf
+        };
+        state.takFlashPerf = nowPerf;
+      } else if (state.phraseStep > 0 && roll < pTak + pGu) {
+        const { ioiMs, breathAfter } = computeOrganicIoiMs(null, state.lastPitch, 'gu', phrasePos, vb);
+        ev = {
+          id: nextNoteId++,
+          tMs: state.scoreMs,
+          lane: null,
+          kind: 'gu',
+          vel: 0.72 + Math.random() * 0.18,
+          hand: 'L',
+          source: 'auto',
+          chord: state.chord,
+          ioiMs,
+          breathAfter,
+          createdPerf: nowPerf
+        };
+        state.guFlashPerf = nowPerf;
+      } else {
+        const prevLane = state.lastPitch;
+        const lane = sampleProbs(attn.probs);
+        if (state.lockedIds.length > 0) state.lockCursor++;
+
+        // Ornamental Grace Cascade (2-3 rapid 40-62ms notes blooming into spacious target!)
+        if (roll < pTak + pGu + pCasc && lane >= 2) {
+          const dir = Math.random() < 0.68 ? 1 : -1;
+          const g1 = clamp(lane - dir * 2, 1, 8);
+          const g2 = clamp(lane - dir, 1, 8);
+          const { ioiMs: tailIoi, breathAfter } = computeOrganicIoiMs(lane, prevLane, 'N', phrasePos, vb);
+          const gap1 = 42 + Math.random() * 18;
+          const gap2 = 46 + Math.random() * 18;
+          const isTriple = Math.random() < 0.45 && g1 !== g2 && g2 !== lane;
+
+          ev = {
+            id: nextNoteId++,
+            tMs: state.scoreMs,
+            lane: isTriple ? g1 : g2,
+            kind: 'ghost',
+            vel: 0.46 + Math.random() * 0.14,
+            hand: LANE_HAND[isTriple ? g1 : g2],
+            source: 'auto',
+            chord: state.chord,
+            ioiMs: gap1,
+            breathAfter: false,
+            createdPerf: nowPerf
+          };
+          if (isTriple) {
+            state.cascadeQueue.push({ lane: g2, kind: 'N', vel: 0.64, gapMs: gap2, tailIoiMs: tailIoi, breathAfter });
+          }
+          state.cascadeQueue.push({
+            lane,
+            kind: (lane >= 5 && Math.random() < va.shimmer * 0.55) ? 'harm' : 'N',
+            vel: 0.86 + Math.random() * 0.12,
+            gapMs: gap2,
+            tailIoiMs: Math.max(tailIoi * 1.24, 460), // luminous spacious bloom after ripple!
+            breathAfter: true
+          });
+        } else {
+          // Single expressive melodic note, 2f0 shimmer harmonic, or rolled dyad
+          let kind = 'N';
+          let lane2 = null;
+          const pool = sc.chords[state.chord] || [0, 4, 6];
+          if (lane >= 4 && Math.random() < va.shimmer * 0.58) {
+            kind = 'harm';
+          } else if (Math.random() < vb.dyad * 0.34 && pool.length >= 2) {
+            const partner = pool.find(p => Math.abs(p - lane) >= 2 && p !== lane);
+            if (partner != null) { kind = 'dyad'; lane2 = partner; }
+          } else if (Math.random() < 0.14 && state.phraseStep > 0) {
+            kind = 'ghost';
+          }
+
+          // Todd velocity contour (gentle swell toward phrase apex)
+          const velArch = 0.72 + Math.sin(phrasePos * Math.PI) * 0.22 + (lane === 0 ? 0.06 : 0);
+          const vel = kind === 'ghost' ? (0.30 + Math.random() * 0.14) : clamp(velArch + (Math.random() - 0.5) * 0.08, 0.52, 0.98);
+          const { ioiMs, breathAfter } = computeOrganicIoiMs(lane, prevLane, kind, phrasePos, vb);
+
+          ev = {
+            id: nextNoteId++,
+            tMs: state.scoreMs,
+            lane,
+            lane2,
+            kind,
+            vel,
+            hand: LANE_HAND[lane],
+            source: 'auto',
+            chord: state.chord,
+            ioiMs,
+            breathAfter,
+            createdPerf: nowPerf
+          };
+        }
+        state.laneFlashPerf[ev.lane] = nowPerf;
+        if (ev.lane2 != null) state.laneFlashPerf[ev.lane2] = nowPerf;
+        state.lastPitch = ev.lane2 ?? ev.lane;
+        state.lastHand = ev.hand;
+      }
+
+      // Highlight top contributing arcs in hot orange on trigger
+      state.activeArcs = attn.arcs.map((a, idx) => ({
+        noteId: a.note.id,
+        weight: a.wn,
+        isLock: a.isLock,
+        flashPerf: idx < 2 || a.isLock ? nowPerf : 0
+      }));
+
+      triggerAudioForEvent(ev, audioCtx.currentTime + 0.004);
+      recordNoteEvent(ev);
+      state.playheadFlashPerf = nowPerf;
+      state.phraseStep++;
+      state.notesSinceGemini++;
+      state.nextGenScoreMs = state.scoreMs + ev.ioiMs;
+
+      if (gemini.apiKey && gemini.cadence === '6' && state.notesSinceGemini >= 6) {
+        state.notesSinceGemini = 0;
+        queryGeminiDecisions();
+      }
+
+      computeFutureGhostPreview();
+      updatePanLangPreview();
+      updateTopTelemetry(phrasePos, vb);
+    }
+
+    function updateTopTelemetry(phrasePos, vb) {
+      const modeTag = vecB.strength > 0.15
+        ? VEC_B_SECTORS[vecB.sector].tag
+        : (vb.rubato > 0.5 ? 'arch' : 'pulse');
+      document.getElementById('tel-flow').textContent = `${Math.round(state.liveBpm)} BPM · ${modeTag}`;
+      document.getElementById('tel-phase').textContent = String(Math.round(phrasePos * 100)).padStart(2, '0') + '%';
+    }
+
+    // Rewind & Fork: truncates future after targetMs, cancels Gemini, branches fresh!
+    function executeTimelineFork(targetMs) {
+      const nowPerf = performance.now();
+      cancelInFlightGemini('forked');
+
+      state.notes = state.notes.filter(n => n.tMs <= targetMs + 2);
+      state.forkMarks = state.forkMarks.filter(f => f.tMs <= targetMs);
+      state.forkMarks.push({ tMs: targetMs, createdPerf: nowPerf });
+      if (state.forkMarks.length > 12) state.forkMarks.shift();
+
+      // Preserve locked motif only if its notes still exist
+      const validIds = new Set(state.notes.map(n => n.id));
+      state.lockedIds = state.lockedIds.filter(id => validIds.has(id));
+      state.lockCursor = 0;
+      syncLockChip();
+
+      // Re-seed harmonic & melodic cursor from last surviving note
+      state.scoreMs = targetMs;
+      state.cascadeQueue.length = 0;
+      const lastPitched = [...state.notes].reverse().find(n => n.lane != null);
+      if (lastPitched) {
+        state.lastPitch = lastPitched.lane;
+        state.lastHand = lastPitched.hand || 'R';
+        state.chord = lastPitched.chord || 'i';
+        document.getElementById('tel-chord').textContent = '@' + state.chord;
+      } else {
+        state.lastPitch = 0;
+        state.chord = 'i';
+        document.getElementById('tel-chord').textContent = '@i';
+      }
+
+      state.phraseStep = Math.max(0, state.notes.length % state.phraseLen);
+      state.nextGenScoreMs = state.scoreMs + 140;
+      state.playheadFlashPerf = nowPerf;
+
+      const attn = computeAttentionAndProbs(state.scoreMs);
+      state.lastProbs = attn.probs;
+      state.activeArcs = attn.arcs.map(a => ({
+        noteId: a.note.id,
+        weight: a.wn,
+        isLock: a.isLock,
+        flashPerf: nowPerf
+      }));
+      updateSteppedMeters(attn.bucketTotals, nowPerf);
+      computeFutureGhostPreview();
+      updatePanLangPreview();
+      playLockLatch(0);
+    }
+
+    // =========================================================================
+    // 6. PANLANG GRAMMAR & FAST GEMINI DECISIONS API (DIRECT REST + ABORT)
+    // =========================================================================
+    function buildPanLangPrompt() {
+      const sc = SCALES[activeScaleKey];
+      const recent = state.notes.slice(-16);
+      const tokens = [];
+      let lastChord = null;
+
+      for (let i = 0; i < recent.length; i++) {
+        const ev = recent[i];
+        const prev = i > 0 ? recent[i - 1] : null;
+        const gap = prev ? (ev.tMs - prev.tMs) : 999;
+
+        if (ev.chord && ev.chord !== lastChord) {
+          if (tokens.length > 0) tokens.push('|');
+          tokens.push('@' + ev.chord);
+          lastChord = ev.chord;
+        }
+        if (prev && (gap > 640 || prev.breathAfter)) {
+          tokens.push(',');
+        }
+
+        let sym = '';
+        if (ev.kind === 'tak') sym = 't';
+        else if (ev.kind === 'gu') sym = 'g';
+        else {
+          sym = (ev.source === 'user' ? '*' : '') + String(ev.lane);
+          if (ev.kind === 'dyad' && ev.lane2 != null) sym += '~' + ev.lane2;
+          else if (ev.kind === 'harm') sym += '°';
+          else if (ev.kind === 'ghost') sym += '.';
+        }
+        if (ev.ioiMs > 460 && ev.kind !== 'tak' && ev.kind !== 'gu') sym += ':';
+
+        if (
+          prev && gap < 95 && tokens.length > 0 &&
+          !tokens[tokens.length - 1].startsWith('@') &&
+          tokens[tokens.length - 1] !== '|' &&
+          tokens[tokens.length - 1] !== ','
+        ) {
+          tokens[tokens.length - 1] += '-' + sym;
+        } else {
+          tokens.push(sym);
+        }
+      }
+
+      const parts = [`${sc.shortTag} @${state.chord} ~${Math.round(state.liveBpm)}`];
+      parts.push(tokens.length ? tokens.join(' ') : '0:');
+
+      if (state.lockedIds.length > 0) {
+        const locked = state.lockedIds
+          .map(id => state.notes.find(n => n.id === id))
+          .filter(n => n && n.lane != null);
+        if (locked.length) parts.push('LOCK: ' + locked.map(n => n.lane).join('-'));
+      }
+
+      const vecs = [];
+      if (vecA.strength > 0.04) vecs.push(`${VEC_A_SECTORS[vecA.sector].tag}=${vecA.strength.toFixed(2)}`);
+      if (vecB.strength > 0.04) vecs.push(`${VEC_B_SECTORS[vecB.sector].tag}=${vecB.strength.toFixed(2)}`);
+      if (vecs.length) parts.push('VEC: ' + vecs.join(' '));
+
+      return parts.join(' | ');
+    }
+
+    function updatePanLangPreview() {
+      const wire = buildPanLangPrompt();
+      const el = document.getElementById('panlang-preview');
+      if (el) el.textContent = wire;
+      const estTok = Math.max(8, Math.ceil(wire.length / 3.6));
+      const tokEl = document.getElementById('gem-token-meta');
+      if (tokEl) tokEl.textContent = gemini.lastInputTokens != null ? `${gemini.lastInputTokens} in-tok` : `~${estTok} tok`;
+    }
+
+    function cancelInFlightGemini(reason = 'aborted') {
+      if (gemini.abortCtrl) {
+        try { gemini.abortCtrl.abort(); } catch (_) {}
+        gemini.abortCtrl = null;
+      }
+      gemini.inFlight = false;
+      if (gemini.apiKey) {
+        setGeminiStatus(`ABORT (${reason})`, false);
+      }
+    }
+
+    function setGeminiStatus(text, isHot = false) {
+      const badge = document.getElementById('gem-status-badge');
+      const top = document.getElementById('gem-top-status');
+      if (badge) {
+        badge.textContent = text;
+        badge.className = 'badge' + (isHot ? ' hot' : ' ok');
+      }
+      if (top) {
+        top.textContent = text;
+        top.style.color = isHot ? SIGNAL_HEX : 'var(--ink-2)';
+      }
+    }
+
+    async function queryGeminiDecisions() {
+      if (!gemini.apiKey) {
+        setGeminiStatus('NO KEY', true);
+        return;
+      }
+      // Cancel stale in-flight call so latest musical moment wins
+      if (gemini.abortCtrl) {
+        try { gemini.abortCtrl.abort(); } catch (_) {}
+      }
+      const ctrl = new AbortController();
+      gemini.abortCtrl = ctrl;
+      gemini.inFlight = true;
+      setGeminiStatus('QUERY…', true);
+
+      const sc = SCALES[activeScaleKey];
+      const wire = buildPanLangPrompt();
+      updatePanLangPreview();
+
+      const payload = {
+        model: 'gemini-decision-1',
+        input: `PanLang handpan score (0=Ding..8=top, *=user, -=cascade, :=long, ,=breath, °=2f0, t=tak, g=gu):\n${wire}`,
+        questions: {
+          next_move: {
+            type: 'choice',
+            instructions: 'Next expressive phrasing move?',
+            criteria: {
+              echo: 'Echo or vary recent or LOCK motif',
+              lift: 'Ascend melodically toward upper shimmer',
+              cascade: 'Quick 2-3 note grace cascade or dyad',
+              breathe: 'Open breath caesura with lingering sustain',
+              resolve: 'Ground onto Ding tonic (^1)'
+            }
+          },
+          harmonic_color: {
+            type: 'choice',
+            instructions: 'Next modal harmony center?',
+            criteria: {
+              i: 'Tonic ground',
+              III: 'Warm relative lift',
+              iv: 'Subdominant depth',
+              bVI: 'Poignant emotional lift',
+              bVII: 'Forward modal tension',
+              v: 'Poised suspension'
+            }
+          },
+          focal_deg: {
+            type: 'choice',
+            instructions: `Focal lane in ${sc.shortTag}?`,
+            criteria: Object.fromEntries(sc.notes.map((n, i) => [`n${i}`, `${n}^${sc.degrees[i]}`]))
+          }
+        }
+      };
+
+      const t0 = performance.now();
+      try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/decisions', {
+          method: 'POST',
+          signal: ctrl.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': gemini.apiKey
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.error?.message || `HTTP ${res.status}`);
+        }
+
+        const latencyMs = Math.round(performance.now() - t0);
+        gemini.callCount++;
+        gemini.lastLatencyMs = latencyMs;
+        gemini.lastInputTokens =
+          data?.usage?.total_input_tokens ??
+          data?.usage?.input_tokens ??
+          data?.usage?.inputTokens ??
+          data?.usageMetadata?.promptTokenCount ??
+          null;
+        gemini.rawJson = data;
+        gemini.lastPulsePerf = performance.now();
+
+        applyGeminiAnswers(data);
+        setGeminiStatus(`${latencyMs}ms`, false);
+        document.getElementById('gem-lat-meta').textContent = `${latencyMs}ms`;
+        document.getElementById('gem-call-count').textContent = `#${gemini.callCount}`;
+        document.getElementById('gem-raw-json').textContent = JSON.stringify(data.answers || data, null, 2);
+        updatePanLangPreview();
+
+        // Brief signal pulse on pill button
+        const btn = document.getElementById('btn-gemini');
+        btn.classList.add('signal-pulse');
+        setTimeout(() => btn.classList.remove('signal-pulse'), 450);
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        const msg = err?.message || String(err);
+        setGeminiStatus('ERR', true);
+        document.getElementById('gem-raw-json').textContent = `Error: ${msg}`;
+      } finally {
+        if (gemini.abortCtrl === ctrl) {
+          gemini.abortCtrl = null;
+          gemini.inFlight = false;
+        }
+      }
+    }
+
+    function applyGeminiAnswers(data) {
+      const ans = data.answers || {};
+      if (ans.next_move?.probabilities) {
+        gemini.moveProbs = ans.next_move.probabilities;
+        renderProbBars('prob-move', gemini.moveProbs, ans.next_move.choice, 5);
+      }
+      if (ans.harmonic_color?.probabilities) {
+        gemini.harmProbs = ans.harmonic_color.probabilities;
+        renderProbBars('prob-harm', gemini.harmProbs, ans.harmonic_color.choice, 6);
+      }
+      if (ans.focal_deg?.probabilities) {
+        const fp = ans.focal_deg.probabilities;
+        gemini.focalProbs = fp;
+        const logs = [];
+        for (let i = 0; i < 9; i++) logs.push(Math.log((fp[`n${i}`] ?? 0.02) + 0.015));
+        const meanL = logs.reduce((a, b) => a + b, 0) / 9;
+        for (let i = 0; i < 9; i++) {
+          gemini.focalBias[i] = clamp((logs[i] - meanL) * 0.92, -1.8, 2.0);
+        }
+        const sc = SCALES[activeScaleKey];
+        const labeled = {};
+        for (let i = 0; i < 9; i++) {
+          labeled[`${sc.notes[i]} ^${sc.degrees[i]}`] = fp[`n${i}`] ?? 0;
+        }
+        const winIdx = ans.focal_deg.choice ? parseInt(ans.focal_deg.choice.slice(1), 10) : -1;
+        const winLbl = winIdx >= 0 ? `${sc.notes[winIdx]} ^${sc.degrees[winIdx]}` : '';
+        renderProbBars('prob-focal', labeled, winLbl, 4);
+      }
+    }
+
+    function renderProbBars(containerId, probMap, winnerKey, topN) {
+      const el = document.getElementById(containerId);
+      if (!el || !probMap) return;
+      const sorted = Object.entries(probMap).sort((a, b) => b[1] - a[1]).slice(0, topN);
+      el.innerHTML = sorted.map(([k, v]) => {
+        const pct = Math.round(v * 100);
+        const isWin = k === winnerKey;
+        return `<div class="prob-row ${isWin ? 'win hot' : ''}">
+          <span class="p-name">${k}</span>
+          <span class="p-track"><span class="p-fill" style="width:${pct}%"></span></span>
+          <span class="p-pct">${pct}%</span>
+        </div>`;
+      }).join('');
+      setTimeout(() => {
+        el.querySelectorAll('.prob-row.hot').forEach(r => r.classList.remove('hot'));
+      }, 450);
+    }
+
+    // =========================================================================
+    // 7. STAGE GEOMETRY & UNIFIED INTERACTION ENGINE
+    // =========================================================================
+    const stageWrap = document.getElementById('stage-wrap');
+    const canvas = document.getElementById('score-canvas');
+    const ctx = canvas.getContext('2d');
+    const svg = document.getElementById('score-svg');
+
+    let geom = {
+      w: 1200, h: 640, dpr: 1,
+      railW: 82, padTop: 46, padBot: 46,
+      playheadX: 760, playheadY: 320,
+      pxPerMs: 0.092,
+      deadZoneR: 28,
+      fanMaxR: 185
+    };
+
+    function measureStage() {
+      const r = stageWrap.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      geom.w = Math.max(360, Math.round(r.width));
+      geom.h = Math.max(280, Math.round(r.height));
+      geom.dpr = dpr;
+      geom.railW = geom.w < 780 ? 60 : 82;
+      geom.padTop = 44;
+      geom.padBot = 44;
+      geom.playheadX = Math.round(clamp(geom.w * 0.63, geom.railW + 200, geom.w - 295));
+      geom.playheadY = Math.round(geom.h * 0.50);
+      geom.pxPerMs = clamp((geom.playheadX - geom.railW) / 9600, 0.068, 0.115);
+      geom.fanMaxR = Math.round(clamp(Math.min((geom.w - geom.playheadX) - 104, geom.h * 0.37), 108, 196));
+
+      canvas.width = Math.round(geom.w * dpr);
+      canvas.height = Math.round(geom.h * dpr);
+      svg.setAttribute('viewBox', `0 0 ${geom.w} ${geom.h}`);
+    }
+
+    function laneToY(lane) {
+      const span = geom.h - geom.padTop - geom.padBot;
+      return (geom.h - geom.padBot) - (lane / 8) * span;
+    }
+    function takY() { return geom.padTop - 18; }
+    function guY()  { return geom.h - geom.padBot + 18; }
+
+    function yToLaneOrPerc(py) {
+      if (py < geom.padTop - 7) return 'tak';
+      if (py > geom.h - geom.padBot + 7) return 'gu';
+      const span = geom.h - geom.padTop - geom.padBot;
+      const frac = ((geom.h - geom.padBot) - py) / (span || 1);
+      return clamp(Math.round(frac * 8), 0, 8);
+    }
+
+    function timeToX(tMs) {
+      return geom.playheadX - (state.scoreMs - tMs) * geom.pxPerMs;
+    }
+
+    function getKnobPos(vec) {
+      const cx = geom.playheadX, cy = geom.playheadY;
+      if (vec.strength <= 0.001) {
+        // Compact resting dock right beside Playhead Knob
+        const dy = vec.key === 'A' ? -24 : 24;
+        return { x: cx + 27, y: cy + dy, docked: true };
+      }
+      const r = geom.deadZoneR + vec.strength * (geom.fanMaxR - geom.deadZoneR);
+      const rad = (vec.angleDeg * Math.PI) / 180;
+      return { x: cx + Math.cos(rad) * r, y: cy + Math.sin(rad) * r, docked: false };
+    }
+
+    // Active pointer interaction state machine
+    const drag = {
+      mode: null,       // 'playhead' | 'scrub' | 'vecA' | 'vecB' | 'glide' | 'select'
+      pointerId: null,
+      startX: 0, startY: 0,
+      curX: 0, curY: 0,
+      lastGlideLane: null,
+      scrubTargetMs: 0,
+      scrubWasPlaying: false,
+      lastRatchetId: null,
+      hitNoteId: null
+    };
+
+    function findPastNoteAt(px, py, radius = 16) {
+      let best = null, bestD = radius;
+      for (let i = state.notes.length - 1; i >= 0; i--) {
+        const n = state.notes[i];
+        const nx = timeToX(n.tMs);
+        if (nx < geom.railW - 6 || nx > geom.playheadX + 8) continue;
+        const ny = n.kind === 'tak' ? takY() : (n.kind === 'gu' ? guY() : laneToY(n.lane));
+        const d = Math.hypot(px - nx, py - ny);
+        if (d < bestD) { bestD = d; best = n; }
+      }
+      return best;
+    }
+
+    function updateVectorFromPointer(vec, px, py) {
+      const cx = geom.playheadX, cy = geom.playheadY;
+      const dx = px - cx;
+      const dy = py - cy;
+      const dist = Math.hypot(dx, dy);
+      const nowPerf = performance.now();
+
+      const sectors = vec.key === 'A' ? VEC_A_SECTORS : VEC_B_SECTORS;
+      const maxAngle = sectors[0].angleDeg;
+      const minAngle = sectors[sectors.length - 1].angleDeg;
+
+      // Dead-zone unlatch inside playhead or dragged back across playhead
+      if (dist < geom.deadZoneR || dx < -8) {
+        if (vec.strength > 0) {
+          vec.strength = 0;
+          vec.lastRulerStep = -1;
+          vec.hotPerf = nowPerf;
+          playUnlatchClick(0.08);
+          syncVectorChips();
+          const attn = computeAttentionAndProbs(state.scoreMs);
+          state.lastProbs = attn.probs;
+          computeFutureGhostPreview();
+          updatePanLangPreview();
+        }
+        return;
+      }
+
+      const rawAngle = (Math.atan2(dy, Math.max(4, dx)) * 180) / Math.PI;
+      const clampedAngle = clamp(rawAngle, minAngle, maxAngle);
+      const newStrength = clamp((dist - geom.deadZoneR) / (geom.fanMaxR - geom.deadZoneR), 0.04, 1.0);
+      const newSector = nearestSectorIdx(sectors, clampedAngle);
+      const newRulerStep = Math.round(newStrength * 10);
+
+      const pan = clamp(0.15 + newStrength * 0.45, -0.7, 0.7);
+      if (newSector !== vec.sector) {
+        playSectorDetent(pan, newSector);
+      } else if (newRulerStep !== vec.lastRulerStep) {
+        playDetentTick(pan, newStrength);
+      }
+
+      vec.angleDeg = clampedAngle;
+      vec.strength = newStrength;
+      vec.sector = newSector;
+      vec.lastRulerStep = newRulerStep;
+      vec.hotPerf = nowPerf;
+
+      // Live immediate chord & probability response as user steers!
+      if (vec.key === 'A' && newStrength > 0.32) {
+        const secChord = VEC_A_SECTORS[newSector].chord;
+        if (secChord && secChord !== state.chord) {
+          state.chord = secChord;
+          document.getElementById('tel-chord').textContent = '@' + state.chord;
+        }
+      }
+      const attn = computeAttentionAndProbs(state.scoreMs);
+      state.lastProbs = attn.probs;
+      computeFutureGhostPreview();
+      syncVectorChips();
+      updatePanLangPreview();
+    }
+
+    function resetVector(vec) {
+      if (vec.strength <= 0) return;
+      vec.strength = 0;
+      vec.lastRulerStep = -1;
+      vec.hotPerf = performance.now();
+      playUnlatchClick(0.1);
+      syncVectorChips();
+      const attn = computeAttentionAndProbs(state.scoreMs);
+      state.lastProbs = attn.probs;
+      computeFutureGhostPreview();
+      updatePanLangPreview();
+    }
+
+    function toggleLockOnIds(ids) {
+      const nowPerf = performance.now();
+      const pitchedIds = ids.filter(id => {
+        const n = state.notes.find(x => x.id === id);
+        return n && n.lane != null;
+      });
+      if (pitchedIds.length === 0) {
+        if (state.lockedIds.length > 0) {
+          state.lockedIds = [];
+          state.lockCursor = 0;
+          state.lockFlashPerf = nowPerf;
+          playUnlatchClick(-0.2);
+          syncLockChip();
+        }
+        return;
+      }
+
+      const same = pitchedIds.length === state.lockedIds.length &&
+        pitchedIds.every((id, i) => id === state.lockedIds[i]);
+
+      if (same) {
+        state.lockedIds = [];
+        state.lockCursor = 0;
+        playUnlatchClick(-0.2);
+      } else {
+        state.lockedIds = pitchedIds.slice(-6);
+        state.lockCursor = 0;
+        playLockLatch(-0.22);
+      }
+      state.lockFlashPerf = nowPerf;
+      syncLockChip();
+      const attn = computeAttentionAndProbs(state.scoreMs);
+      state.lastProbs = attn.probs;
+      state.activeArcs = attn.arcs.map(a => ({
+        noteId: a.note.id,
+        weight: a.wn,
+        isLock: a.isLock,
+        flashPerf: a.isLock ? nowPerf : 0
+      }));
+      updateSteppedMeters(attn.bucketTotals, nowPerf);
+      computeFutureGhostPreview();
+      updatePanLangPreview();
+    }
+
+    stageWrap.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) {
+        // Right-click strikes 2f0 harmonic shimmer immediately!
+        const rect = stageWrap.getBoundingClientRect();
+        const py = e.clientY - rect.top;
+        const target = yToLaneOrPerc(py);
+        strikeUserLane(target, { harm: true, vel: 0.85 });
+        return;
+      }
+      if (e.button !== 0) return;
+
+      ensureAudio();
+      const rect = stageWrap.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+
+      drag.pointerId = e.pointerId;
+      drag.startX = px; drag.startY = py;
+      drag.curX = px; drag.curY = py;
+      drag.hitNoteId = null;
+
+      // 1. Hit-test Steering Knobs A & B
+      const posA = getKnobPos(vecA);
+      const posB = getKnobPos(vecB);
+      if (Math.hypot(px - posA.x, py - posA.y) <= 18) {
+        drag.mode = 'vecA';
+        vecA.hotPerf = performance.now();
+        stageWrap.setPointerCapture(e.pointerId);
+        playDetentTick(0.25, 0.45);
+        return;
+      }
+      if (Math.hypot(px - posB.x, py - posB.y) <= 18) {
+        drag.mode = 'vecB';
+        vecB.hotPerf = performance.now();
+        stageWrap.setPointerCapture(e.pointerId);
+        playDetentTick(0.25, 0.45);
+        return;
+      }
+
+      // 2. Hit-test Main Playhead Knob (center knob OR top scrub tab)
+      const hitPlayheadCenter = Math.hypot(px - geom.playheadX, py - geom.playheadY) <= 19;
+      const hitPlayheadTop = Math.abs(px - geom.playheadX) <= 15 && py <= 30;
+      if (hitPlayheadCenter || hitPlayheadTop) {
+        drag.mode = 'playhead';
+        drag.scrubWasPlaying = state.playing;
+        drag.scrubTargetMs = state.scoreMs;
+        drag.lastRatchetId = null;
+        state.playheadFlashPerf = performance.now();
+        stageWrap.setPointerCapture(e.pointerId);
+        playDetentTick(0, 0.6);
+        return;
+      }
+
+      // 3. Left Harmonic Ruler Rail or Live Play Zone (>= playheadX - 34) -> Immediate Strike + Glide!
+      if (px <= geom.railW + 8 || px >= geom.playheadX - 34) {
+        drag.mode = 'glide';
+        const target = yToLaneOrPerc(py);
+        drag.lastGlideLane = target;
+        strikeUserLane(target, { harm: e.shiftKey || e.altKey, vel: 0.88 });
+        stageWrap.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      // 4. Past Score Region: hit-test existing note -> Lock toggle OR drag-sweep motif selection
+      const hitNote = findPastNoteAt(px, py, 16);
+      if (hitNote && hitNote.lane != null) {
+        drag.mode = 'select';
+        drag.hitNoteId = hitNote.id;
+        stageWrap.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      // 5. Empty space in past region: start potential motif sweep; if quick click, strike that lane live!
+      drag.mode = 'select';
+      drag.hitNoteId = null;
+      stageWrap.setPointerCapture(e.pointerId);
+    });
+
+    stageWrap.addEventListener('pointermove', (e) => {
+      const rect = stageWrap.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      drag.curX = px;
+      drag.curY = py;
+
+      if (!drag.mode) {
+        // Hover telemetry & cursor feedback
+        const lane = yToLaneOrPerc(py);
+        state.hoverLane = typeof lane === 'number' ? lane : -1;
+        const posA = getKnobPos(vecA);
+        const posB = getKnobPos(vecB);
+        const nearKnob = Math.hypot(px - posA.x, py - posA.y) <= 18 ||
+                         Math.hypot(px - posB.x, py - posB.y) <= 18 ||
+                         Math.hypot(px - geom.playheadX, py - geom.playheadY) <= 19 ||
+                         (Math.abs(px - geom.playheadX) <= 15 && py <= 30);
+        const hitN = (px > geom.railW + 8 && px < geom.playheadX - 24) ? findPastNoteAt(px, py, 15) : null;
+        state.hoverNoteId = hitN ? hitN.id : null;
+        stageWrap.style.cursor = nearKnob ? 'grab' : (hitN ? 'pointer' : 'crosshair');
+        return;
+      }
+
+      stageWrap.style.cursor = (drag.mode === 'vecA' || drag.mode === 'vecB' || drag.mode === 'scrub' || drag.mode === 'playhead') ? 'grabbing' : 'crosshair';
+
+      if (drag.mode === 'playhead') {
+        const dx = px - drag.startX;
+        if (dx < -10) {
+          // Enter backward Time-Scrub & Fork mode!
+          drag.mode = 'scrub';
+          state.playing = false;
+          syncPlayButton();
+        } else if (dx > 12) {
+          // Quick-Pull right out of Playhead Knob -> Engage Vector A Radial Fan!
+          drag.mode = 'vecA';
+          updateVectorFromPointer(vecA, px, py);
+          return;
+        }
+      }
+
+      if (drag.mode === 'scrub') {
+        const clampedX = clamp(px, geom.railW + 10, geom.playheadX);
+        const dtBack = (geom.playheadX - clampedX) / geom.pxPerMs;
+        drag.scrubTargetMs = Math.max(0, state.scoreMs - dtBack);
+        state.playheadFlashPerf = performance.now();
+
+        // Fire quiet tactile mechanical ratchet tick whenever crossing a past note!
+        let crossed = null;
+        for (let i = state.notes.length - 1; i >= 0; i--) {
+          if (state.notes[i].tMs <= drag.scrubTargetMs) {
+            crossed = state.notes[i];
+            break;
+          }
+        }
+        const cid = crossed ? crossed.id : -1;
+        if (cid !== drag.lastRatchetId) {
+          drag.lastRatchetId = cid;
+          const pan = clamp(((clampedX - geom.railW) / Math.max(1, geom.playheadX - geom.railW)) * 1.1 - 0.55, -0.75, 0.3);
+          playScrubRatchet(pan, crossed?.lane ?? 3);
+        }
+        return;
+      }
+
+      if (drag.mode === 'vecA') {
+        updateVectorFromPointer(vecA, px, py);
+        return;
+      }
+      if (drag.mode === 'vecB') {
+        updateVectorFromPointer(vecB, px, py);
+        return;
+      }
+
+      if (drag.mode === 'glide') {
+        const target = yToLaneOrPerc(py);
+        if (target !== drag.lastGlideLane) {
+          drag.lastGlideLane = target;
+          strikeUserLane(target, { harm: e.shiftKey || e.altKey, vel: 0.78 });
+        }
+      }
+    });
+
+    function finishDrag(e) {
+      if (!drag.mode) return;
+      const mode = drag.mode;
+      const dist = Math.hypot(drag.curX - drag.startX, drag.curY - drag.startY);
+
+      if (mode === 'scrub') {
+        const backMs = state.scoreMs - drag.scrubTargetMs;
+        if (backMs > 60) {
+          executeTimelineFork(drag.scrubTargetMs);
+        }
+        if (drag.scrubWasPlaying) {
+          state.playing = true;
+          state.lastFramePerf = performance.now();
+          syncPlayButton();
+        }
+      } else if (mode === 'select') {
+        if (dist > 14) {
+          // Horizontal drag-select motif span (2-6 past notes)
+          const xLo = Math.min(drag.startX, drag.curX);
+          const xHi = Math.max(drag.startX, drag.curX);
+          const selected = state.notes.filter(n => {
+            if (n.lane == null) return false;
+            const nx = timeToX(n.tMs);
+            return nx >= xLo - 6 && nx <= xHi + 6 && nx <= geom.playheadX + 4;
+          });
+          if (selected.length > 0) {
+            toggleLockOnIds(selected.map(n => n.id));
+          }
+        } else if (drag.hitNoteId != null) {
+          toggleLockOnIds([drag.hitNoteId]);
+        } else {
+          // Quick click on empty pitch lane -> Direct live handpan strike!
+          const target = yToLaneOrPerc(drag.startY);
+          strikeUserLane(target, { harm: e?.shiftKey || e?.altKey, vel: 0.86 });
+        }
+      }
+
+      drag.mode = null;
+      drag.pointerId = null;
+      drag.lastGlideLane = null;
+      drag.hitNoteId = null;
+      stageWrap.style.cursor = 'crosshair';
+    }
+
+    stageWrap.addEventListener('pointerup', finishDrag);
+    stageWrap.addEventListener('pointercancel', finishDrag);
+    stageWrap.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    stageWrap.addEventListener('dblclick', (e) => {
+      const rect = stageWrap.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const posA = getKnobPos(vecA);
+      const posB = getKnobPos(vecB);
+      if (Math.hypot(px - posA.x, py - posA.y) <= 22) { resetVector(vecA); return; }
+      if (Math.hypot(px - posB.x, py - posB.y) <= 22) { resetVector(vecB); return; }
+      const hitN = findPastNoteAt(px, py, 16);
+      if (hitN && state.lockedIds.includes(hitN.id)) {
+        toggleLockOnIds([]);
+      }
+    });
+
+    // Keyboard Direct Agency (1-9 / A-L / T / B / Space / ,)
+    const KEY_TO_LANE = {
+      '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8,
+      'a': 0, 's': 1, 'd': 2, 'f': 3, 'g': 4, 'h': 5, 'j': 6, 'k': 7, 'l': 8
+    };
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+      if (e.repeat) return;
+
+      const k = e.key.toLowerCase();
+      if (k in KEY_TO_LANE) {
+        e.preventDefault();
+        strikeUserLane(KEY_TO_LANE[k], { harm: e.shiftKey, vel: 0.88 });
+      } else if (k === 't') {
+        e.preventDefault();
+        strikeUserLane('tak', { vel: 0.82 });
+      } else if (k === 'b') {
+        e.preventDefault();
+        strikeUserLane('gu', { vel: 0.88 });
+      } else if (k === ',') {
+        e.preventDefault();
+        injectBreathCaesura();
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        if (e.shiftKey) injectBreathCaesura();
+        else toggleFlow();
+      } else if (k === 'escape') {
+        closeDrawers();
+        if (state.lockedIds.length > 0) toggleLockOnIds([]);
+      }
+    });
+
+    // =========================================================================
+    // 8. CANVAS + SVG RENDERERS (PURE OBSIDIAN + 5-STEP INK + #ff5a1f SIGNAL)
+    // =========================================================================
+    function signalHeat(tsPerf, durMs = SIGNAL_DECAY_MS) {
+      if (!tsPerf) return 0;
+      const dt = performance.now() - tsPerf;
+      if (dt < 0 || dt >= durMs) return 0;
+      const u = 1 - dt / durMs;
+      return u * u;
+    }
+
+    function mixWhiteOrange(heat, baseAlpha = 1.0) {
+      const r = Math.round(lerp(255, 255, heat));
+      const g = Math.round(lerp(255, 90, heat));
+      const b = Math.round(lerp(255, 31, heat));
+      const a = clamp(lerp(baseAlpha, 1.0, heat * 0.85), 0, 1);
+      return `rgba(${r},${g},${b},${a.toFixed(3)})`;
+    }
+
+    function renderCanvas(nowPerf) {
+      const { w, h, dpr, railW, playheadX } = geom;
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      // 1. Subtle harmonic probability aura along the playhead vertical strip
+      for (let lane = 0; lane < 9; lane++) {
+        const y = laneToY(lane);
+        const p = state.lastProbs[lane] || 0;
+        const heat = signalHeat(state.laneFlashPerf[lane]);
+        if (p > 0.06 || heat > 0.01) {
+          const rad = 18 + p * 44 + heat * 22;
+          const grad = ctx.createRadialGradient(playheadX, y, 0, playheadX, y, rad);
+          if (heat > 0.05) {
+            grad.addColorStop(0, `rgba(255,90,31,${(heat * 0.24 + p * 0.08).toFixed(3)})`);
+          } else {
+            grad.addColorStop(0, `rgba(255,255,255,${(p * 0.14).toFixed(3)})`);
+          }
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(playheadX, y, rad, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 2. Organic Breath Caesura luminous gaps & Acoustic Bloom Halos on notes
+      for (let i = state.notes.length - 1; i >= 0; i--) {
+        const n = state.notes[i];
+        const nx = timeToX(n.tMs);
+        if (nx < railW - 60) break;
+        if (nx > w + 40) continue;
+
+        // Soft vertical breathing wash after wide caesura pauses
+        if (n.breathAfter && i < state.notes.length - 1) {
+          const nextX = timeToX(state.notes[i + 1].tMs);
+          const gapW = nextX - nx;
+          if (gapW > 46) {
+            const g = ctx.createLinearGradient(nx + 10, 0, nextX - 10, 0);
+            g.addColorStop(0, 'rgba(255,255,255,0)');
+            g.addColorStop(0.5, 'rgba(255,255,255,0.022)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(nx + 10, geom.padTop - 8, gapW - 20, h - geom.padTop - geom.padBot + 16);
+          }
+        }
+
+        // Decaying acoustic bloom halo (models 140ms bloom rise + 2.4s shimmer decay!)
+        const ageMs = nowPerf - n.createdPerf;
+        if (ageMs >= 0 && ageMs < 2600) {
+          const ny = n.kind === 'tak' ? takY() : (n.kind === 'gu' ? guY() : laneToY(n.lane));
+          const bloomEnv = ageMs < 150 ? (ageMs / 150) : Math.exp(-(ageMs - 150) / 820);
+          const heat = signalHeat(n.createdPerf);
+          const radius = 8 + (ageMs / 2600) * (36 + n.vel * 24);
+          const alpha = bloomEnv * (0.28 + n.vel * 0.24);
+
+          ctx.beginPath();
+          ctx.arc(nx, ny, radius, 0, Math.PI * 2);
+          ctx.strokeStyle = mixWhiteOrange(heat, alpha * 0.65);
+          ctx.lineWidth = 1.0;
+          ctx.stroke();
+
+          // Soft core bloom glow
+          const coreR = 14 + n.vel * 16;
+          const cg = ctx.createRadialGradient(nx, ny, 0, nx, ny, coreR);
+          cg.addColorStop(0, mixWhiteOrange(heat, alpha * 0.42));
+          cg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = cg;
+          ctx.beginPath();
+          ctx.arc(nx, ny, coreR, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (n.kind === 'dyad' && n.lane2 != null) {
+            const ny2 = laneToY(n.lane2);
+            ctx.beginPath();
+            ctx.arc(nx, ny2, radius * 0.88, 0, Math.PI * 2);
+            ctx.strokeStyle = mixWhiteOrange(heat, alpha * 0.55);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // 3. Scrub-Rewind "Pending Prune" hatched obsidian veil
+      if (drag.mode === 'scrub') {
+        const sx = timeToX(drag.scrubTargetMs);
+        if (sx < playheadX - 2) {
+          ctx.fillStyle = 'rgba(255, 90, 31, 0.055)';
+          ctx.fillRect(sx, 0, playheadX - sx, h);
+          ctx.strokeStyle = 'rgba(255, 90, 31, 0.14)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let x = sx - h; x < playheadX; x += 14) {
+            ctx.moveTo(Math.max(sx, x), Math.max(0, sx - x));
+            ctx.lineTo(Math.min(playheadX, x + h), Math.min(h, playheadX - x));
+          }
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // Build razor-sharp SVG layers
+    function buildProtractorFanSvg(vec, isDragging, nowPerf) {
+      const sectors = vec.key === 'A' ? VEC_A_SECTORS : VEC_B_SECTORS;
+      const cx = geom.playheadX, cy = geom.playheadY;
+      const deadR = geom.deadZoneR;
+      const maxR = geom.fanMaxR;
+      const heat = isDragging ? 1.0 : signalHeat(vec.hotPerf);
+      const pos = getKnobPos(vec);
+      const out = [];
+
+      const startDeg = sectors[sectors.length - 1].angleDeg - 6; // top (-deg)
+      const endDeg = sectors[0].angleDeg + 6;                    // bottom (+deg)
+      const arcPt = (r, deg) => {
+        const rad = (deg * Math.PI) / 180;
+        return [cx + Math.cos(rad) * r, cy + Math.sin(rad) * r];
+      };
+      const arcPath = (r, d0, d1) => {
+        const [x0, y0] = arcPt(r, d0);
+        const [x1, y1] = arcPt(r, d1);
+        const large = Math.abs(d1 - d0) > 180 ? 1 : 0;
+        return `M${x0.toFixed(1)},${y0.toFixed(1)} A${r},${r} 0 ${large} 1 ${x1.toFixed(1)},${y1.toFixed(1)}`;
+      };
+
+      // Full Graduated Protractor Fan while actively dragging this vector!
+      if (isDragging) {
+        // Subtle obsidian backing wedge so labels stay crystal legible
+        const [sx0, sy0] = arcPt(maxR + 10, startDeg);
+        const [sx1, sy1] = arcPt(maxR + 10, endDeg);
+        out.push(`<path d="M${cx},${cy} L${sx0.toFixed(1)},${sy0.toFixed(1)} A${maxR + 10},${maxR + 10} 0 0 1 ${sx1.toFixed(1)},${sy1.toFixed(1)} Z" fill="rgba(0,0,0,0.68)"/>`);
+
+        // Dead-zone unlatch ring
+        const inDead = vec.strength <= 0.001;
+        out.push(`<circle cx="${cx}" cy="${cy}" r="${deadR}" fill="none" stroke="${inDead ? SIGNAL_HEX : 'rgba(255,255,255,0.20)'}" stroke-dasharray="2 3" stroke-width="1"/>`);
+        if (inDead) {
+          out.push(`<text x="${cx}" y="${cy + deadR + 12}" text-anchor="middle" fill="${SIGNAL_HEX}" font-size="9" letter-spacing="0.08em">RELEASE</text>`);
+        }
+
+        // Concentric strength range arcs (25%, 50%, 75%, 100%)
+        [0.25, 0.50, 0.75, 1.0].forEach((f, idx) => {
+          const r = deadR + f * (maxR - deadR);
+          const stroke = idx === 3 ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.11)';
+          out.push(`<path d="${arcPath(r, startDeg, endDeg)}" fill="none" stroke="${stroke}" stroke-width="${idx === 3 ? 1.1 : 0.75}"/>`);
+        });
+
+        // Fine degree graduation ticks every 4° along outer protractor rim
+        for (let deg = Math.ceil(startDeg); deg <= Math.floor(endDeg); deg += 4) {
+          const [ix, iy] = arcPt(maxR - 4, deg);
+          const [ox, oy] = arcPt(maxR + 2, deg);
+          const near = Math.abs(deg - vec.angleDeg) < 3.5 && vec.strength > 0;
+          out.push(`<line x1="${ix.toFixed(1)}" y1="${iy.toFixed(1)}" x2="${ox.toFixed(1)}" y2="${oy.toFixed(1)}" stroke="${near ? SIGNAL_HEX : 'rgba(255,255,255,0.22)'}" stroke-width="${near ? 1.5 : 0.8}"/>`);
+        }
+
+        // Radial spokes & semantic sector labels
+        sectors.forEach((sec, idx) => {
+          const active = idx === vec.sector && vec.strength > 0;
+          const [ix, iy] = arcPt(deadR + 4, sec.angleDeg);
+          const [ox, oy] = arcPt(maxR + 6, sec.angleDeg);
+          const [lx, ly] = arcPt(maxR + 13, sec.angleDeg);
+          out.push(`<line x1="${ix.toFixed(1)}" y1="${iy.toFixed(1)}" x2="${ox.toFixed(1)}" y2="${oy.toFixed(1)}" stroke="${active ? mixWhiteOrange(heat, 0.55) : 'rgba(255,255,255,0.12)'}" stroke-width="${active ? 1.1 : 0.75}" stroke-dasharray="${active ? '' : '2 4'}"/>`);
+          out.push(`<circle cx="${ox.toFixed(1)}" cy="${oy.toFixed(1)}" r="${active ? 2.5 : 1.4}" fill="${active ? SIGNAL_HEX : 'rgba(255,255,255,0.34)'}"/>`);
+          out.push(`<text x="${lx.toFixed(1)}" y="${(ly + 3).toFixed(1)}" text-anchor="start" fill="${active ? mixWhiteOrange(heat, 1.0) : 'rgba(255,255,255,0.44)'}" font-size="${active ? 10.5 : 9.5}" font-weight="${active ? 600 : 400}" letter-spacing="0.03em">${sec.label}</text>`);
+        });
+
+        // Header label above fan
+        const [hx, hy] = arcPt(maxR + 18, startDeg - 4);
+        out.push(`<text x="${(hx - 18).toFixed(1)}" y="${(hy - 2).toFixed(1)}" fill="rgba(255,255,255,0.45)" font-size="9" letter-spacing="0.12em">VECTOR ${vec.key} · ${vec.name}</text>`);
+      }
+
+      // Tether line with physical ruler tick marks (spaceship future-hud rulerOf!)
+      if (vec.strength > 0.001) {
+        const tetherCol = mixWhiteOrange(heat, isDragging ? 0.95 : 0.72);
+        const dx = pos.x - cx, dy = pos.y - cy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const ux = dx / dist, uy = dy / dist;
+        const nx = -uy, ny = ux; // perpendicular unit normal for physical ruler ticks
+
+        out.push(`<line x1="${cx}" y1="${cy}" x2="${pos.x.toFixed(1)}" y2="${pos.y.toFixed(1)}" stroke="${tetherCol}" stroke-width="${isDragging ? 1.6 : 1.15}"/>`);
+
+        // Physical ruler perpendicular ticks every 10% strength along tether line
+        const maxTick = Math.floor(vec.strength * 10);
+        for (let step = 1; step <= maxTick; step++) {
+          const frac = step / 10;
+          const r = deadR + frac * (maxR - deadR);
+          if (r > dist - 5) break;
+          const tx = cx + ux * r;
+          const ty = cy + uy * r;
+          const major = step === 5 || step === 10 || step === 2 || step === 7;
+          const halfLen = (step === 5 || step === 10) ? 6.5 : (major ? 4.5 : 2.8);
+          const tCol = (step === maxTick && heat > 0.05) ? SIGNAL_HEX : mixWhiteOrange(heat * 0.7, step === 5 || step === 10 ? 0.65 : 0.36);
+          out.push(`<line x1="${(tx - nx * halfLen).toFixed(1)}" y1="${(ty - ny * halfLen).toFixed(1)}" x2="${(tx + nx * halfLen).toFixed(1)}" y2="${(ty + ny * halfLen).toFixed(1)}" stroke="${tCol}" stroke-width="1"/>`);
+        }
+
+        // Anchored readout badge next to active knob
+        const pct = Math.round(vec.strength * 100);
+        const secShort = sectors[vec.sector].short;
+        out.push(`<text x="${(pos.x + 12).toFixed(1)}" y="${(pos.y - 6).toFixed(1)}" fill="${mixWhiteOrange(heat, 0.92)}" font-size="9.5" font-weight="600" letter-spacing="0.06em">${secShort}</text>`);
+        out.push(`<text x="${(pos.x + 12).toFixed(1)}" y="${(pos.y + 6).toFixed(1)}" fill="${mixWhiteOrange(heat, 0.56)}" font-size="9">${pct}%</text>`);
+      }
+
+      // Satellite Steering Knob Handle (always cleanly visible: docked or deployed)
+      const knobR = pos.docked ? 6.5 : 7.5;
+      const strokeCol = pos.docked
+        ? mixWhiteOrange(heat, 0.42)
+        : mixWhiteOrange(heat, 0.96);
+      const fillCol = isDragging
+        ? SIGNAL_HEX
+        : (pos.docked ? '#000000' : '#000000');
+      out.push(`<circle cx="${pos.x.toFixed(1)}" cy="${pos.y.toFixed(1)}" r="${knobR}" fill="${fillCol}" stroke="${strokeCol}" stroke-width="${isDragging ? 2 : 1.4}"/>`);
+      if (!isDragging && !pos.docked) {
+        out.push(`<circle cx="${pos.x.toFixed(1)}" cy="${pos.y.toFixed(1)}" r="2.4" fill="${mixWhiteOrange(heat, 0.95)}"/>`);
+      }
+      if (pos.docked) {
+        out.push(`<text x="${(pos.x + 11).toFixed(1)}" y="${(pos.y + 3).toFixed(1)}" fill="rgba(255,255,255,0.40)" font-size="8.5" letter-spacing="0.08em">+ ${vec.name}</text>`);
+      }
+
+      return out.join('');
+    }
+
+    function renderSvg(nowPerf) {
+      const { w, h, railW, playheadX, playheadY } = geom;
+      const sc = SCALES[activeScaleKey];
+      const parts = [];
+
+      // -----------------------------------------------------------------------
+      // LAYER 1: HARMONIC RULER RAIL & HORIZONTAL PITCH LANES
+      // -----------------------------------------------------------------------
+      parts.push(`<rect x="0" y="0" width="${railW}" height="${h}" fill="#000000"/>`);
+      parts.push(`<line x1="${railW}" y1="0" x2="${railW}" y2="${h}" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>`);
+
+      // Top Rim Tak & Bottom Cavity Gu subtle percussion rails
+      const yt = takY(), yg = guY();
+      const takHeat = signalHeat(state.takFlashPerf);
+      const guHeat  = signalHeat(state.guFlashPerf);
+      parts.push(`<line x1="${railW}" y1="${yt}" x2="${w}" y2="${yt}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2 6"/>`);
+      parts.push(`<text x="${railW - 8}" y="${yt + 3}" text-anchor="end" fill="${mixWhiteOrange(takHeat, 0.34)}" font-size="9" letter-spacing="0.06em">TAK ×</text>`);
+      parts.push(`<line x1="${railW}" y1="${yg}" x2="${w}" y2="${yg}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="2 6"/>`);
+      parts.push(`<text x="${railW - 8}" y="${yg + 3}" text-anchor="end" fill="${mixWhiteOrange(guHeat, 0.34)}" font-size="9" letter-spacing="0.06em">GU ◇</text>`);
+
+      // 9 Scale Degree Pitch Lanes (Ding ^1 bottom .. ^5' top)
+      const chordPool = sc.chords[state.chord] || [];
+      for (let lane = 0; lane < 9; lane++) {
+        const y = laneToY(lane);
+        const heat = signalHeat(state.laneFlashPerf[lane]);
+        const inChord = chordPool.includes(lane);
+        const isHover = state.hoverLane === lane;
+        const prob = state.lastProbs[lane] || 0;
+
+        // Horizontal staff line
+        const lineStroke = heat > 0.04
+          ? mixWhiteOrange(heat, 0.42)
+          : (isHover ? 'rgba(255,255,255,0.22)' : (lane === 0 ? 'rgba(255,255,255,0.16)' : (inChord ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.055)')));
+        parts.push(`<line x1="${railW}" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="${lineStroke}" stroke-width="${lane === 0 ? 1.1 : 0.85}"/>`);
+
+        // Live probability micro-bar on left rail edge (shows steering vector pull in realtime!)
+        const barW = clamp(prob * 42, 1.5, 22);
+        parts.push(`<rect x="${(railW - barW).toFixed(1)}" y="${(y - 2).toFixed(1)}" width="${barW.toFixed(1)}" height="4" fill="${mixWhiteOrange(heat, inChord ? 0.38 : 0.16)}"/>`);
+
+        // Keybind + Note Name + Scale Degree
+        parts.push(`<text x="7" y="${(y + 3).toFixed(1)}" fill="rgba(255,255,255,0.22)" font-size="9">${lane + 1}</text>`);
+        parts.push(`<text x="20" y="${(y + 3).toFixed(1)}" fill="${mixWhiteOrange(heat, isHover ? 1.0 : (inChord ? 0.82 : 0.48))}" font-size="10.5" font-weight="${lane === 0 || inChord ? 600 : 400}">${sc.notes[lane]}</text>`);
+        if (railW >= 72) {
+          parts.push(`<text x="${railW - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="${mixWhiteOrange(heat, 0.36)}" font-size="9">^${sc.degrees[lane]}</text>`);
+        }
+      }
+
+      // Past time-ruler ticks along top edge (real physical seconds: -1s, -2s, ... -8s)
+      for (let sec = 1; sec <= 9; sec++) {
+        const tx = playheadX - sec * 1000 * geom.pxPerMs;
+        if (tx <= railW + 10) break;
+        parts.push(`<line x1="${tx.toFixed(1)}" y1="0" x2="${tx.toFixed(1)}" y2="6" stroke="rgba(255,255,255,0.20)" stroke-width="1"/>`);
+        parts.push(`<text x="${tx.toFixed(1)}" y="16" text-anchor="middle" fill="rgba(255,255,255,0.22)" font-size="8.5">-${sec}s</text>`);
+      }
+
+      // Fork markers on timeline
+      for (const f of state.forkMarks) {
+        const fx = timeToX(f.tMs);
+        if (fx < railW || fx > playheadX + 2) continue;
+        const fh = signalHeat(f.createdPerf, 900);
+        parts.push(`<line x1="${fx.toFixed(1)}" y1="20" x2="${fx.toFixed(1)}" y2="${h - 14}" stroke="${mixWhiteOrange(fh, 0.28)}" stroke-dasharray="3 4" stroke-width="1"/>`);
+        parts.push(`<text x="${(fx + 4).toFixed(1)}" y="30" fill="${mixWhiteOrange(fh, 0.48)}" font-size="8.5" letter-spacing="0.08em">FORK</text>`);
+      }
+
+      // -----------------------------------------------------------------------
+      // LAYER 2: CONTINUOUS ATTENTION BEZIER CONNECTION ARCS & LOCKED MOTIF
+      // -----------------------------------------------------------------------
+      const targetY = laneToY(state.lastPitch);
+      for (const arc of state.activeArcs) {
+        const note = state.notes.find(n => n.id === arc.noteId);
+        if (!note || note.lane == null) continue;
+        const rawX = timeToX(note.tMs);
+        const clamped = rawX < railW + 4;
+        const x1 = clamped ? railW + 4 : rawX;
+        const y1 = laneToY(note.lane);
+        const x2 = playheadX;
+        const y2 = targetY;
+        const dx = Math.max(12, x2 - x1);
+
+        // Arc arch height naturally scales with temporal horizon distance!
+        const dir = ((y1 + y2) * 0.5 > playheadY) ? -1 : 1;
+        const arch = clamp(22 + dx * 0.25, 24, h * 0.42);
+        const cy1 = clamp(y1 + dir * arch, 14, h - 14);
+        const cy2 = clamp(y2 + dir * arch * 0.82, 14, h - 14);
+        const cx1 = x1 + dx * 0.28;
+        const cx2 = x2 - dx * 0.26;
+
+        const heat = Math.max(signalHeat(arc.flashPerf), arc.isLock ? signalHeat(state.lockFlashPerf) : 0);
+        const sw = arc.isLock ? 1.85 : clamp(0.75 + arc.weight * 4.2, 0.75, 2.4);
+        const baseAlpha = arc.isLock ? 0.78 : clamp(0.14 + arc.weight * 1.45, 0.14, 0.68);
+        const dash = clamped ? '4 3' : '';
+
+        parts.push(`<path d="M${x1.toFixed(1)},${y1.toFixed(1)} C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}" fill="none" stroke="${mixWhiteOrange(heat, baseAlpha)}" stroke-width="${sw.toFixed(2)}" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`);
+      }
+
+      // Locked Motif Bracket & Direct Tether
+      if (state.lockedIds.length > 0) {
+        const lockedNotes = state.lockedIds
+          .map(id => state.notes.find(n => n.id === id))
+          .filter(n => n && n.lane != null);
+        if (lockedNotes.length > 0) {
+          const xs = lockedNotes.map(n => timeToX(n.tMs));
+          const ys = lockedNotes.map(n => laneToY(n.lane));
+          const xLo = Math.max(railW + 4, Math.min(...xs) - 12);
+          const xHi = Math.min(playheadX - 4, Math.max(...xs) + 12);
+          const yLo = Math.max(20, Math.min(...ys) - 14);
+          const yHi = Math.min(h - 20, Math.max(...ys) + 14);
+          const lHeat = signalHeat(state.lockFlashPerf);
+          const lCol = mixWhiteOrange(lHeat, 0.88);
+          const midY = (yLo + yHi) * 0.5;
+
+          if (xHi > railW + 4) {
+            const bxW = Math.max(18, xHi - xLo);
+            const bxH = Math.max(24, yHi - yLo);
+            parts.push(`<rect x="${xLo.toFixed(1)}" y="${yLo.toFixed(1)}" width="${bxW.toFixed(1)}" height="${bxH.toFixed(1)}" rx="3" fill="rgba(255,255,255,0.035)" stroke="${lCol}" stroke-width="1.25" stroke-dasharray="3 2"/>`);
+            parts.push(`<text x="${(xLo + 3).toFixed(1)}" y="${(yLo - 4).toFixed(1)}" fill="${lCol}" font-size="8.5" font-weight="600" letter-spacing="0.10em">LOCKED MOTIF (${lockedNotes.length})</text>`);
+            // Direct glowing tether line from bracket anchor straight to Playhead Knob
+            const anchorX = xLo + bxW;
+            const ctrlX = (anchorX + playheadX) * 0.5;
+            parts.push(`<circle cx="${anchorX.toFixed(1)}" cy="${midY.toFixed(1)}" r="2.6" fill="${lCol}"/>`);
+            parts.push(`<path d="M${anchorX.toFixed(1)},${midY.toFixed(1)} C${ctrlX.toFixed(1)},${midY.toFixed(1)} ${ctrlX.toFixed(1)},${playheadY.toFixed(1)} ${playheadX},${playheadY}" fill="none" stroke="${lCol}" stroke-width="1.45" stroke-opacity="0.88"/>`);
+          } else {
+            // Motif scrolled into deep memory (>9s ago): keep crisp left-edge anchor + tether!
+            const ay = clamp(midY, geom.padTop + 10, h - geom.padBot - 10);
+            const ax = railW + 4;
+            const ctrlX = (ax + playheadX) * 0.5;
+            parts.push(`<rect x="${ax}" y="${(ay - 9).toFixed(1)}" width="74" height="18" rx="2" fill="#000" stroke="${lCol}" stroke-width="1.1"/>`);
+            parts.push(`<text x="${ax + 6}" y="${(ay + 3).toFixed(1)}" fill="${lCol}" font-size="8.5" font-weight="600" letter-spacing="0.06em">← LOCK (${lockedNotes.length})</text>`);
+            parts.push(`<path d="M${ax + 74},${ay.toFixed(1)} C${ctrlX.toFixed(1)},${ay.toFixed(1)} ${ctrlX.toFixed(1)},${playheadY.toFixed(1)} ${playheadX},${playheadY}" fill="none" stroke="${lCol}" stroke-width="1.3" stroke-dasharray="4 3" stroke-opacity="0.78"/>`);
+          }
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // LAYER 3: ELASTIC NOTE NODES & MELODIC CONTOUR RIBBON
+      // -----------------------------------------------------------------------
+      const scrubX = drag.mode === 'scrub' ? timeToX(drag.scrubTargetMs) : Infinity;
+      let prevMelX = null, prevMelY = null, prevMelT = -9999, lastPitchLblX = -999;
+
+      for (let i = 0; i < state.notes.length; i++) {
+        const n = state.notes[i];
+        const nx = timeToX(n.tMs);
+        if (nx < railW - 14 || nx > playheadX + 26) continue;
+
+        const isPruned = nx > scrubX + 1;
+        const isLocked = state.lockedIds.includes(n.id);
+        const isHover = state.hoverNoteId === n.id;
+        const heat = isPruned ? 0 : signalHeat(n.createdPerf);
+        const ageFade = clamp(1 - (playheadX - nx) / Math.max(300, (playheadX - railW) * 1.45), 0.28, 1.0);
+        const dimMul = isPruned ? 0.16 : ageFade;
+
+        if (n.kind === 'tak') {
+          const y = yt;
+          const col = mixWhiteOrange(heat, 0.72 * dimMul);
+          parts.push(`<path d="M${(nx - 4).toFixed(1)},${(y - 4).toFixed(1)} L${(nx + 4).toFixed(1)},${(y + 4).toFixed(1)} M${(nx + 4).toFixed(1)},${(y - 4).toFixed(1)} L${(nx - 4).toFixed(1)},${(y + 4).toFixed(1)}" stroke="${col}" stroke-width="1.3"/>`);
+          continue;
+        }
+        if (n.kind === 'gu') {
+          const y = yg;
+          const col = mixWhiteOrange(heat, 0.74 * dimMul);
+          parts.push(`<polygon points="${nx.toFixed(1)},${(y - 5).toFixed(1)} ${(nx + 5).toFixed(1)},${y.toFixed(1)} ${nx.toFixed(1)},${(y + 5).toFixed(1)} ${(nx - 5).toFixed(1)},${y.toFixed(1)}" fill="none" stroke="${col}" stroke-width="1.3"/>`);
+          continue;
+        }
+
+        const ny = laneToY(n.lane);
+
+        // Delicate melodic contour line connecting notes within the same breath phrase
+        if (prevMelX != null && (n.tMs - prevMelT) < 620) {
+          parts.push(`<line x1="${prevMelX.toFixed(1)}" y1="${prevMelY.toFixed(1)}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="rgba(255,255,255,${(0.16 * dimMul).toFixed(3)})" stroke-width="1"/>`);
+        }
+        prevMelX = nx; prevMelY = ny; prevMelT = n.tMs;
+
+        // Breath caesura punctuation mark `,` on top edge
+        if (n.breathAfter) {
+          parts.push(`<text x="${(nx + 12).toFixed(1)}" y="${(geom.padTop - 4).toFixed(1)}" fill="rgba(255,255,255,${(0.32 * dimMul).toFixed(3)})" font-size="13">,</text>`);
+        }
+
+        // Rolled dyad tie between lane and lane2
+        if (n.kind === 'dyad' && n.lane2 != null) {
+          const ny2 = laneToY(n.lane2);
+          const col = mixWhiteOrange(heat, 0.85 * dimMul);
+          parts.push(`<line x1="${nx.toFixed(1)}" y1="${ny.toFixed(1)}" x2="${nx.toFixed(1)}" y2="${ny2.toFixed(1)}" stroke="${col}" stroke-width="1.2" stroke-dasharray="2 2"/>`);
+          parts.push(`<circle cx="${nx.toFixed(1)}" cy="${ny2.toFixed(1)}" r="${(3.8 + n.vel * 2.2).toFixed(1)}" fill="#000" stroke="${col}" stroke-width="1.4"/>`);
+          parts.push(`<text x="${(nx + 7).toFixed(1)}" y="${((ny + ny2) * 0.5 + 3).toFixed(1)}" fill="${col}" font-size="10">≈</text>`);
+        }
+
+        const r = n.kind === 'ghost' ? 3.2 : (4.0 + n.vel * 3.4);
+        const col = mixWhiteOrange(heat, (n.source === 'user' || isLocked ? 0.98 : 0.82) * dimMul);
+
+        // Hover or Locked outer halo ring
+        if (isHover || isLocked) {
+          parts.push(`<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="${(r + 4.5).toFixed(1)}" fill="none" stroke="${isLocked ? mixWhiteOrange(signalHeat(state.lockFlashPerf), 0.9) : 'rgba(255,255,255,0.55)'}" stroke-width="1.1"/>`);
+        }
+
+        if (n.kind === 'harm') {
+          // 2f0 Harmonic shimmer: crisp hollow circle + inner dot
+          parts.push(`<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="${(r + 1.2).toFixed(1)}" fill="#000000" stroke="${col}" stroke-width="1.5"/>`);
+          parts.push(`<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="1.6" fill="${col}"/>`);
+        } else if (n.source === 'user') {
+          // User Direct Agency signature: crisp luminous diamond + double ring
+          const d = r + 1.6;
+          parts.push(`<polygon points="${nx.toFixed(1)},${(ny - d).toFixed(1)} ${(nx + d).toFixed(1)},${ny.toFixed(1)} ${nx.toFixed(1)},${(ny + d).toFixed(1)} ${(nx - d).toFixed(1)},${ny.toFixed(1)}" fill="${col}"/>`);
+        } else {
+          // Standard / Ghost note node
+          parts.push(`<circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="${r.toFixed(1)}" fill="${n.kind === 'ghost' ? '#000' : col}" stroke="${col}" stroke-width="${n.kind === 'ghost' ? 1.1 : 0}"/>`);
+        }
+
+        // Crisp non-overlapping pitch + articulation label on spacious / user / accented notes
+        if (isHover) {
+          const dtSec = ((state.scoreMs - n.tMs) / 1000).toFixed(1);
+          const gGlyph = n.kind === 'harm' ? ' ○' : (n.kind === 'dyad' ? ' ≈' : ' ·');
+          parts.push(`<text x="${nx.toFixed(1)}" y="${(ny - r - 9).toFixed(1)}" text-anchor="middle" fill="#ffffff" font-size="9.5">${sc.notes[n.lane]}${gGlyph} -${dtSec}s${isLocked ? ' · LOCK' : ''}</text>`);
+          lastPitchLblX = nx;
+        } else if (!isPruned && (n.source === 'user' || n.vel > 0.72 || n.kind === 'harm') && (nx - lastPitchLblX) > 34 && nx < playheadX - 14) {
+          const gMark = n.kind === 'harm' ? '○' : (n.kind === 'dyad' ? '≈' : '');
+          parts.push(`<text x="${nx.toFixed(1)}" y="${(ny - r - 5).toFixed(1)}" text-anchor="middle" fill="${mixWhiteOrange(heat, 0.44 * dimMul)}" font-size="8.5">${sc.notes[n.lane]}${gMark}</text>`);
+          lastPitchLblX = nx;
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // LAYER 4: FUTURE GHOST PROJECTION (AHEAD OF PLAYHEAD)
+      // -----------------------------------------------------------------------
+      if (drag.mode !== 'scrub') {
+        const yNow = laneToY(state.lastPitch);
+        state.futurePreview.forEach((fp, idx) => {
+          const fx = Math.min(w - 20, playheadX + fp.dtMs * geom.pxPerMs);
+          const fy = laneToY(fp.lane);
+          const alpha = (0.28 - idx * 0.08) * clamp(fp.prob * 4.2, 0.25, 1.0);
+          const cxMid = playheadX + (fx - playheadX) * 0.55;
+          parts.push(`<path d="M${playheadX},${yNow.toFixed(1)} Q${cxMid.toFixed(1)},${fy.toFixed(1)} ${fx.toFixed(1)},${fy.toFixed(1)}" fill="none" stroke="rgba(255,255,255,${alpha.toFixed(3)})" stroke-width="1" stroke-dasharray="2 4"/>`);
+          parts.push(`<circle cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="${(2.4 + fp.prob * 5).toFixed(1)}" fill="none" stroke="rgba(255,255,255,${(alpha * 1.35).toFixed(3)})" stroke-width="1"/>`);
+        });
+      }
+
+      // -----------------------------------------------------------------------
+      // LAYER 5: PLAYHEAD KNOB, SCRUB NEEDLE, MOTIF SWEEP & RADIAL PROTRACTOR HUD
+      // -----------------------------------------------------------------------
+      const phHeat = drag.mode === 'scrub' || drag.mode === 'playhead' ? 1.0 : signalHeat(state.playheadFlashPerf);
+      parts.push(`<line x1="${playheadX}" y1="0" x2="${playheadX}" y2="${h}" stroke="${mixWhiteOrange(phHeat, 0.42)}" stroke-width="1.2"/>`);
+
+      // Top scrub tab handle
+      parts.push(`<rect x="${playheadX - 18}" y="4" width="36" height="14" rx="2" fill="#000" stroke="${mixWhiteOrange(phHeat, 0.55)}" stroke-width="1"/>`);
+      parts.push(`<text x="${playheadX}" y="14" text-anchor="middle" fill="${mixWhiteOrange(phHeat, 0.9)}" font-size="8.5" letter-spacing="0.08em">NOW</text>`);
+
+      // Spaceship Steering Vectors (draw inactive first, actively dragged on top!)
+      if (drag.mode === 'vecA') {
+        parts.push(buildProtractorFanSvg(vecB, false, nowPerf));
+        parts.push(buildProtractorFanSvg(vecA, true, nowPerf));
+      } else if (drag.mode === 'vecB') {
+        parts.push(buildProtractorFanSvg(vecA, false, nowPerf));
+        parts.push(buildProtractorFanSvg(vecB, true, nowPerf));
+      } else {
+        parts.push(buildProtractorFanSvg(vecA, false, nowPerf));
+        parts.push(buildProtractorFanSvg(vecB, false, nowPerf));
+      }
+
+      // Central Main Playhead Knob (rendered crisp on top of tethers)
+      parts.push(`<circle cx="${playheadX}" cy="${playheadY}" r="9.5" fill="#000000" stroke="${mixWhiteOrange(phHeat, 0.95)}" stroke-width="1.8"/>`);
+      parts.push(`<circle cx="${playheadX}" cy="${playheadY}" r="3.2" fill="${phHeat > 0.08 ? SIGNAL_HEX : '#ffffff'}"/>`);
+
+      // Active Time-Scrub Rewind Needle & Fork Readout
+      if (drag.mode === 'scrub') {
+        const sx = timeToX(drag.scrubTargetMs);
+        const prunedCount = state.notes.filter(n => n.tMs > drag.scrubTargetMs + 2).length;
+        const dtSec = ((state.scoreMs - drag.scrubTargetMs) / 1000).toFixed(2);
+        parts.push(`<line x1="${sx.toFixed(1)}" y1="0" x2="${sx.toFixed(1)}" y2="${h}" stroke="${SIGNAL_HEX}" stroke-width="1.8"/>`);
+        parts.push(`<circle cx="${sx.toFixed(1)}" cy="${playheadY}" r="8" fill="${SIGNAL_HEX}" stroke="#ffffff" stroke-width="1.4"/>`);
+        const lblX = clamp(sx, railW + 95, playheadX - 95);
+        parts.push(`<rect x="${(lblX - 88).toFixed(1)}" y="24" width="176" height="20" rx="2" fill="#000" stroke="${SIGNAL_HEX}" stroke-width="1"/>`);
+        parts.push(`<text x="${lblX.toFixed(1)}" y="37" text-anchor="middle" fill="${SIGNAL_HEX}" font-size="9.5" font-weight="600" letter-spacing="0.05em">FORK -${dtSec}s · PRUNE ${prunedCount}</text>`);
+      }
+
+      // Drag-Select Motif Marquee
+      if (drag.mode === 'select' && Math.hypot(drag.curX - drag.startX, drag.curY - drag.startY) > 12) {
+        const xLo = Math.min(drag.startX, drag.curX);
+        const xHi = Math.max(drag.startX, drag.curX);
+        parts.push(`<rect x="${xLo.toFixed(1)}" y="${geom.padTop - 8}" width="${(xHi - xLo).toFixed(1)}" height="${h - geom.padTop - geom.padBot + 16}" fill="rgba(255,90,31,0.08)" stroke="${SIGNAL_HEX}" stroke-width="1" stroke-dasharray="3 3"/>`);
+        parts.push(`<text x="${(xLo + 6).toFixed(1)}" y="${geom.padTop + 6}" fill="${SIGNAL_HEX}" font-size="9" letter-spacing="0.08em">LOCK MOTIF SPAN</text>`);
+      }
+
+      svg.innerHTML = parts.join('');
+    }
+
+    // =========================================================================
+    // 9. STEPPED ATTENTION METERS & UI CHROME SYNC
+    // =========================================================================
+    function initSteppedMetersDom() {
+      const container = document.getElementById('attn-meters');
+      container.innerHTML = meterState.map((m, idx) => `
+        <div class="meter-col" id="meter-col-${idx}">
+          <div class="meter-head">
+            <span>${m.label}</span>
+            <span class="m-val" id="meter-val-${idx}">00%</span>
+          </div>
+          <div class="meter-cells" id="meter-cells-${idx}">
+            ${Array.from({ length: 10 }, (_, c) => `<span class="seg" id="mseg-${idx}-${c}"></span>`).join('')}
+          </div>
+          <div class="meter-sub">${m.sub}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderSteppedMeters(nowPerf) {
+      for (let i = 0; i < meterState.length; i++) {
+        const m = meterState[i];
+        const valEl = document.getElementById(`meter-val-${i}`);
+        if (valEl) valEl.textContent = String(Math.round(m.value * 100)).padStart(2, '0') + '%';
+        for (let c = 0; c < 10; c++) {
+          const el = document.getElementById(`mseg-${i}-${c}`);
+          if (!el) continue;
+          const filled = c < m.steps;
+          const heat = signalHeat(m.cells[c].changedPerf);
+          if (heat > 0.03) {
+            el.style.background = mixWhiteOrange(heat, filled ? 0.92 : 0.14);
+          } else {
+            el.style.background = filled
+              ? (i === 5 ? '#ffffff' : 'rgba(255,255,255,0.78)')
+              : 'rgba(255,255,255,0.10)';
+          }
+        }
+      }
+    }
+
+    function syncVectorChips() {
+      const aChip = document.getElementById('chip-vec-a');
+      const aTxt = document.getElementById('chip-vec-a-text');
+      if (vecA.strength > 0.01) {
+        aChip.className = 'vec-chip active' + (signalHeat(vecA.hotPerf) > 0.08 ? ' hot' : '');
+        aTxt.textContent = `${VEC_A_SECTORS[vecA.sector].short} ${Math.round(vecA.strength * 100)}%`;
+      } else {
+        aChip.className = 'vec-chip';
+        aTxt.textContent = 'HARM · NEUTRAL';
+      }
+
+      const bChip = document.getElementById('chip-vec-b');
+      const bTxt = document.getElementById('chip-vec-b-text');
+      if (vecB.strength > 0.01) {
+        bChip.className = 'vec-chip active' + (signalHeat(vecB.hotPerf) > 0.08 ? ' hot' : '');
+        bTxt.textContent = `${VEC_B_SECTORS[vecB.sector].short} ${Math.round(vecB.strength * 100)}%`;
+      } else {
+        bChip.className = 'vec-chip';
+        bTxt.textContent = 'TIME · NEUTRAL';
+      }
+    }
+
+    function syncLockChip() {
+      const chip = document.getElementById('chip-lock');
+      const txt = document.getElementById('chip-lock-text');
+      const sc = SCALES[activeScaleKey];
+      if (state.lockedIds.length > 0) {
+        const lanes = state.lockedIds
+          .map(id => state.notes.find(n => n.id === id))
+          .filter(n => n && n.lane != null)
+          .map(n => sc.notes[n.lane]);
+        chip.className = 'vec-chip active' + (signalHeat(state.lockFlashPerf) > 0.08 ? ' hot' : '');
+        txt.textContent = `LOCK · ${lanes.slice(0, 3).join('-')}${lanes.length > 3 ? '…' : ''}`;
+      } else {
+        chip.className = 'vec-chip';
+        txt.textContent = 'LOCK · OFF';
+      }
+    }
+
+    function syncPlayButton() {
+      const btn = document.getElementById('btn-play');
+      const lbl = document.getElementById('btn-play-label');
+      btn.classList.toggle('active', state.playing);
+      lbl.textContent = state.playing ? 'PAUSE' : 'PLAY';
+    }
+
+    function toggleFlow() {
+      ensureAudio();
+      state.playing = !state.playing;
+      state.lastFramePerf = performance.now();
+      if (state.playing) {
+        state.nextGenScoreMs = state.scoreMs + 60;
+        state.playheadFlashPerf = performance.now();
+      }
+      syncPlayButton();
+    }
+
+    // =========================================================================
+    // 10. ANIMATION & REALTIME SCHEDULING LOOP
+    // =========================================================================
+    function tick(nowPerf) {
+      const dtMs = clamp(nowPerf - state.lastFramePerf, 0, 80);
+      state.lastFramePerf = nowPerf;
+
+      if (state.playing && drag.mode !== 'scrub') {
+        state.scoreMs += dtMs;
+        // Organic elastic scheduler (catches up cleanly, max 2 events per frame)
+        let guard = 0;
+        while (state.scoreMs >= state.nextGenScoreMs && guard < 2) {
+          stepAutonomousEngine(nowPerf);
+          guard++;
+        }
+      }
+
+      // Cool active hot chips smoothly once decay finishes
+      const playBtn = document.getElementById('btn-play');
+      playBtn.classList.toggle('hot', state.playing && signalHeat(state.playheadFlashPerf) > 0.08);
+      if (vecA.hotPerf && nowPerf - vecA.hotPerf > SIGNAL_DECAY_MS && nowPerf - vecA.hotPerf < SIGNAL_DECAY_MS + 40) syncVectorChips();
+      if (vecB.hotPerf && nowPerf - vecB.hotPerf > SIGNAL_DECAY_MS && nowPerf - vecB.hotPerf < SIGNAL_DECAY_MS + 40) syncVectorChips();
+      if (state.lockFlashPerf && nowPerf - state.lockFlashPerf > SIGNAL_DECAY_MS && nowPerf - state.lockFlashPerf < SIGNAL_DECAY_MS + 40) syncLockChip();
+
+      renderCanvas(nowPerf);
+      renderSvg(nowPerf);
+      renderSteppedMeters(nowPerf);
+      requestAnimationFrame(tick);
+    }
+
+    // =========================================================================
+    // 11. CONTROLS, DRAWERS & INITIALIZATION
+    // =========================================================================
+    function closeDrawers() {
+      document.getElementById('drawer-gemini').classList.remove('open');
+      document.getElementById('drawer-notes').classList.remove('open');
+      document.getElementById('btn-gemini').classList.remove('open');
+      document.getElementById('btn-notes').classList.remove('open');
+    }
+
+    document.getElementById('btn-play').addEventListener('click', toggleFlow);
+
+    document.getElementById('sel-scale').addEventListener('change', (e) => {
+      activeScaleKey = e.target.value;
+      cancelInFlightGemini('scale');
+      const attn = computeAttentionAndProbs(state.scoreMs);
+      state.lastProbs = attn.probs;
+      computeFutureGhostPreview();
+      syncLockChip();
+      updatePanLangPreview();
+      playDetentTick(0, 0.5);
+    });
+
+    document.getElementById('sel-timbre').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val.startsWith('bank:')) {
+        const bankId = val.slice(5);
+        activeBankId = bankId;
+        activeProfileKey = bankId.replace('yishama-', '');
+        ensureAudio();
+        ensureStudioBank(bankId);
+      } else {
+        activeBankId = null;
+        activeProfileKey = val.slice(4);
+        updateTimbreBadge('DSP', '');
+      }
+      playDetentTick(0, 0.45);
+    });
+
+    document.getElementById('btn-gemini').addEventListener('click', () => {
+      const d = document.getElementById('drawer-gemini');
+      const open = !d.classList.contains('open');
+      closeDrawers();
+      if (open) {
+        d.classList.add('open');
+        document.getElementById('btn-gemini').classList.add('open');
+        updatePanLangPreview();
+      }
+    });
+    document.getElementById('close-gemini').addEventListener('click', closeDrawers);
+
+    document.getElementById('btn-notes').addEventListener('click', () => {
+      const d = document.getElementById('drawer-notes');
+      const open = !d.classList.contains('open');
+      closeDrawers();
+      if (open) {
+        d.classList.add('open');
+        document.getElementById('btn-notes').classList.add('open');
+      }
+    });
+    document.getElementById('close-notes').addEventListener('click', closeDrawers);
+
+    // Memory-only API key listener
+    const keyInput = document.getElementById('gem-api-key');
+    keyInput.addEventListener('input', () => {
+      gemini.apiKey = keyInput.value.trim();
+      if (gemini.apiKey) setGeminiStatus('READY', false);
+      else setGeminiStatus('LOCAL', false);
+    });
+    document.getElementById('btn-gem-clear').addEventListener('click', () => {
+      cancelInFlightGemini('cleared');
+      gemini.apiKey = '';
+      keyInput.value = '';
+      gemini.moveProbs = null;
+      gemini.harmProbs = null;
+      gemini.focalBias.fill(0);
+      setGeminiStatus('LOCAL', false);
+    });
+    document.getElementById('sel-gem-cadence').addEventListener('change', (e) => {
+      gemini.cadence = e.target.value;
+    });
+    document.getElementById('btn-gem-query').addEventListener('click', () => {
+      queryGeminiDecisions();
+    });
+
+    // Bottom chip instant reset clicks
+    document.getElementById('chip-vec-a-x').addEventListener('click', (e) => { e.stopPropagation(); resetVector(vecA); });
+    document.getElementById('chip-vec-b-x').addEventListener('click', (e) => { e.stopPropagation(); resetVector(vecB); });
+    document.getElementById('chip-lock-x').addEventListener('click', (e) => { e.stopPropagation(); toggleLockOnIds([]); });
+    document.getElementById('chip-vec-a').addEventListener('dblclick', () => resetVector(vecA));
+    document.getElementById('chip-vec-b').addEventListener('dblclick', () => resetVector(vecB));
+
+    window.addEventListener('resize', measureStage);
+
+    // Boot
+    initSteppedMetersDom();
+    measureStage();
+    const initAttn = computeAttentionAndProbs(0);
+    state.lastProbs = initAttn.probs;
+    computeFutureGhostPreview();
+    syncVectorChips();
+    syncLockChip();
+    updatePanLangPreview();
+    requestAnimationFrame(tick);
+  })();
+  </script>
+</body>
+</html>

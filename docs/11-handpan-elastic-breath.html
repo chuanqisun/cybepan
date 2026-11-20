@@ -1,0 +1,4229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11 — Elastic Breath-Pendulum &amp; Kinesthetic String-Harp</title>
+  <style>
+    :root {
+      --paper: #f8f7f3;
+      --paper-stage: #fbfaf6;
+      --paper-panel: #f1efe8;
+      --ink: #151517;
+      --ink-2: #57554f;
+      --ink-3: #8e8b82;
+      --rule: #dedcd5;
+      --rule-strong: #c8c5bc;
+      --signal: #e5481b;
+      --signal-soft: rgba(229, 72, 27, 0.11);
+      --signal-mid: rgba(229, 72, 27, 0.28);
+      --slate: #2b6777;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ==================== TOP UTILITY BAR ==================== */
+    header.topbar {
+      height: 50px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--paper);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-num {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 2px 6px;
+      background: var(--ink);
+      color: var(--paper);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.06em;
+      color: var(--ink-2);
+      padding: 2px 7px;
+      border: 1px solid var(--rule);
+      border-radius: 99px;
+      background: var(--paper-stage);
+      flex-shrink: 0;
+    }
+
+    .live-led {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ink-3);
+      transition: background 140ms ease, box-shadow 140ms ease;
+    }
+    .live-led.on {
+      background: var(--signal);
+      box-shadow: 0 0 0 3px var(--signal-soft);
+    }
+    .live-led.echo {
+      background: var(--slate);
+      box-shadow: 0 0 0 3px rgba(43, 103, 119, 0.16);
+    }
+
+    .utility-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pill-select-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--rule);
+      border-radius: 99px;
+      padding: 0 9px;
+      height: 28px;
+      background: var(--paper-stage);
+      font-size: 0.74rem;
+      color: var(--ink-2);
+    }
+
+    .pill-select-wrap span {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-3);
+    }
+
+    .pill-select-wrap select {
+      border: none;
+      background: transparent;
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 0.75rem;
+      font-weight: 500;
+      outline: none;
+      cursor: pointer;
+      padding-right: 2px;
+    }
+
+    .util-btn {
+      height: 28px;
+      padding: 0 11px;
+      border: 1px solid var(--rule);
+      border-radius: 99px;
+      background: var(--paper-stage);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 0.74rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 120ms ease, background 120ms ease;
+    }
+    .util-btn:hover {
+      border-color: var(--ink-2);
+      background: #fff;
+    }
+    .util-btn.active {
+      border-color: var(--ink);
+      background: var(--ink);
+      color: var(--paper);
+    }
+    .util-btn .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ink-3);
+    }
+    .util-btn .dot.live { background: var(--signal); }
+
+    /* ==================== MAIN UNIFIED INSTRUMENT STAGE ==================== */
+    main.workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 20px 10px;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .stage-shell {
+      position: relative;
+      flex: 1;
+      min-height: 430px;
+      background: var(--paper-stage);
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    canvas#stage-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    /* Floating Precision Stage HUD Overlays */
+    .stage-hud-top {
+      position: absolute;
+      top: 10px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .hud-left, .hud-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      pointer-events: auto;
+    }
+
+    .stage-tag {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-2);
+      background: rgba(251, 250, 246, 0.88);
+      padding: 3px 7px;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      backdrop-filter: blur(4px);
+    }
+
+    .rubato-pill {
+      font-family: var(--font-mono);
+      font-size: 0.67rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      border-radius: 2px;
+      border: 1px solid var(--signal-mid);
+      background: var(--signal-soft);
+      color: var(--signal);
+      transition: all 140ms ease;
+    }
+    .rubato-pill.rigid {
+      border-color: var(--rule-strong);
+      background: var(--paper-panel);
+      color: var(--ink-2);
+    }
+
+    /* Instant A/B Comparison Switch on Pendulum Header */
+    .ab-switch {
+      display: inline-flex;
+      border: 1px solid var(--rule-strong);
+      border-radius: 3px;
+      background: var(--paper-panel);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .ab-btn {
+      border: none;
+      background: transparent;
+      color: var(--ink-2);
+      font-family: var(--font-mono);
+      font-size: 0.67rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      padding: 3px 9px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: all 110ms ease;
+    }
+    .ab-btn:hover { color: var(--ink); }
+    .ab-btn.active-organic {
+      background: var(--signal);
+      color: #fff;
+    }
+    .ab-btn.active-rigid {
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    .readout-strip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink-2);
+      background: rgba(251, 250, 246, 0.9);
+      padding: 3px 9px;
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+    }
+    .readout-strip strong {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .readout-strip strong.hot {
+      color: var(--signal);
+    }
+
+    .stage-toast {
+      position: absolute;
+      bottom: 10px;
+      left: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+      z-index: 4;
+    }
+
+    .toast-pill {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--ink-2);
+      background: rgba(251, 250, 246, 0.92);
+      border: 1px solid var(--rule);
+      padding: 3px 9px;
+      border-radius: 2px;
+      transition: opacity 220ms ease;
+    }
+    .toast-pill.pin {
+      border-color: var(--signal);
+      color: var(--signal);
+      background: rgba(255, 247, 244, 0.95);
+    }
+
+    .unpin-btn {
+      display: none;
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      padding: 3px 8px;
+      border: 1px solid var(--signal);
+      background: var(--signal);
+      color: #fff;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .unpin-btn.show { display: inline-flex; }
+
+    /* ==================== BRAUN 3-CONTROL MINIMAL CONSOLE ==================== */
+    section.braun-console {
+      flex-shrink: 0;
+      display: grid;
+      grid-template-columns: auto 1fr 1fr;
+      align-items: center;
+      gap: 20px;
+      padding: 11px 16px;
+      background: var(--paper-stage);
+      border: 1px solid var(--rule);
+      border-radius: 4px;
+    }
+
+    @media (max-width: 960px) {
+      section.braun-console {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+    }
+
+    .ctrl-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ctrl-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .ctrl-label {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-2);
+    }
+
+    .ctrl-val {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .ctrl-val.accent { color: var(--signal); }
+
+    /* Control 1: 3-Way Agency Mode */
+    .mode-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .seg-group {
+      display: inline-flex;
+      background: var(--paper-panel);
+      border: 1px solid var(--rule-strong);
+      border-radius: 3px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .seg-btn {
+      border: none;
+      background: transparent;
+      color: var(--ink-2);
+      font-family: var(--font-sans);
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 2px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 120ms ease;
+    }
+    .seg-btn:hover { color: var(--ink); }
+    .seg-btn.active {
+      background: var(--ink);
+      color: var(--paper);
+      font-weight: 600;
+    }
+
+    .flow-play-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--rule-strong);
+      background: var(--paper-stage);
+      color: var(--ink);
+      font-size: 0.75rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 120ms ease;
+      flex-shrink: 0;
+    }
+    .flow-play-btn:hover {
+      border-color: var(--ink);
+    }
+    .flow-play-btn.playing {
+      border-color: var(--signal);
+      background: var(--signal);
+      color: #fff;
+    }
+
+    /* Braun Precision Sliders */
+    .fader-wrap {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    input[type="range"].braun-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 22px;
+      background: transparent;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    input[type="range"].braun-slider:focus { outline: none; }
+
+    input[type="range"].braun-slider::-webkit-slider-runnable-track {
+      height: 3px;
+      background: var(--rule-strong);
+      border-radius: 2px;
+    }
+
+    input[type="range"].braun-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 20px;
+      margin-top: -8.5px;
+      background: var(--ink);
+      border: 2px solid var(--paper-stage);
+      border-radius: 2px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+      transition: background 120ms ease, transform 80ms ease;
+    }
+    input[type="range"].braun-slider:hover::-webkit-slider-thumb {
+      background: var(--signal);
+    }
+
+    input[type="range"].braun-slider::-moz-range-track {
+      height: 3px;
+      background: var(--rule-strong);
+      border-radius: 2px;
+    }
+    input[type="range"].braun-slider::-moz-range-thumb {
+      width: 14px;
+      height: 20px;
+      background: var(--ink);
+      border: 2px solid var(--paper-stage);
+      border-radius: 2px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+    }
+
+    .fader-ends {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.62rem;
+      color: var(--ink-3);
+      letter-spacing: 0.02em;
+    }
+
+    /* ==================== QUIET KINESTHETIC KEYSTRIP FOOTER ==================== */
+    footer.keystrip {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      padding: 0 2px 2px;
+      font-family: var(--font-mono);
+      font-size: 0.67rem;
+      color: var(--ink-2);
+    }
+
+    .key-clusters {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+    }
+
+    .kgroup {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .kgroup-lbl {
+      color: var(--ink-3);
+      font-size: 0.63rem;
+      margin-right: 2px;
+    }
+
+    .kcap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 19px;
+      height: 19px;
+      padding: 0 4px;
+      border: 1px solid var(--rule-strong);
+      border-radius: 2px;
+      background: var(--paper-stage);
+      color: var(--ink);
+      font-size: 0.64rem;
+      font-weight: 600;
+      transition: all 70ms ease;
+    }
+    .kcap.wide { padding: 0 7px; }
+    .kcap.lit {
+      background: var(--signal);
+      border-color: var(--signal);
+      color: #fff;
+      transform: translateY(1px);
+    }
+
+    .keystrip-telemetry {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--ink-3);
+    }
+    .keystrip-telemetry strong { color: var(--ink); font-weight: 600; }
+
+    /* ==================== SLIDE-OVER DRAWERS (GEMINI PANLANG & RESEARCH NOTES) ==================== */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(21, 21, 23, 0.16);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+      z-index: 20;
+    }
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    aside.drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: min(440px, 94vw);
+      height: 100vh;
+      background: var(--paper);
+      border-left: 1px solid var(--rule-strong);
+      box-shadow: -12px 0 32px rgba(21, 21, 23, 0.08);
+      transform: translateX(102%);
+      transition: transform 210ms cubic-bezier(0.22, 1, 0.36, 1);
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+    }
+    aside.drawer.wide {
+      width: min(560px, 95vw);
+    }
+    aside.drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-head {
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .drawer-head h2 {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .drawer-close {
+      border: 1px solid var(--rule-strong);
+      background: var(--paper-stage);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 3px 9px;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .drawer-close:hover { border-color: var(--ink); }
+
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 18px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      font-size: 0.83rem;
+      line-height: 1.56;
+    }
+
+    .drawer-section {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-bottom: 13px;
+      border-bottom: 1px solid var(--rule);
+    }
+    .drawer-section:last-child { border-bottom: none; }
+
+    .drawer-section h3 {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: 0.71rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-2);
+    }
+    .drawer-section p {
+      margin: 0;
+      color: var(--ink-2);
+    }
+
+    .key-input-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .ephemeral-input {
+      flex: 1;
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--rule-strong);
+      border-radius: 2px;
+      background: #fff;
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      -webkit-text-security: disc;
+      outline: none;
+    }
+    .ephemeral-input:focus {
+      border-color: var(--ink);
+    }
+
+    .mini-btn {
+      height: 32px;
+      padding: 0 11px;
+      border: 1px solid var(--rule-strong);
+      border-radius: 2px;
+      background: var(--paper-stage);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .mini-btn:hover { border-color: var(--ink); background: #fff; }
+    .mini-btn.primary {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: var(--paper);
+    }
+    .mini-btn.primary:hover { background: var(--signal); border-color: var(--signal); }
+
+    .toggle-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.78rem;
+      color: var(--ink);
+    }
+
+    .code-box {
+      font-family: var(--font-mono);
+      font-size: 0.73rem;
+      line-height: 1.5;
+      background: var(--paper-panel);
+      border: 1px solid var(--rule);
+      border-radius: 2px;
+      padding: 9px 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--ink);
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--ink-2);
+    }
+    .metric-row strong { color: var(--ink); }
+
+    .note-card {
+      background: var(--paper-stage);
+      border: 1px solid var(--rule);
+      border-left: 3px solid var(--ink);
+      padding: 10px 12px;
+      border-radius: 2px;
+    }
+    .note-card.signal { border-left-color: var(--signal); }
+    .note-card strong {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--ink);
+      margin-bottom: 3px;
+    }
+    .note-card p {
+      font-size: 0.78rem;
+      color: var(--ink-2);
+      margin: 0;
+    }
+    .note-card code {
+      font-family: var(--font-mono);
+      font-size: 0.73rem;
+      background: var(--paper-panel);
+      padding: 1px 4px;
+      border-radius: 2px;
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <!-- ==================== SLIM TOP UTILITY BAR ==================== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-num">11</span>
+      <span class="brand-title">Elastic Breath-Pendulum &amp; Kinesthetic String-Harp</span>
+      <span class="live-badge">
+        <span class="live-led" id="status-led"></span>
+        <span id="status-text">READY</span>
+      </span>
+    </div>
+
+    <div class="utility-pills">
+      <label class="pill-select-wrap">
+        <span>Scale</span>
+        <select id="scale-select" aria-label="Handpan Scale"></select>
+      </label>
+
+      <label class="pill-select-wrap">
+        <span>Timbre</span>
+        <select id="timbre-select" aria-label="Timbre Profile">
+          <optgroup label="Studio Soundbanks (Auto DSP Fallback)">
+            <option value="bank:yishama-stainless" selected>Yishama Stainless (Bank)</option>
+            <option value="bank:yishama-ember">Yishama Ember (Bank)</option>
+            <option value="bank:yishama-nitrided">Classic Nitrided (Bank)</option>
+          </optgroup>
+          <optgroup label="Live Coupled-Bloom DSP">
+            <option value="dsp:stainless">Yishama Stainless (DSP)</option>
+            <option value="dsp:ember">Ember Shimmer (DSP)</option>
+            <option value="dsp:nitrided">Nitrided Crisp (DSP)</option>
+            <option value="dsp:ceramic">Raw Ceramic (DSP)</option>
+          </optgroup>
+        </select>
+      </label>
+
+      <button type="button" class="util-btn" id="btn-gemini-drawer">
+        <span class="dot" id="gemini-pill-badge"></span>
+        <span>Gemini PanLang</span>
+      </button>
+
+      <button type="button" class="util-btn" id="btn-notes-drawer">Research Notes</button>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN WORKSPACE ==================== -->
+  <main class="workspace">
+    <!-- UNIFIED INSTRUMENT = TIME VISUALIZER = SCORE -->
+    <div class="stage-shell" id="stage-container">
+      <div class="stage-hud-top">
+        <div class="hud-left">
+          <span class="stage-tag">Breath-Pendulum · Todd Phrase-Arch</span>
+          <span class="rubato-pill" id="rubato-state-pill">ELASTIC BREATH</span>
+        </div>
+
+        <div class="hud-right">
+          <div class="ab-switch" role="group" aria-label="Rubato A/B Comparison">
+            <button type="button" class="ab-btn active-organic" id="btn-ab-organic">Organic Rubato</button>
+            <button type="button" class="ab-btn" id="btn-ab-rigid">Rigid Grid</button>
+          </div>
+
+          <div class="readout-strip">
+            <span><strong id="readout-bpm">94</strong> BPM</span>
+            <span>IOI <strong id="readout-ioi">320ms</strong></span>
+            <span>Stretch <strong id="readout-stretch" class="hot">1.00×</strong></span>
+            <span>Phrase <strong id="readout-phrase">0%</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <canvas id="stage-canvas" aria-label="Elastic Breath-Pendulum and 9-Ribbon Harmonic String Harp"></canvas>
+
+      <div class="stage-toast">
+        <span class="toast-pill" id="stage-toast">Tap keys (F/J), pluck or vertical-strum ribbons, drag pendulum bob, or click any past bead to pin attention.</span>
+        <button type="button" class="unpin-btn" id="btn-unpin-attn">Unpin Attention ×</button>
+      </div>
+    </div>
+
+    <!-- RADICAL MINIMALISM: ONLY 3 BRAUN-STYLE ESSENTIAL CONTROLS -->
+    <section class="braun-console" aria-label="Core Controls">
+      <!-- Control 1: Agency Mode -->
+      <div class="ctrl-block">
+        <div class="ctrl-head">
+          <span class="ctrl-label">01 · Agency Mode</span>
+          <span class="ctrl-val" id="val-mode">Direct Touch</span>
+        </div>
+        <div class="mode-row">
+          <div class="seg-group" role="group" aria-label="Agency Mode">
+            <button type="button" class="seg-btn active" id="btn-mode-direct">Direct Touch</button>
+            <button type="button" class="seg-btn" id="btn-mode-echo">Call &amp; Echo</button>
+            <button type="button" class="seg-btn" id="btn-mode-flow">Master Flow</button>
+          </div>
+          <button type="button" class="flow-play-btn" id="btn-flow-play" title="Play / Pause Master Flow">▶</button>
+        </div>
+      </div>
+
+      <!-- Control 2: Rubato Elasticity -->
+      <div class="ctrl-block">
+        <div class="ctrl-head">
+          <span class="ctrl-label">02 · Rubato Elasticity</span>
+          <span class="ctrl-val accent" id="val-elasticity">74% · Speech-Rubato</span>
+        </div>
+        <div class="fader-wrap">
+          <input type="range" class="braun-slider" id="slider-elasticity" min="0" max="100" value="74" aria-label="Rubato Elasticity">
+          <div class="fader-ends">
+            <span>0% Rigid Grid</span>
+            <span>Todd + KTH Breath</span>
+            <span>100% Free Rubato</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Control 3: Emotional Arc / Tension -->
+      <div class="ctrl-block">
+        <div class="ctrl-head">
+          <span class="ctrl-label">03 · Emotional Arc / Tension</span>
+          <span class="ctrl-val" id="val-tension">46% · Warm Flow</span>
+        </div>
+        <div class="fader-wrap">
+          <input type="range" class="braun-slider" id="slider-tension" min="0" max="100" value="46" aria-label="Emotional Arc and Tension">
+          <div class="fader-ends">
+            <span>Grounded Calm (i / iv)</span>
+            <span>Balanced</span>
+            <span>Poignant Lift (bVI / bVII)</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUBTLE INTERACTIVE KEYSTRIP HINT FOOTER -->
+    <footer class="keystrip" id="keystrip-bar">
+      <div class="key-clusters">
+        <span class="kgroup"><span class="kgroup-lbl">L-LIFT</span><span class="kcap" data-k="q">Q</span><span class="kcap" data-k="w">W</span><span class="kcap" data-k="e">E</span><span class="kcap" data-k="r">R</span></span>
+        <span class="kgroup"><span class="kgroup-lbl">L-MID</span><span class="kcap" data-k="a">A</span><span class="kcap" data-k="s">S</span><span class="kcap" data-k="d">D</span><span class="kcap" data-k="f">F</span></span>
+        <span class="kgroup"><span class="kgroup-lbl">L-LOW</span><span class="kcap" data-k="z">Z</span><span class="kcap" data-k="x">X</span><span class="kcap" data-k="c">C</span><span class="kcap" data-k="v">V</span></span>
+        <span class="kgroup"><span class="kcap wide" data-k=" ">SPACE Tak/Gu</span></span>
+        <span class="kgroup"><span class="kgroup-lbl">R-MID</span><span class="kcap" data-k="j">J</span><span class="kcap" data-k="k">K</span><span class="kcap" data-k="l">L</span><span class="kcap" data-k=";">;</span></span>
+        <span class="kgroup"><span class="kgroup-lbl">R-LIFT</span><span class="kcap" data-k="u">U</span><span class="kcap" data-k="i">I</span><span class="kcap" data-k="o">O</span><span class="kcap" data-k="p">P</span></span>
+        <span class="kgroup"><span class="kgroup-lbl">R-LOW</span><span class="kcap" data-k="m">M</span><span class="kcap" data-k=",">,</span><span class="kcap" data-k=".">.</span><span class="kcap" data-k="/">/</span></span>
+      </div>
+
+      <div class="keystrip-telemetry">
+        <span>Chord <strong id="tel-chord-mini">i</strong></span>
+        <span id="tel-hold-mini">Hold=Bloom · Tap=Crisp · L+R=Dyad · 1–9=Ribbons</span>
+      </div>
+    </footer>
+  </main>
+
+  <!-- ==================== DRAWER BACKDROP ==================== -->
+  <div class="drawer-backdrop" id="drawer-backdrop"></div>
+
+  <!-- ==================== GEMINI PANLANG DRAWER ==================== -->
+  <aside class="drawer" id="gemini-drawer" aria-label="Gemini PanLang Decisions Advisor">
+    <div class="drawer-head">
+      <h2>Gemini PanLang · Decisions Echo Advisor</h2>
+      <button type="button" class="drawer-close" id="btn-close-gemini">Close</button>
+    </div>
+
+    <div class="drawer-body">
+      <div class="drawer-section">
+        <h3>Ephemeral API Key (Memory Only)</h3>
+        <p>Optional. Never stored in localStorage, cookies, or forms. Without a key, live PanLang encoding and the full local Todd+KTH rubato &amp; attention engine run seamlessly offline.</p>
+        <div class="key-input-row">
+          <input
+            type="text"
+            id="gem-api-key"
+            class="ephemeral-input"
+            placeholder="Paste Gemini API key (memory-only)…"
+            autocomplete="new-password"
+            name="ephemeral_panlang_token_x"
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+            spellcheck="false"
+            autocorrect="off"
+            autocapitalize="off"
+            readonly
+          >
+          <button type="button" class="mini-btn" id="btn-clear-key">Clear</button>
+        </div>
+        <div class="toggle-line">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;">
+            <input type="checkbox" id="gem-auto-toggle" checked>
+            <span>Auto-advise on phrase &amp; echo turn (~45 tok)</span>
+          </label>
+          <button type="button" class="mini-btn primary" id="btn-gem-test">Query Now</button>
+        </div>
+        <div class="metric-row">
+          <span>Status: <strong id="gem-status">LOCAL ENGINE</strong></span>
+          <span>Latency: <strong id="gem-latency">—</strong></span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <h3>Live PanLang Prompt (~35–55 Tokens)</h3>
+        <p>Encodes both pitch (`0..8`, `T`, `G`, `~`) and real elastic microtiming (`:` bloom hold, `-` 45ms cascade, `,` Luftpause breath, `^` accel, `v` rit, `*` apex).</p>
+        <div class="code-box" id="gem-panlang-view">PAN D-Kurd | bar 1/4 u=.00 | ch i | tens .46 | elas .74 | 320ms
+seq: (waiting for first notes…)</div>
+      </div>
+
+      <div class="drawer-section">
+        <h3>3-Question Decisions Output (`gemini-decision-1`)</h3>
+        <p>Direct REST `v1beta/decisions` with `AbortController`: `rubato_shape` (4), `harmonic_pull` (6), `focal_deg` (0..8).</p>
+        <div class="code-box" id="gem-answers-view">Local advisor active — enter an API key above to stream live gemini-decision-1 probability vectors.</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==================== RESEARCH NOTES DRAWER ==================== -->
+  <aside class="drawer wide" id="notes-drawer" aria-label="Computational Research Notes">
+    <div class="drawer-head">
+      <h2>Research Notes · Organic Handpan Rubato &amp; Agency</h2>
+      <button type="button" class="drawer-close" id="btn-close-notes">Close</button>
+    </div>
+
+    <div class="drawer-body">
+      <div class="note-card signal">
+        <strong>1. Todd Phrase-Arch Model (1985 / 1992)</strong>
+        <p>Human musicians do not play on a flat eighth-note clock. Across a 4-bar phrase (`u ∈ [0,1]`), velocity and tempo swell smoothly in an asymmetric parabolic arch: <em>accelerando</em> + crescendo into a golden-section climax near <code>u = 0.62</code>, a fleeting apex poise, then quadratic <em>ritardando</em> + warm decrescendo into the cadential landing. Grab the vermilion apex diamond directly on the arch to reshape peak location and expressive depth live.</p>
+      </div>
+
+      <div class="note-card">
+        <strong>2. KTH Punctuation &amp; Leap-Proportional Luftpause</strong>
+        <p>Inspired by Friberg, Bresin &amp; Sundberg's KTH performance grammar: wide melodic leaps (≥ 4 scale degrees) or dramatic drops onto the central Ding automatically insert a preparatory micro-breath (<code>+18%</code> to <code>+45%</code> IOI), matching physical hand travel across steel shells and giving the ear space to group the phrase. Sub-phrase &amp; cadential boundaries open into vocal <code>Luftpause ○</code> inhalations.</p>
+      </div>
+
+      <div class="note-card">
+        <strong>3. Agogic Accent, Melodic Charge &amp; Stolen-Time Payback</strong>
+        <p>True <em>rubato</em> literally means "stolen time." Color degrees (<code>^b6</code>, <code>^b7</code>), phrase-apex tones, and tonic Ding landings borrow <code>+12%</code> to <code>+28%</code> extra duration, tracked in a live rubato-debt accumulator. Passing scalar notes gently repay that borrowed time (<code>−8%</code> to <code>−18%</code>), keeping the macro breath buoyant and grounded rather than drifting.</p>
+      </div>
+
+      <div class="note-card">
+        <strong>4. Cascade Pickups &amp; Stainless Bloom-Aware Pacing</strong>
+        <p>Yishama stainless steel pantams exhibit a nonlinear <code>140–185 ms</code> delayed bloom where <code>2f₀</code> (octave) and <code>3f₀</code> (compound fifth) swell after impact with inverted decay tails (<code>τ₃ &gt; τ₂ &gt; τ₁</code>). Heavy Ding strikes and rolled dyads automatically open wider trailing space so the metallic halo blooms cleanly, contrasted against tight <code>42–68 ms</code> ornamental grace-note cascades.</p>
+      </div>
+
+      <div class="note-card">
+        <strong>5. Embodied Kinesthetic Agency &amp; Hold Articulation</strong>
+        <p>In <strong>Direct Touch</strong>, audio fires in <code>&lt;3 ms</code> with zero grid quantization. Key hold duration directly sculpts physics: crisp taps (<code>&lt;115 ms</code>) palm-damp the steel envelope; lingering holds (<code>&gt;260 ms</code>) swell sympathetic <code>2f₀</code> overtones and suspend the Breath-Pendulum. In <strong>Call &amp; Echo</strong>, pause <code>~700 ms</code> after any phrase and the partner musically answers while faithfully preserving your exact rubato elasticity profile.</p>
+      </div>
+
+      <div class="note-card">
+        <strong>6. Non-Literal 9-Ribbon Harp &amp; Continuous Attention Arcs</strong>
+        <p>Replacing the circular pan with 9 pitch-spaced horizontal steel ribbons unifies instrument, elastic-time score, and attention visualizer. Past impulse beads stream leftward at constant wall-clock speed so rubato breath gaps vs 45ms cascades become immediately visible. Arched Bezier filaments connect influential memory beads back to the Strike Bar: horizontal arc length naturally encodes memory horizon, while stroke weight &amp; vermilion ink encode active pull strength. Click any past bead to pin attention.</p>
+      </div>
+    </div>
+  </aside>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // =========================================================================
+    // 1. Scales, Pitch Geometry & Musical Theory Tables
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function noteToSemitone(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 0;
+      return NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12;
+    }
+
+    function noteToFreq(note) {
+      return 440 * Math.pow(2, noteToSemitone(note) / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (Aeolian)',
+        short: 'D-Kurd',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        colorDegs: [2, 3, 6],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      },
+      'd-amara': {
+        name: 'D Amara (Celtic Minor)',
+        short: 'D-Amara',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        colorDegs: [2, 5, 8],
+        chords: {
+          i:    [0, 1, 3, 5, 7],
+          III:  [1, 2, 5, 7, 8],
+          iv:   [0, 3, 6, 8],
+          v:    [1, 2, 4, 7],
+          bVI:  [2, 5, 7],
+          bVII: [2, 4, 6, 8]
+        }
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (Dorian Pent.)',
+        short: 'Fs-Pygmy',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        colorDegs: [2, 4, 7],
+        chords: {
+          i:    [0, 2, 3, 5, 7],
+          III:  [2, 3, 4, 7, 8],
+          iv:   [0, 1, 5, 6],
+          v:    [1, 3, 4, 6, 8],
+          bVI:  [2, 4, 5, 7],
+          bVII: [1, 4, 6, 8]
+        }
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (Phrygian Dom.)',
+        short: 'Cs-Hijaz',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        colorDegs: [2, 3, 8],
+        chords: {
+          i:    [0, 1, 4, 6, 7],
+          III:  [1, 3, 6, 7],
+          iv:   [0, 2, 4, 8],
+          v:    [1, 3, 5, 7],
+          bVI:  [2, 4, 6, 8],
+          bVII: [3, 5, 7]
+        }
+      },
+      'e-sabye': {
+        name: 'E Sabye (Major / Ionian)',
+        short: 'E-Sabye',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        colorDegs: [2, 3, 6],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      }
+    };
+
+    const HAND_PAN = [
+      { hand: 'R', pan:  0.00 },
+      { hand: 'R', pan:  0.22 },
+      { hand: 'L', pan: -0.22 },
+      { hand: 'R', pan:  0.34 },
+      { hand: 'L', pan: -0.34 },
+      { hand: 'R', pan:  0.30 },
+      { hand: 'L', pan: -0.30 },
+      { hand: 'R', pan:  0.18 },
+      { hand: 'L', pan: -0.18 }
+    ];
+
+    const HARMONY_NEXT = {
+      i:    [{ v: 'bVI', w: 0.34 }, { v: 'iv', w: 0.24 }, { v: 'III', w: 0.18 }, { v: 'bVII', w: 0.16 }, { v: 'v', w: 0.08 }],
+      III:  [{ v: 'bVI', w: 0.32 }, { v: 'bVII', w: 0.28 }, { v: 'i', w: 0.24 }, { v: 'iv', w: 0.16 }],
+      iv:   [{ v: 'i', w: 0.36 }, { v: 'bVII', w: 0.26 }, { v: 'v', w: 0.22 }, { v: 'bVI', w: 0.16 }],
+      bVI:  [{ v: 'bVII', w: 0.42 }, { v: 'i', w: 0.26 }, { v: 'III', w: 0.18 }, { v: 'v', w: 0.14 }],
+      bVII: [{ v: 'i', w: 0.48 }, { v: 'III', w: 0.22 }, { v: 'bVI', w: 0.18 }, { v: 'v', w: 0.12 }],
+      v:    [{ v: 'i', w: 0.56 }, { v: 'bVI', w: 0.24 }, { v: 'iv', w: 0.20 }]
+    };
+
+    function sampleWeighted(entries) {
+      let tot = 0;
+      for (const e of entries) tot += Math.max(0, e.w);
+      if (tot <= 0) return entries[0].v;
+      let r = Math.random() * tot;
+      for (const e of entries) {
+        r -= Math.max(0, e.w);
+        if (r <= 0) return e.v;
+      }
+      return entries[entries.length - 1].v;
+    }
+
+    function softmax(logits, temp = 0.72) {
+      const t = Math.max(0.12, temp);
+      let mx = -Infinity;
+      for (const l of logits) if (l > mx) mx = l;
+      let sum = 0;
+      const exps = logits.map(l => {
+        const e = Math.exp((l - mx) / t);
+        sum += e;
+        return e;
+      });
+      return exps.map(e => e / (sum || 1));
+    }
+
+    function sampleFromProbs(probs) {
+      let r = Math.random();
+      for (let i = 0; i < probs.length; i++) {
+        r -= probs[i];
+        if (r <= 0) return i;
+      }
+      return probs.length - 1;
+    }
+
+    // =========================================================================
+    // 2. Yishama Coupled-Bloom Web Audio Engine + Studio Bank Loader + Damp
+    // =========================================================================
+    const PROFILES = {
+      stainless: { tau1: 0.56, tau2: 0.78, tau3: 1.15, f1Atk: 0.028, f2Bloom: 0.135, f3Bloom: 0.185, oct: 0.48, fifth: 0.30, p4: 0.11, beat: 0.85, skin: 0.14, body: 0.22, brightness: 4400 },
+      ember:     { tau1: 0.48, tau2: 0.74, tau3: 1.25, f1Atk: 0.020, f2Bloom: 0.105, f3Bloom: 0.155, oct: 0.56, fifth: 0.36, p4: 0.16, beat: 0.65, skin: 0.16, body: 0.16, brightness: 5800 },
+      nitrided:  { tau1: 0.36, tau2: 0.44, tau3: 0.55, f1Atk: 0.012, f2Bloom: 0.060, f3Bloom: 0.085, oct: 0.34, fifth: 0.18, p4: 0.06, beat: 0.35, skin: 0.24, body: 0.28, brightness: 3100 },
+      ceramic:   { tau1: 0.30, tau2: 0.32, tau3: 0.35, f1Atk: 0.014, f2Bloom: 0.050, f3Bloom: 0.060, oct: 0.20, fifth: 0.09, p4: 0.03, beat: 0.20, skin: 0.28, body: 0.38, brightness: 2000 }
+    };
+
+    const ENHARMONIC = { 'Db':'C#', 'D#':'Eb', 'Gb':'F#', 'Ab':'G#', 'A#':'Bb' };
+    const studioBanks = new Map();
+    const bankLoadingPromises = new Map();
+
+    let activeScaleKey = 'd-kurd';
+    let activeBankId = 'yishama-stainless';
+    let activeProfileKey = 'stainless';
+
+    let audioCtx = null, dryGain = null, reverbSend = null, noiseBuffer = null;
+
+    function canonicalNote(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      return m ? (ENHARMONIC[m[1]] || m[1]) + m[2] : note;
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createWarmRoomIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const t = i / len;
+          const env = Math.pow(1 - t, decay) * (i < 900 ? 0.65 : 1.0);
+          const w = (Math.random() * 2 - 1) * env;
+          lp = lp * 0.78 + w * 0.22;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11;
+        comp.ratio.value = 3.4;
+        comp.knee.value = 18;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.82;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createWarmRoomIR(audioCtx, 2.25, 2.85);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.29;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        noiseBuffer = createNoise(audioCtx, 0.35);
+
+        if (activeBankId) {
+          ensureStudioBank(activeBankId);
+        }
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    async function ensureStudioBank(bankId) {
+      if (!bankId) return null;
+      ensureAudio();
+      if (studioBanks.has(bankId)) return studioBanks.get(bankId);
+      if (bankLoadingPromises.has(bankId)) return bankLoadingPromises.get(bankId);
+
+      const p = (async () => {
+        try {
+          if (!window.__HANDPAN_BANKS__?.[bankId]) {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = `./soundbanks/${bankId}.bank.js`;
+              s.onload = resolve;
+              s.onerror = () => reject(new Error('Bank script unavailable'));
+              document.head.appendChild(s);
+            });
+          }
+          const raw = window.__HANDPAN_BANKS__?.[bankId];
+          if (!raw?.samples) return null;
+          const map = new Map();
+          const entries = Object.entries(raw.samples);
+          for (let i = 0; i < entries.length; i += 8) {
+            const sl = entries.slice(i, i + 8);
+            const bufs = await Promise.all(sl.map(([, b64]) => audioCtx.decodeAudioData(b64ToBuf(b64))));
+            bufs.forEach((ab, k) => map.set(sl[k][0], ab));
+          }
+          studioBanks.set(bankId, map);
+          showToast(`Studio bank ready: ${bankId}`);
+          return map;
+        } catch (_) {
+          return null; // seamless DSP fallback
+        } finally {
+          bankLoadingPromises.delete(bankId);
+        }
+      })();
+
+      bankLoadingPromises.set(bankId, p);
+      return p;
+    }
+
+    function playStudioBankBuffer(key, when, gainVal, panVal = 0) {
+      if (!activeBankId) return null;
+      const map = studioBanks.get(activeBankId);
+      const ab = map?.get(key);
+      if (!ab) return null;
+      const src = audioCtx.createBufferSource();
+      src.buffer = ab;
+      const voiceGain = audioCtx.createGain();
+      voiceGain.gain.setValueAtTime(gainVal, when);
+
+      if (panVal !== 0 && audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = panVal * 0.7;
+        src.connect(voiceGain);
+        voiceGain.connect(sp);
+        sp.connect(dryGain);
+        sp.connect(reverbSend);
+      } else {
+        src.connect(voiceGain);
+        voiceGain.connect(dryGain);
+        voiceGain.connect(reverbSend);
+      }
+      src.start(when);
+
+      return {
+        damp(tau = 0.08) {
+          if (!audioCtx) return;
+          const now = audioCtx.currentTime;
+          try {
+            voiceGain.gain.cancelScheduledValues(now);
+            voiceGain.gain.setValueAtTime(Math.max(0.001, voiceGain.gain.value), now);
+            voiceGain.gain.setTargetAtTime(0.0001, now, tau);
+            src.stop(now + tau * 6 + 0.04);
+          } catch (_) {}
+        }
+      };
+    }
+
+    function scheduleTone(idx, when, opts = {}) {
+      ensureAudio();
+      const sc = SCALES[activeScaleKey];
+      const note = sc.notes[idx];
+      if (!note) return null;
+      const t0 = Math.max(audioCtx.currentTime + 0.0015, when);
+      const vel = clamp(opts.vel ?? 0.8, 0.08, 1.0);
+      const type = opts.type ?? 'N';
+      const panVal = HAND_PAN[idx]?.pan ?? 0;
+
+      if (activeBankId && type !== 'M') {
+        const cNote = canonicalNote(note);
+        const key = type === 'H' ? `${cNote}|H|v0|r0` : `${cNote}|N|v${vel < 0.62 ? 0 : 1}|r0`;
+        const bakedV = type === 'H' ? 0.86 : (vel < 0.62 ? 0.42 : 0.94);
+        const gScale = clamp((vel / bakedV) * (type === 'g' ? 0.58 : 0.92), 0.12, 1.15);
+        const bankHandle = playStudioBankBuffer(key, t0, gScale, panVal);
+        if (bankHandle) return bankHandle;
+      }
+
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+
+      let t1 = p.tau1 * pitchScale * (isDing ? 1.16 : 1.0);
+      let t2 = p.tau2 * pitchScale * (isDing ? 1.12 : 1.0);
+      let t3 = p.tau3 * pitchScale * (isDing ? 1.15 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { t1 *= 0.45; t2 *= 0.38; t3 *= 0.30; octMul = 0.42; fifthMul = 0.25; }
+      else if (type === 'H') { f0Mul = 0.08; octMul = 1.85; fifthMul = 1.05; t2 *= 1.15; }
+      else if (type === 'M') { t1 *= 0.22; t2 *= 0.18; t3 *= 0.15; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.56, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(10000, p.brightness * (0.65 + 0.50 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(850, cut * 0.52), t0 + t3 * 3.5);
+
+      if (audioCtx.createStereoPanner) {
+        const panner = audioCtx.createStereoPanner();
+        panner.pan.value = panVal;
+        vg.connect(lp);
+        lp.connect(panner);
+        panner.connect(dryGain);
+        panner.connect(reverbSend);
+      } else {
+        vg.connect(lp);
+        lp.connect(dryGain);
+        lp.connect(reverbSend);
+      }
+
+      const oscList = [];
+      function addBloomMode(hz, amp, riseSec, tauSec) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.003 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.05);
+
+        const totalDur = Math.min(5.2, riseSec + tauSec * 5.2);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + riseSec);
+        g.gain.setTargetAtTime(0.0001, t0 + riseSec, tauSec);
+
+        osc.connect(g);
+        g.connect(vg);
+        osc.start(t0);
+        osc.stop(t0 + totalDur);
+        oscList.push(osc);
+      }
+
+      addBloomMode(freq, 0.60 * f0Mul, p.f1Atk, t1);
+      if (p.beat > 0.05 && f0Mul > 0.2) {
+        addBloomMode(freq + p.beat, 0.22 * f0Mul, p.f1Atk * 1.35, t1 * 0.96);
+      }
+      addBloomMode(freq * 2.001, p.oct * octMul * (0.55 + 0.55 * vel), p.f2Bloom, t2);
+      addBloomMode(freq * 2.999, p.fifth * fifthMul * (0.45 + 0.65 * vel), p.f3Bloom, t3);
+      addBloomMode(freq * 4.001, p.p4 * vel * (isDing ? 1.4 : 0.7), p.f3Bloom * 1.15, t2 * 0.75);
+
+      // Soft woody skin-pad strike transient
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = isDing ? 420 : 680;
+      bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.skin * vel * (type === 'g' ? 1.3 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(t0); noise.stop(t0 + 0.025);
+
+      // Helmholtz cavity (~78 Hz) on Ding & low notes
+      if (isDing || idx <= 2) {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(isDing ? 98 : 92, t0);
+        bo.frequency.exponentialRampToValueAtTime(78, t0 + 0.08);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * (isDing ? 1.0 : 0.35), t0 + 0.008);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.24 : 0.12));
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.28);
+      }
+
+      return {
+        damp(tau = 0.08) {
+          if (!audioCtx) return;
+          const now = audioCtx.currentTime;
+          try {
+            vg.gain.cancelScheduledValues(now);
+            vg.gain.setValueAtTime(Math.max(0.001, vg.gain.value), now);
+            vg.gain.setTargetAtTime(0.0001, now, tau);
+          } catch (_) {}
+        }
+      };
+    }
+
+    function scheduleTak(when, vel = 0.8) {
+      ensureAudio();
+      const t0 = Math.max(audioCtx.currentTime + 0.0015, when);
+      if (playStudioBankBuffer('PERC|TAK', t0, vel * 0.82)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.56, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2650; bp.Q.value = 1.3;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.85, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.036);
+
+      [880, 1620].forEach((hz, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.87, t0 + 0.032);
+        g.gain.setValueAtTime(0.28 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.038);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.042);
+      });
+    }
+
+    function scheduleGu(when, vel = 0.85) {
+      ensureAudio();
+      const t0 = Math.max(audioCtx.currentTime + 0.0015, when);
+      if (playStudioBankBuffer('PERC|GU', t0, vel * 0.88)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.72, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(118, t0);
+      o.frequency.exponentialRampToValueAtTime(78, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.92, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // Subtle mechanical Braun tactile micro-detent click for pendulum / apex manipulation
+    function playDetentClick(intensity = 0.5) {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime;
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2100 + intensity * 700;
+      bp.Q.value = 4.5;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.045 * clamp(intensity, 0.25, 1.0), t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.005);
+      n.connect(bp); bp.connect(g); g.connect(dryGain);
+      n.start(t0); n.stop(t0 + 0.008);
+    }
+
+    // =========================================================================
+    // 3. Master-Level Handpan Organic Rubato Engine (Todd + KTH + Agogic + Bloom)
+    // =========================================================================
+    const PHRASE_STEPS = 32; // 4 bars × 8 structural steps
+    const PIXELS_PER_SEC = 118;
+
+    const ctrl = {
+      mode: 'direct',           // 'direct' | 'echo' | 'flow'
+      elasticity: 0.74,         // 0..1 slider value
+      savedOrganicElast: 0.74,  // stored when toggling Rigid Grid A/B
+      rigidOverride: false,     // instant A/B switch
+      tension: 0.46,            // 0..1 Emotional Arc / Tension
+      toddApexU: 0.62,          // draggable phrase peak position (0.28..0.84)
+      toddDepth: 1.0,           // draggable phrase arch gain (0.35..1.55)
+      flowPlaying: false
+    };
+
+    function getEffectiveElasticity() {
+      return ctrl.rigidOverride ? 0 : ctrl.elasticity;
+    }
+
+    function getNominalIOIMs() {
+      // Emotional tension gently livens base pulse while keeping meditative handpan gravity
+      const tensionMs = lerp(352, 276, ctrl.tension);
+      // In direct/echo mode, blend smoothly with human-entrained pulse
+      if (ctrl.mode !== 'flow' && eng.entrainedIOIMs > 0) {
+        return clamp(lerp(tensionMs, eng.entrainedIOIMs, 0.72), 165, 560);
+      }
+      return tensionMs;
+    }
+
+    // Todd (1985/1992) Phrase-Arch tempo multiplier:
+    // returns { tempoRate (>1 faster, <1 slower), ioiMul, dynBoost, phaseLabel }
+    function evaluateToddArch(u, elasticity = getEffectiveElasticity()) {
+      if (elasticity <= 0.005) {
+        return { tempoRate: 1.0, ioiMul: 1.0, dynBoost: 0, phaseLabel: 'RIGID GRID' };
+      }
+      const peakU = ctrl.toddApexU;
+      const depth = ctrl.toddDepth * elasticity;
+      // Gemini rubato_shape gentle bias
+      let shapeAccel = 0, shapeSlow = 0, shapeApexHang = 0;
+      if (geminiState.rubatoShape === 'accelerate_lift') shapeAccel = 0.07;
+      else if (geminiState.rubatoShape === 'breathe_open') shapeSlow = 0.11;
+      else if (geminiState.rubatoShape === 'linger_apex') shapeApexHang = 0.14;
+      else if (geminiState.rubatoShape === 'settle_home') shapeSlow = 0.09;
+
+      let tempoDelta = 0; // positive = faster (accelerando), negative = slower (ritardando)
+      let phaseLabel = 'ELASTIC BREATH';
+
+      if (u <= peakU) {
+        const s = u / Math.max(0.15, peakU); // 0 -> 1 rising toward apex
+        // Starts slightly breathed-in, smoothly accelerates along parabolic curve to apex
+        const arch = Math.sin(s * Math.PI * 0.5);
+        tempoDelta = (-0.07 + 0.25 * arch + shapeAccel) * depth;
+        phaseLabel = s > 0.86 ? 'APEX HANG' : 'ACCEL ↑';
+      } else {
+        const s = (u - peakU) / Math.max(0.15, 1 - peakU); // 0 -> 1 falling into cadence
+        // Continuous C1 quadratic Todd phrase-final slowing
+        tempoDelta = (0.18 + shapeAccel - (0.52 + shapeSlow) * (s * s)) * depth;
+        phaseLabel = s > 0.76 ? 'LUFTPAUSE ○' : 'RIT ↓';
+      }
+
+      // Note: golden apex poise is applied as an expressive agogic hesitation in computeOrganicTiming
+      if (Math.abs(u - peakU) < 0.055) {
+        phaseLabel = 'APEX HANG';
+      }
+
+      const tempoRate = clamp(1 + tempoDelta, 0.54, 1.44);
+      const ioiMul = 1 / tempoRate;
+      const dynBoost = clamp((tempoRate - 0.96) * 0.28, -0.14, 0.18);
+      return { tempoRate, ioiMul, dynBoost, phaseLabel, shapeApexHang };
+    }
+
+    // Complete 4-layer organic IOI computer for any transition prevIdx -> nextIdx
+    function computeOrganicTiming({ phraseStep, prevIdx, nextIdx, nextType, prevType, prevVel, nextVel }) {
+      const E = getEffectiveElasticity();
+      const baseMs = getNominalIOIMs();
+      const u = (phraseStep % PHRASE_STEPS) / PHRASE_STEPS;
+      const barStep = phraseStep % 8;
+      const barIdx = Math.floor((phraseStep % PHRASE_STEPS) / 8);
+
+      if (E <= 0.005) {
+        return {
+          ioiMs: baseMs,
+          stretchRatio: 1.0,
+          tempoRate: 1.0,
+          dynBoost: 0,
+          phaseLabel: 'RIGID GRID',
+          tag: '',
+          isLuftpause: false
+        };
+      }
+
+      const sc = SCALES[activeScaleKey];
+      const todd = evaluateToddArch(u, E);
+      let mul = todd.ioiMul;
+      let tag = '';
+      let isLuftpause = false;
+      let phaseLabel = todd.phaseLabel;
+
+      // Layer 2: KTH Punctuation & Leap-Proportional Breath (Luftpause)
+      const leap = (prevIdx != null && nextIdx != null) ? Math.abs(nextIdx - prevIdx) : 0;
+      if (leap >= 4) {
+        const leapBreath = (0.16 + 0.055 * Math.min(4, leap - 3)) * E;
+        mul *= (1 + leapBreath);
+        tag = 'LEAP';
+      }
+      // Half-phrase (end of bar 2) & cadential close (end of bar 4) Luftpause
+      if (barIdx === 3 && barStep === 7) {
+        mul *= (1 + (0.44 + 0.18 * (1 - ctrl.tension)) * E);
+        tag = 'LUFT';
+        isLuftpause = true;
+        phaseLabel = 'LUFTPAUSE ○';
+      } else if (barIdx === 1 && barStep === 7) {
+        mul *= (1 + 0.24 * E);
+        tag = tag || 'BREATH';
+        isLuftpause = true;
+      }
+
+      // Layer 3: Agogic Accent, Golden Apex Hang & Stolen-Time Debt Payback
+      const isColorDeg = nextIdx != null && sc.colorDegs.includes(nextIdx);
+      const isDingLanding = nextIdx === 0 && (barStep === 0 || (barIdx === 3 && barStep >= 6));
+      const isNearPeak = Math.abs(u - ctrl.toddApexU) < 0.065;
+      const isApexNote = (nextIdx != null && nextIdx >= 7 && Math.abs(u - ctrl.toddApexU) < 0.14) || isNearPeak;
+
+      if (isDingLanding || isApexNote || isColorDeg) {
+        const apexExtra = isNearPeak ? (0.12 + (todd.shapeApexHang || 0)) : 0;
+        const steal = (isDingLanding ? 0.24 : (isApexNote ? 0.18 + apexExtra : 0.14)) * E;
+        mul *= (1 + steal);
+        eng.rubatoDebtMs = clamp(eng.rubatoDebtMs + baseMs * steal * 0.55, -240, 260);
+        if (!tag) tag = isApexNote ? 'APEX' : 'AGOGIC';
+      } else if (leap <= 2 && eng.rubatoDebtMs > 18) {
+        // Repay stolen rubato time on decorative passing tones!
+        const paybackRatio = clamp((eng.rubatoDebtMs / baseMs) * 0.32, 0.06, 0.19) * E;
+        mul *= (1 - paybackRatio);
+        eng.rubatoDebtMs = Math.max(0, eng.rubatoDebtMs - baseMs * paybackRatio);
+      }
+
+      // Layer 4: Decay-Aware Stainless Bloom Pacing after resonant Ding, Dyad, or Harmonic
+      if (prevIdx === 0 && (prevVel ?? 0.8) > 0.72) {
+        mul *= (1 + 0.26 * E);
+      } else if (prevType === '~' || prevType === 'H') {
+        mul *= (1 + 0.19 * E);
+      }
+
+      // Live Pendulum Manual Bending (when user drags/slings pendulum bob)
+      const userBendMul = Math.pow(1.65, -pendulum.manualBend); // bend < 0 slows, > 0 speeds up
+      mul *= userBendMul;
+
+      // Subtle organic human micro-jitter (~±2.8% pink-ish warmth)
+      const microWarmth = 1 + (Math.random() - 0.5) * 0.055 * E;
+      mul = clamp(mul * microWarmth, 0.42, 2.25);
+
+      const ioiMs = baseMs * mul;
+      return {
+        ioiMs,
+        stretchRatio: mul,
+        tempoRate: 1 / mul,
+        dynBoost: todd.dynBoost,
+        phaseLabel,
+        tag,
+        isLuftpause
+      };
+    }
+
+    // =========================================================================
+    // 4. Shared Musical Engine State, Memory, Continuous Attention & Ribbons
+    // =========================================================================
+    const eng = {
+      phraseStep: 0,
+      barIdx: 0,
+      currentChord: 'i',
+      lastPitch: 0,
+      lastHand: 'R',
+      lastType: 'D',
+      lastVel: 0.85,
+      contourDir: +1,
+      rubatoDebtMs: 0,
+      entrainedIOIMs: 320,
+      userIOIs: [],
+      lastHumanNoteMs: 0,
+      lastHumanHand: null,
+      lastHumanIdx: 0,
+      mouseYNorm: 0.5, // 0=top (lift), 1=bottom (ground)
+      mouseInsideLower: false,
+      probs: Array(9).fill(1 / 9),
+      memory: [],      // last 48 musical events
+      trail: [],       // rendered impulse beads with timestamps & tags
+      archTrace: [],   // recent Todd curve actual trace points { u, stretchRatio, isLuftpause, age }
+      nextBeadId: 1,
+      lockedBeadId: null,
+      activeFilaments: [], // { beadId, idx, weight, locked }
+      rimShock: 0,
+      rimLabel: '',
+      // Call & Echo buffers
+      callPhrase: [],     // { idx, vel, type, ioiMs, holdMs, dyadPartnerIdx }
+      echoState: 'idle',  // 'idle' | 'listening' | 'breathing' | 'echoing'
+      echoQueue: [],
+      echoTimer: null,
+      echoStartWaitMs: 0
+    };
+
+    // 9 Horizontal Resonant Steel Ribbons physics state
+    const ribbons = Array.from({ length: 9 }, (_, i) => ({
+      idx: i,
+      y: 0,
+      energy: 0,
+      overtone: 0,
+      phase: 0,
+      dampRate: 1.9 - i * 0.05,
+      holdGlow: 0,
+      lastVel: 0
+    }));
+
+    // Coupled-Oscillator Breath Pendulum physics state
+    const pendulum = {
+      angle: 0,           // radians (-0.75 .. +0.75)
+      vel: 0,
+      phase: 0,
+      targetRate: 1.0,
+      breathHalo: 0,
+      manualDragging: false,
+      manualBend: 0,      // -1 (slow/suspend) .. +1 (accelerate)
+      suspended: false,
+      lastDetentBucket: 0,
+      trail: []           // ghost angular trail
+    };
+
+    // Gemini PanLang Advisor state
+    let geminiApiKey = '';
+    let geminiController = null;
+    let geminiInFlight = false;
+    let geminiCallCount = 0;
+
+    const geminiState = {
+      rubatoShape: null,
+      harmonicPull: null,
+      harmonicProbs: null,
+      focalBias: Array(9).fill(0),
+      lastLatencyMs: null,
+      lastPanLang: ''
+    };
+
+    // =========================================================================
+    // 5. Continuous Attention & Semantic Pitch Distribution Engine
+    // =========================================================================
+    function getLockedBead() {
+      if (eng.lockedBeadId == null) return null;
+      const found = eng.trail.find(b => b.id === eng.lockedBeadId);
+      if (!found) {
+        eng.lockedBeadId = null;
+        syncUnpinUI();
+        return null;
+      }
+      return found;
+    }
+
+    function computeAttentionOverTrail(nowSec) {
+      const visible = eng.trail.filter(b => b.idx != null && (nowSec - b.timeSec) < 7.8 && (nowSec - b.timeSec) > 0.04);
+      if (!visible.length) return [];
+      const sc = SCALES[activeScaleKey];
+      const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+      const locked = getLockedBead();
+
+      const scored = visible.map(b => {
+        const dt = Math.max(0.05, nowSec - b.timeSec);
+        // Continuous multi-horizon kernel: smooth blend of immediate micro + medium phrase echo + long Ding anchor
+        const microW = Math.exp(-dt / 0.85) * 0.55;
+        const motifW = Math.exp(-Math.pow((dt - 2.6) / 1.5, 2)) * 0.42;
+        const anchorW = (b.idx === 0 || b.tag === 'APEX' || b.tag === 'AGOGIC') ? Math.exp(-dt / 6.5) * 0.34 : 0;
+        const harmW = pool.includes(b.idx) ? 0.25 : 0.04;
+        const humanBoost = b.source === 'human' ? 0.28 : 0;
+        let w = microW + motifW + anchorW + harmW + humanBoost;
+        if (locked && b.id === locked.id) w = 2.8;
+        return { bead: b, raw: w };
+      });
+
+      const maxRaw = Math.max(...scored.map(s => s.raw), 0.01);
+      return scored
+        .map(s => ({
+          beadId: s.bead.id,
+          idx: s.bead.idx,
+          weight: clamp(s.raw / maxRaw, 0, 1),
+          locked: Boolean(locked && s.bead.id === locked.id)
+        }))
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 8);
+    }
+
+    function evaluatePitchProbs(opts = {}) {
+      const sc = SCALES[activeScaleKey];
+      const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+      const rowDir = opts.rowDir ?? 0;         // -1 ground, 0 mid, +1 lift
+      const prefHand = opts.hand ?? (eng.lastHand === 'R' ? 'L' : 'R');
+      const isDownbeat = opts.isDownbeat ?? false;
+      const isCadence = opts.isCadence ?? false;
+      const isFlurry = opts.isFlurry ?? false;
+      const power = opts.power ?? 0.72;
+      const u = (eng.phraseStep % PHRASE_STEPS) / PHRASE_STEPS;
+      const locked = getLockedBead();
+
+      const logits = Array(9).fill(0);
+
+      for (let j = 0; j < 9; j++) {
+        let L = 0;
+
+        // 1. Harmonic chord pool gravity
+        L += pool.includes(j) ? 1.35 : (isFlurry ? 0.15 : -0.55);
+
+        // 2. Emotional Arc / Tension: low tension grounds on Ding/low fifths, high tension lifts to bVI/bVII/high rim
+        const normPos = (j - 4) / 4; // -1..+1
+        const tensionTilt = (ctrl.tension - 0.45) * 1.9;
+        L += tensionTilt * normPos;
+        if (sc.colorDegs.includes(j)) L += (ctrl.tension - 0.3) * 0.95;
+
+        // 3. Phrase-Arch melodic contour (rises toward toddApexU, settles toward cadence)
+        const archLift = u <= ctrl.toddApexU
+          ? lerp(-0.5, 1.1, u / Math.max(0.2, ctrl.toddApexU))
+          : lerp(1.0, -1.1, (u - ctrl.toddApexU) / Math.max(0.2, 1 - ctrl.toddApexU));
+        L += archLift * normPos * 0.65;
+
+        // 4. Melodic proximity & smoothness (conjunct motion in flurries, singing thirds normally)
+        const delta = j - eng.lastPitch;
+        const dist = Math.abs(delta);
+        if (dist === 0) L -= (power < 0.45 ? 0.15 : 1.15);
+        else if (isFlurry) L += (dist === 1 ? 1.35 : (dist === 2 ? 0.65 : -0.4 * dist));
+        else L += (dist <= 2 ? 0.85 : (dist === 3 ? 0.45 : -0.18 * dist));
+
+        // Natural wave momentum
+        if (Math.sign(delta) === eng.contourDir && dist > 0 && dist <= 3) L += 0.35;
+
+        // 5. Physical hand hemisphere affinity (so L/R feels natural)
+        const hMatch = (j === 0) ? (prefHand === 'R' || isDownbeat || rowDir < 0) : (HAND_PAN[j].hand === prefHand);
+        L += hMatch ? 0.52 : -0.35;
+
+        // 6. Direct Kinesthetic Row Steering + subtle Mouse Y lift when playing keyboard
+        if (rowDir !== 0) {
+          if (rowDir > 0) {
+            if (eng.lastPitch >= 7) L += (j >= 6 ? 1.45 : -0.9);
+            else L += (delta > 0 && delta <= 3) ? 1.95 : (delta <= 0 ? -1.25 : 0.45);
+            if (j >= 6) L += 0.55;
+          } else {
+            if (eng.lastPitch <= 1) L += (j === 0 ? 1.9 : -0.8);
+            else L += (delta < 0 && delta >= -3) ? 1.85 : (delta >= 0 ? -1.25 : 0.4);
+            if (j <= 1) L += 0.8;
+          }
+        } else if (eng.mouseInsideLower && ctrl.mode !== 'flow') {
+          const mouseTilt = (0.5 - eng.mouseYNorm) * 1.5; // top=+0.75, bottom=-0.75
+          L += mouseTilt * normPos;
+        }
+
+        // 7. Downbeat & Cadential Resolution Grammar
+        if (isDownbeat && rowDir <= 0) {
+          const root = eng.currentChord === 'i' ? 0 : pool[0];
+          if (j === root) L += 1.6;
+          if (j === 0 && eng.currentChord === 'i') L += 0.9;
+        }
+        if (isCadence && rowDir <= 0) {
+          if (j === 0) L += 2.25;
+          else if (j === 4) L += 0.85;
+        }
+
+        // 8. Continuous Memory Attention Pull (and Magnetic Locked Bead!)
+        if (locked && locked.idx != null) {
+          const dLock = Math.abs(j - locked.idx);
+          if (dLock === 0) L += 2.4;
+          else if (dLock === 1 || dLock === 2) L += 0.95;
+        }
+
+        // 9. Gemini PanLang Decisions Bias (if active)
+        L += geminiState.focalBias[j] * 0.95;
+
+        logits[j] = L;
+      }
+
+      const temp = lerp(0.58, 0.95, ctrl.tension);
+      const probs = softmax(logits, temp);
+      eng.probs = probs;
+      return probs;
+    }
+
+    function advanceHarmony(rowDir = 0) {
+      const barInPhrase = eng.barIdx % 4;
+
+      if (geminiState.harmonicProbs && Math.random() < 0.72) {
+        const entries = Object.entries(geminiState.harmonicProbs).map(([v, w]) => ({ v, w }));
+        if (entries.length) {
+          eng.currentChord = sampleWeighted(entries);
+          syncChordUI();
+          return;
+        }
+      }
+
+      if (barInPhrase === 0) {
+        eng.currentChord = ctrl.tension > 0.78 && Math.random() < 0.35 ? 'bVI' : 'i';
+      } else if (barInPhrase === 3 && rowDir <= 0 && Math.random() < (0.86 - ctrl.tension * 0.32)) {
+        eng.currentChord = 'i';
+      } else {
+        const nexts = HARMONY_NEXT[eng.currentChord] || HARMONY_NEXT.i;
+        const weighted = nexts.map(e => {
+          let w = e.w;
+          if (e.v === 'i' || e.v === 'iv') w *= (1.35 - ctrl.tension * 0.8);
+          if (e.v === 'bVI' || e.v === 'bVII' || e.v === 'III') w *= (0.45 + ctrl.tension * 1.35 + (rowDir > 0 ? 0.5 : 0));
+          return { v: e.v, w };
+        });
+        eng.currentChord = sampleWeighted(weighted);
+      }
+      syncChordUI();
+    }
+
+    // =========================================================================
+    // 6. Event Emission, Ribbon Excitation & Telemetry Sync
+    // =========================================================================
+    function emitVisualNote({ idx, type, vel, source, ioiMs, stretchRatio, tag, dyadPartnerIdx = null, isLuftpause = false }) {
+      const nowSec = performance.now() / 1000;
+      const sc = SCALES[activeScaleKey];
+
+      if (type === 'T' || type === 'G') {
+        eng.rimShock = 1.0;
+        eng.rimLabel = type === 'T' ? 'TAK' : 'GU';
+        eng.memory.push({ type, idx: null, note: eng.rimLabel, vel, ioiMs, stretchRatio, tag: '' });
+        if (eng.memory.length > 48) eng.memory.shift();
+        updatePanLangPreview();
+        return null;
+      }
+
+      if (idx == null || idx < 0 || idx > 8) return null;
+
+      // Excite steel ribbon physical standing wave
+      const rib = ribbons[idx];
+      rib.energy = clamp(Math.max(rib.energy * 0.45, vel), 0.12, 1.15);
+      rib.overtone = type === 'H' ? 1.25 : clamp(vel * 0.9, 0.2, 1.0);
+      rib.lastVel = vel;
+      rib.dampRate = type === 'g' ? 4.4 : (type === 'M' ? 5.6 : (1.55 - (8 - idx) * 0.04));
+
+      if (dyadPartnerIdx != null && ribbons[dyadPartnerIdx]) {
+        const pRib = ribbons[dyadPartnerIdx];
+        pRib.energy = clamp(Math.max(pRib.energy * 0.45, vel * 0.92), 0.12, 1.1);
+        pRib.overtone = 0.85;
+      }
+
+      // Create elastic trail bead
+      const bead = {
+        id: eng.nextBeadId++,
+        timeSec: nowSec,
+        idx,
+        note: sc.notes[idx],
+        deg: sc.degrees[idx],
+        type,
+        vel,
+        source,
+        ioiMs: ioiMs || getNominalIOIMs(),
+        stretchRatio: stretchRatio || 1.0,
+        tag: tag || '',
+        holdMs: 0,
+        dyadPartnerIdx,
+        chord: eng.currentChord
+      };
+
+      eng.trail.push(bead);
+      while (eng.trail.length > 90) eng.trail.shift();
+
+      eng.memory.push({
+        type, idx, note: bead.note, deg: bead.deg, vel,
+        ioiMs: bead.ioiMs, stretchRatio: bead.stretchRatio, tag: bead.tag
+      });
+      if (eng.memory.length > 48) eng.memory.shift();
+
+      // Update continuous attention filaments
+      eng.activeFilaments = computeAttentionOverTrail(nowSec);
+
+      // Update live Todd arch velocity trace
+      const u = (eng.phraseStep % PHRASE_STEPS) / PHRASE_STEPS;
+      eng.archTrace.push({
+        u,
+        stretchRatio: bead.stretchRatio,
+        tempoRate: 1 / Math.max(0.35, bead.stretchRatio),
+        isLuftpause,
+        timeSec: nowSec
+      });
+      if (eng.archTrace.length > 44) eng.archTrace.shift();
+
+      // Entrain pendulum impulse
+      pendulum.targetRate = clamp(1 / Math.max(0.42, bead.stretchRatio), 0.5, 1.55);
+      if (isLuftpause || bead.stretchRatio > 1.28) {
+        pendulum.breathHalo = Math.min(1.0, pendulum.breathHalo + 0.72);
+      }
+
+      // Flip contour smoothly near ends
+      if (idx >= 7) eng.contourDir = -1;
+      else if (idx <= 1) eng.contourDir = +1;
+
+      updateReadouts(bead.ioiMs, bead.stretchRatio, u, isLuftpause ? 'LUFTPAUSE ○' : null);
+      updatePanLangPreview();
+      return bead;
+    }
+
+    function updateReadouts(ioiMs, stretchRatio, u, overrideLabel = null) {
+      const bpm = Math.round(clamp(30000 / Math.max(110, ioiMs), 42, 196));
+      document.getElementById('readout-bpm').textContent = String(bpm);
+      document.getElementById('readout-ioi').textContent = `${Math.round(ioiMs)}ms`;
+      const stEl = document.getElementById('readout-stretch');
+      stEl.textContent = `${stretchRatio.toFixed(2)}×`;
+      stEl.classList.toggle('hot', Math.abs(stretchRatio - 1) > 0.14);
+      document.getElementById('readout-phrase').textContent = `${Math.round(u * 100)}%`;
+
+      const pill = document.getElementById('rubato-state-pill');
+      if (ctrl.rigidOverride || getEffectiveElasticity() <= 0.01) {
+        pill.textContent = 'RIGID GRID 1.00×';
+        pill.classList.add('rigid');
+      } else {
+        pill.classList.remove('rigid');
+        if (pendulum.suspended) pill.textContent = 'BREATH HOLD ○';
+        else if (overrideLabel) pill.textContent = overrideLabel;
+        else if (eng.echoState === 'echoing') pill.textContent = 'ECHO RUBATO';
+        else if (stretchRatio > 1.24) pill.textContent = 'LUFTPAUSE / RIT ↓';
+        else if (stretchRatio < 0.84) pill.textContent = 'ACCEL / CASCADE ↑';
+        else pill.textContent = evaluateToddArch(u).phaseLabel;
+      }
+    }
+
+    function syncChordUI() {
+      document.getElementById('tel-chord-mini').textContent = eng.currentChord;
+    }
+
+    function setLiveStatus(text, stateClass = '') {
+      const led = document.getElementById('status-led');
+      const lbl = document.getElementById('status-text');
+      lbl.textContent = text;
+      led.className = 'live-led' + (stateClass ? ' ' + stateClass : '');
+    }
+
+    let toastFadeTimer = null;
+    function showToast(msg, isPin = false) {
+      const el = document.getElementById('stage-toast');
+      el.textContent = msg;
+      el.classList.toggle('pin', isPin);
+      if (toastFadeTimer) clearTimeout(toastFadeTimer);
+      if (!isPin) {
+        toastFadeTimer = setTimeout(() => {
+          const locked = getLockedBead();
+          if (locked) {
+            el.textContent = `ATTENTION PINNED · ${locked.note} (^${locked.deg}) — click bead or Unpin to release`;
+            el.classList.add('pin');
+          }
+        }, 4200);
+      }
+    }
+
+    function syncUnpinUI() {
+      const locked = getLockedBead();
+      const btn = document.getElementById('btn-unpin-attn');
+      btn.classList.toggle('show', Boolean(locked));
+      if (locked) {
+        showToast(`ATTENTION PINNED · ${locked.note} (^${locked.deg}) — pulling melody toward this memory`, true);
+      }
+    }
+
+    // =========================================================================
+    // 7. Two-Hand Kinesthetic Keyboard & Hold-Duration Articulation
+    // =========================================================================
+    const KEY_MAP = {
+      // Left Lift (Top Row)
+      'q': { hand: 'L', rowDir: +1, power: 0.48, harmonicBias: 0.35 },
+      'w': { hand: 'L', rowDir: +1, power: 0.64, harmonicBias: 0.15 },
+      'e': { hand: 'L', rowDir: +1, power: 0.78, harmonicBias: 0.05 },
+      'r': { hand: 'L', rowDir: +1, power: 0.90, harmonicBias: 0.00 },
+      // Left Center (Home Row)
+      'a': { hand: 'L', rowDir:  0, power: 0.42, harmonicBias: 0.00 },
+      's': { hand: 'L', rowDir:  0, power: 0.62, harmonicBias: 0.00 },
+      'd': { hand: 'L', rowDir:  0, power: 0.78, harmonicBias: 0.00 },
+      'f': { hand: 'L', rowDir:  0, power: 0.92, harmonicBias: 0.00 },
+      // Left Ground (Bottom Row)
+      'z': { hand: 'L', rowDir: -1, power: 0.48, harmonicBias: 0.00 },
+      'x': { hand: 'L', rowDir: -1, power: 0.66, harmonicBias: 0.00 },
+      'c': { hand: 'L', rowDir: -1, power: 0.80, harmonicBias: 0.00 },
+      'v': { hand: 'L', rowDir: -1, power: 0.95, harmonicBias: 0.00 },
+      // Right Lift (Top Row)
+      'u': { hand: 'R', rowDir: +1, power: 0.90, harmonicBias: 0.05 },
+      'i': { hand: 'R', rowDir: +1, power: 0.78, harmonicBias: 0.10 },
+      'o': { hand: 'R', rowDir: +1, power: 0.66, harmonicBias: 0.35 },
+      'p': { hand: 'R', rowDir: +1, power: 0.50, harmonicBias: 0.45 },
+      // Right Center (Home Row)
+      'j': { hand: 'R', rowDir:  0, power: 0.92, harmonicBias: 0.00 },
+      'k': { hand: 'R', rowDir:  0, power: 0.78, harmonicBias: 0.00 },
+      'l': { hand: 'R', rowDir:  0, power: 0.62, harmonicBias: 0.00 },
+      ';': { hand: 'R', rowDir:  0, power: 0.42, harmonicBias: 0.00 },
+      // Right Ground (Bottom Row)
+      'm': { hand: 'R', rowDir: -1, power: 0.95, harmonicBias: 0.00 },
+      ',': { hand: 'R', rowDir: -1, power: 0.80, harmonicBias: 0.00 },
+      '.': { hand: 'R', rowDir: -1, power: 0.66, harmonicBias: 0.00 },
+      '/': { hand: 'R', rowDir: -1, power: 0.48, harmonicBias: 0.00 }
+    };
+
+    const heldKeys = new Map(); // normalizedKey -> { downMs, voiceHandle, idx, bead, shimmerFired }
+    const keyCapEls = new Map();
+    let lastSpaceMs = 0;
+
+    function setKeyCapLit(key, isLit) {
+      const cap = keyCapEls.get(key);
+      if (cap) cap.classList.toggle('lit', isLit);
+    }
+
+    function cancelPendingEcho() {
+      if (eng.echoTimer) {
+        clearTimeout(eng.echoTimer);
+        eng.echoTimer = null;
+      }
+      eng.echoQueue = [];
+      if (eng.echoState === 'echoing' || eng.echoState === 'breathing') {
+        eng.echoState = 'listening';
+      }
+    }
+
+    function recordHumanNoteForEntrainmentAndEcho(entry) {
+      const now = performance.now();
+      const ioi = eng.lastHumanNoteMs > 0 ? (now - eng.lastHumanNoteMs) : getNominalIOIMs();
+      const isNewPhrase = eng.lastHumanNoteMs === 0 || ioi > 1100;
+
+      if (ioi >= 105 && ioi <= 900) {
+        eng.userIOIs.push(ioi);
+        if (eng.userIOIs.length > 10) eng.userIOIs.shift();
+        const sorted = [...eng.userIOIs].sort((a, b) => a - b);
+        const med = sorted[Math.floor(sorted.length / 2)];
+        eng.entrainedIOIMs = lerp(eng.entrainedIOIMs, med, 0.36);
+      }
+
+      if (ctrl.mode === 'echo') {
+        cancelPendingEcho();
+        if (isNewPhrase) eng.callPhrase = [];
+        eng.callPhrase.push({
+          idx: entry.idx,
+          vel: entry.vel,
+          type: entry.type,
+          ioiMs: isNewPhrase ? 0 : clamp(ioi, 42, 1150),
+          holdMs: 180,
+          dyadPartnerIdx: entry.dyadPartnerIdx ?? null,
+          bead: entry.bead
+        });
+        if (eng.callPhrase.length > 16) eng.callPhrase.shift();
+        eng.echoState = 'listening';
+        eng.echoStartWaitMs = now;
+        scheduleCallAndEchoCheck();
+      }
+
+      eng.lastHumanNoteMs = now;
+    }
+
+    function triggerDirectPitch(idx, opts = {}) {
+      ensureAudio();
+      const now = performance.now();
+      const ioi = eng.lastHumanNoteMs > 0 ? (now - eng.lastHumanNoteMs) : getNominalIOIMs();
+      const nominal = getNominalIOIMs();
+      const stretchRatio = clamp(ioi / Math.max(120, nominal), 0.32, 2.2);
+
+      const vel = clamp(opts.vel ?? 0.82, 0.14, 1.0);
+      const type = opts.type ?? (idx === 0 ? 'D' : 'N');
+      const voiceHandle = scheduleTone(idx, audioCtx.currentTime, { vel, type });
+
+      if (ioi > 950) {
+        eng.barIdx++;
+        advanceHarmony(opts.rowDir ?? 0);
+      }
+      eng.phraseStep = (eng.phraseStep + 1) % PHRASE_STEPS;
+      if (eng.phraseStep % 8 === 0) {
+        eng.barIdx++;
+        advanceHarmony(opts.rowDir ?? 0);
+      }
+
+      eng.lastPitch = idx;
+      eng.lastHand = HAND_PAN[idx]?.hand ?? 'R';
+      eng.lastType = type;
+      eng.lastVel = vel;
+
+      const tag = ioi < 75 ? 'CASCADE' : (stretchRatio > 1.4 ? 'LUFT' : (opts.tag || ''));
+      const bead = emitVisualNote({
+        idx, type, vel,
+        source: 'human',
+        ioiMs: clamp(ioi, 45, 1400),
+        stretchRatio,
+        tag,
+        isLuftpause: stretchRatio > 1.45
+      });
+
+      recordHumanNoteForEntrainmentAndEcho({ idx, vel, type, bead });
+      setLiveStatus(ctrl.mode === 'echo' ? 'LISTENING' : 'PLAYING', 'on');
+      return { voiceHandle, bead };
+    }
+
+    function handleKinestheticKeyDown(rawKey, shiftKey) {
+      const k = rawKey.toLowerCase();
+
+      // Direct ribbon keys 1..9
+      if (k >= '1' && k <= '9') {
+        const idx = parseInt(k, 10) - 1;
+        const { voiceHandle, bead } = triggerDirectPitch(idx, { vel: shiftKey ? 0.94 : 0.82 });
+        heldKeys.set(k, { downMs: performance.now(), voiceHandle, idx, bead, shimmerFired: false });
+        return;
+      }
+
+      // Spacebar: Tak rim slap or Gu Helmholtz bass pulse (Shift, low mouse zone, or quick double-tap alternates Tak -> Gu!)
+      if (k === ' ') {
+        ensureAudio();
+        setKeyCapLit(' ', true);
+        const now = performance.now();
+        const isQuickDouble = (now - lastSpaceMs) < 220;
+        const isGu = shiftKey || eng.mouseYNorm > 0.72 || (isQuickDouble && eng.rimLabel === 'TAK');
+        lastSpaceMs = now;
+        if (isGu) scheduleGu(audioCtx.currentTime, 0.88);
+        else scheduleTak(audioCtx.currentTime, 0.82);
+        emitVisualNote({
+          idx: null,
+          type: isGu ? 'G' : 'T',
+          vel: isGu ? 0.88 : 0.80,
+          source: 'human',
+          ioiMs: eng.lastHumanNoteMs > 0 ? clamp(now - eng.lastHumanNoteMs, 60, 900) : getNominalIOIMs(),
+          stretchRatio: 1.0,
+          tag: ''
+        });
+        eng.lastHumanNoteMs = now;
+        heldKeys.set(' ', { downMs: now, voiceHandle: null, idx: null, bead: null, shimmerFired: true });
+        return;
+      }
+
+      const desc = KEY_MAP[k];
+      if (!desc) return;
+
+      ensureAudio();
+      setKeyCapLit(k, true);
+
+      const now = performance.now();
+      const ioi = eng.lastHumanNoteMs > 0 ? (now - eng.lastHumanNoteMs) : getNominalIOIMs();
+      const nominal = getNominalIOIMs();
+      const isSimultaneous = eng.lastHumanNoteMs > 0 && ioi < 42 && eng.lastHumanHand && desc.hand !== eng.lastHumanHand;
+      const isLongPause = eng.lastHumanNoteMs === 0 || ioi > Math.max(850, nominal * 2.2);
+      const isFlurry = !isSimultaneous && !isLongPause && ioi < nominal * 0.56;
+
+      if (!isSimultaneous) {
+        if (isLongPause) {
+          eng.phraseStep = Math.floor(eng.phraseStep / 8) * 8;
+          if (eng.memory.length > 0) {
+            eng.barIdx++;
+            advanceHarmony(desc.rowDir);
+          }
+        } else {
+          eng.phraseStep = (eng.phraseStep + 1) % PHRASE_STEPS;
+          if (eng.phraseStep % 8 === 0) {
+            eng.barIdx++;
+            advanceHarmony(desc.rowDir);
+          }
+        }
+      }
+
+      const barStep = eng.phraseStep % 8;
+      const barIdx = Math.floor(eng.phraseStep / 8);
+      const isDownbeat = isLongPause || barStep === 0;
+      const isCadence = barIdx === 3 && barStep >= 6;
+
+      let chosenIdx;
+      let noteType = 'N';
+      let dyadPartner = null;
+
+      if (isSimultaneous) {
+        // Opposite-hand simultaneous strike -> rolled harmonic dyad or shimmering 2f0 overtone!
+        const sc = SCALES[activeScaleKey];
+        const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+        let bestIdx = (eng.lastHumanIdx + 2) % 9;
+        let bestScore = -99;
+        for (let j = 0; j < 9; j++) {
+          if (j === eng.lastHumanIdx) continue;
+          const dist = Math.abs(j - eng.lastHumanIdx);
+          let s = pool.includes(j) ? 2.2 : 0.2;
+          if (dist === 2 || dist === 3 || dist === 4) s += 1.6;
+          if (HAND_PAN[j].hand === desc.hand) s += 1.1;
+          s += desc.rowDir * ((j - 4) / 4) * 1.4;
+          s += Math.random() * 0.45;
+          if (s > bestScore) { bestScore = s; bestIdx = j; }
+        }
+        chosenIdx = bestIdx;
+        dyadPartner = eng.lastHumanIdx;
+        noteType = (desc.rowDir > 0 && Math.random() < 0.48) ? 'H' : '~';
+      } else {
+        const probs = evaluatePitchProbs({
+          rowDir: desc.rowDir,
+          hand: desc.hand,
+          isDownbeat,
+          isCadence,
+          isFlurry,
+          power: desc.power
+        });
+        chosenIdx = sampleFromProbs(probs);
+        if (chosenIdx === 0) noteType = 'D';
+        else if (desc.harmonicBias > 0 && chosenIdx >= 5 && Math.random() < desc.harmonicBias) noteType = 'H';
+        else if (desc.power <= 0.45) noteType = 'g';
+      }
+
+      const vel = clamp(desc.power + (isDownbeat ? 0.08 : 0) + (Math.random() - 0.5) * 0.05, 0.20, 1.0);
+      const voiceHandle = scheduleTone(chosenIdx, audioCtx.currentTime, {
+        vel,
+        type: noteType === '~' ? 'N' : noteType
+      });
+
+      const stretchRatio = isSimultaneous ? 0.35 : clamp(ioi / Math.max(120, nominal), 0.35, 2.25);
+      const tag = isSimultaneous ? 'DYAD' : (isFlurry ? 'CASCADE' : (isLongPause ? 'LUFT' : ''));
+
+      eng.lastPitch = chosenIdx;
+      eng.lastHand = desc.hand;
+      eng.lastHumanHand = desc.hand;
+      eng.lastHumanIdx = chosenIdx;
+      eng.lastType = noteType;
+      eng.lastVel = vel;
+
+      const bead = emitVisualNote({
+        idx: chosenIdx,
+        type: noteType,
+        vel,
+        source: 'human',
+        ioiMs: clamp(ioi, 40, 1400),
+        stretchRatio,
+        tag,
+        dyadPartnerIdx: dyadPartner,
+        isLuftpause: isLongPause
+      });
+
+      heldKeys.set(k, { downMs: now, voiceHandle, idx: chosenIdx, bead, shimmerFired: false });
+      recordHumanNoteForEntrainmentAndEcho({ idx: chosenIdx, vel, type: noteType, dyadPartnerIdx: dyadPartner, bead });
+      setLiveStatus(ctrl.mode === 'echo' ? 'LISTENING' : 'PLAYING', 'on');
+    }
+
+    function handleKinestheticKeyUp(rawKey) {
+      const k = rawKey.toLowerCase();
+      setKeyCapLit(k, false);
+      const entry = heldKeys.get(k);
+      if (!entry) return;
+      heldKeys.delete(k);
+
+      const holdMs = performance.now() - entry.downMs;
+      if (entry.bead) entry.bead.holdMs = holdMs;
+
+      // Update corresponding callPhrase hold duration for Call & Echo faithfulness
+      if (ctrl.mode === 'echo' && eng.callPhrase.length) {
+        const match = eng.callPhrase.find(p => p.bead === entry.bead);
+        if (match) match.holdMs = holdMs;
+      }
+
+      if (entry.idx != null) {
+        const rib = ribbons[entry.idx];
+        rib.holdGlow = 0;
+
+        if (holdMs < 115 && entry.voiceHandle) {
+          // Crisp percussive tap -> gentle tactile palm-damp!
+          entry.voiceHandle.damp(0.085);
+          rib.dampRate = 4.6;
+          document.getElementById('tel-hold-mini').textContent = `Crisp Damp (${Math.round(holdMs)}ms)`;
+        } else if (holdMs >= 280) {
+          if (entry.bead && !entry.bead.tag) entry.bead.tag = 'AGOGIC';
+          document.getElementById('tel-hold-mini').textContent = `Agogic Bloom (${Math.round(holdMs)}ms)`;
+        } else {
+          document.getElementById('tel-hold-mini').textContent = `Open Ring (${Math.round(holdMs)}ms)`;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 8. Call & Echo Co-Creative Rubato Partner (Preserves Human Microtiming!)
+    // =========================================================================
+    function scheduleCallAndEchoCheck() {
+      if (eng.echoTimer) clearTimeout(eng.echoTimer);
+      eng.echoTimer = setTimeout(() => {
+        if (ctrl.mode !== 'echo' || eng.callPhrase.length === 0) return;
+        if (heldKeys.size > 0 || pointerState.mode === 'strum') {
+          // Wait quietly while user is still sustaining a note or strumming ribbons
+          scheduleCallAndEchoCheck();
+          return;
+        }
+        launchRubatoEchoResponse();
+      }, 700);
+    }
+
+    function launchRubatoEchoResponse() {
+      if (ctrl.mode !== 'echo' || eng.callPhrase.length === 0) return;
+      ensureAudio();
+
+      const call = [...eng.callPhrase];
+      const E = getEffectiveElasticity();
+      const sc = SCALES[activeScaleKey];
+
+      // Trigger async Gemini PanLang advice in background if key is set
+      if (geminiApiKey && document.getElementById('gem-auto-toggle').checked) {
+        queryGeminiPanLang();
+      }
+
+      // Advance harmony to musically answer the user's call!
+      eng.barIdx++;
+      advanceHarmony(ctrl.tension > 0.55 ? +1 : -1);
+      const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+      const locked = getLockedBead();
+
+      // Compute average IOI of user's call so we can blend between Rigid Grid and exact human rubato!
+      const nonZeroIOIs = call.slice(1).map(n => n.ioiMs).filter(x => x > 60);
+      const avgCallIOI = nonZeroIOIs.length
+        ? nonZeroIOIs.reduce((a, b) => a + b, 0) / nonZeroIOIs.length
+        : getNominalIOIMs();
+
+      // Construct answering contour: preserve intervals & microtiming elasticity while harmonizing!
+      const answerNotes = [];
+      let prevCallIdx = call[0].idx;
+      let prevAnsIdx = locked?.idx != null ? locked.idx : pool[Math.min(pool.length - 1, Math.floor(Math.random() * pool.length))];
+
+      for (let i = 0; i < call.length; i++) {
+        const src = call[i];
+        let targetIdx;
+
+        if (i === 0) {
+          // Opening echo note: either echoes user's start in the new chord or steps warmly from it
+          const nearest = pool.reduce((best, p) => Math.abs(p - src.idx) < Math.abs(best - src.idx) ? p : best, pool[0]);
+          targetIdx = locked?.idx != null && Math.random() < 0.55 ? locked.idx : nearest;
+        } else if (i === call.length - 1) {
+          // Answering ending: resolve gently home on low tension, or lift poignantly on high tension!
+          if (ctrl.tension < 0.55) {
+            targetIdx = Math.random() < 0.68 ? 0 : pool[0];
+          } else {
+            targetIdx = pool[pool.length - 1];
+          }
+        } else {
+          // Preserve relative melodic interval contour from user's phrase, snapped gently to chord + tension
+          const delta = src.idx - prevCallIdx;
+          const raw = clamp(prevAnsIdx + delta, 0, 8);
+          // Blend contour with harmonic pool
+          const closestChordTone = pool.reduce((b, p) => Math.abs(p - raw) < Math.abs(b - raw) ? p : b, pool[0]);
+          targetIdx = Math.abs(closestChordTone - raw) <= 1 ? closestChordTone : raw;
+        }
+
+        // Preserve user's exact microtiming elasticity scaled by E (0 -> flat avgCallIOI, 1 -> exact user IOI!)
+        const exactIOI = i === 0 ? 0 : src.ioiMs;
+        const elasticIOI = i === 0 ? 0 : lerp(avgCallIOI, exactIOI, E);
+        const stretchRatio = i === 0 ? 1.0 : clamp(elasticIOI / Math.max(110, avgCallIOI), 0.35, 2.25);
+
+        answerNotes.push({
+          idx: targetIdx,
+          vel: clamp(src.vel * (i === call.length - 1 ? 0.94 : 0.88), 0.25, 0.96),
+          type: targetIdx === 0 ? 'D' : (src.type === 'H' ? 'H' : (src.holdMs > 300 ? 'N' : src.type)),
+          ioiMs: elasticIOI,
+          holdMs: src.holdMs,
+          stretchRatio,
+          tag: i === call.length - 1 ? 'ANSWER' : (stretchRatio < 0.55 ? 'CASCADE' : (stretchRatio > 1.35 ? 'LUFT' : ''))
+        });
+
+        prevCallIdx = src.idx;
+        prevAnsIdx = targetIdx;
+      }
+
+      // If user tapped a single resonant note, answer with a gentle 2-note singing cadence reply
+      if (answerNotes.length === 1) {
+        const homeIdx = ctrl.tension < 0.55 ? 0 : pool[pool.length - 1];
+        if (homeIdx !== answerNotes[0].idx) {
+          answerNotes.push({
+            idx: homeIdx,
+            vel: clamp(answerNotes[0].vel * 0.92, 0.35, 0.92),
+            type: homeIdx === 0 ? 'D' : 'N',
+            ioiMs: clamp(avgCallIOI * (1.15 + 0.25 * E), 210, 620),
+            holdMs: 280,
+            stretchRatio: 1.15 + 0.25 * E,
+            tag: 'ANSWER'
+          });
+        }
+      }
+
+      eng.echoState = 'echoing';
+      setLiveStatus('ECHOING', 'echo');
+      showToast(`Echoing your ${call.length}-note rubato contour in ${eng.currentChord}…`);
+
+      let cursor = 0;
+      function playNextEchoStep() {
+        if (ctrl.mode !== 'echo' || eng.echoState !== 'echoing') return;
+        if (cursor >= answerNotes.length) {
+          eng.echoState = 'idle';
+          eng.callPhrase = [];
+          setLiveStatus('YOUR TURN', 'on');
+          return;
+        }
+        const ev = answerNotes[cursor++];
+        const vh = scheduleTone(ev.idx, audioCtx.currentTime, { vel: ev.vel, type: ev.type === '~' ? 'N' : ev.type });
+        if (ev.holdMs < 115 && vh) {
+          setTimeout(() => vh.damp(0.09), Math.max(55, ev.holdMs));
+        }
+
+        eng.lastPitch = ev.idx;
+        eng.lastHand = HAND_PAN[ev.idx]?.hand ?? 'R';
+        eng.phraseStep = (eng.phraseStep + 1) % PHRASE_STEPS;
+
+        emitVisualNote({
+          idx: ev.idx,
+          type: ev.type,
+          vel: ev.vel,
+          source: 'echo',
+          ioiMs: ev.ioiMs || avgCallIOI,
+          stretchRatio: ev.stretchRatio,
+          tag: ev.tag,
+          isLuftpause: ev.stretchRatio > 1.38
+        });
+
+        if (cursor < answerNotes.length) {
+          const nextDelay = Math.max(42, answerNotes[cursor].ioiMs * Math.pow(1.6, -pendulum.manualBend));
+          eng.echoTimer = setTimeout(playNextEchoStep, nextDelay);
+        } else {
+          eng.echoTimer = setTimeout(() => {
+            if (eng.echoState === 'echoing') {
+              eng.echoState = 'idle';
+              eng.callPhrase = [];
+              setLiveStatus('YOUR TURN', 'on');
+            }
+          }, 520);
+        }
+      }
+
+      playNextEchoStep();
+    }
+
+    // =========================================================================
+    // 9. Master Flow Autonomous Organic Rubato Lookahead Scheduler
+    // =========================================================================
+    let flowTimer = null;
+    let nextFlowAudioTime = 0;
+
+    function startMasterFlow() {
+      ensureAudio();
+      if (ctrl.flowPlaying) return;
+      ctrl.flowPlaying = true;
+      nextFlowAudioTime = audioCtx.currentTime + 0.05;
+      flowTimer = setInterval(flowSchedulerTick, 24);
+      syncPlayButtonUI();
+      setLiveStatus('FLOW LIVE', 'on');
+    }
+
+    function stopMasterFlow() {
+      ctrl.flowPlaying = false;
+      if (flowTimer) {
+        clearInterval(flowTimer);
+        flowTimer = null;
+      }
+      syncPlayButtonUI();
+      setLiveStatus(ctrl.mode === 'flow' ? 'PAUSED' : 'READY', '');
+    }
+
+    function flowSchedulerTick() {
+      if (!ctrl.flowPlaying || !audioCtx) return;
+
+      // If user is physically holding the pendulum bob in breath-suspension, freeze time cleanly!
+      if (pendulum.suspended) {
+        nextFlowAudioTime = Math.max(nextFlowAudioTime, audioCtx.currentTime + 0.08);
+        return;
+      }
+
+      const lookahead = 0.11;
+      while (nextFlowAudioTime < audioCtx.currentTime + lookahead) {
+        scheduleOneMasterFlowEvent(nextFlowAudioTime);
+      }
+    }
+
+    function scheduleOneMasterFlowEvent(playAt) {
+      const E = getEffectiveElasticity();
+      const sc = SCALES[activeScaleKey];
+      const stepInPhrase = eng.phraseStep % PHRASE_STEPS;
+      const barIdx = Math.floor(stepInPhrase / 8);
+      const barStep = stepInPhrase % 8;
+
+      if (barStep === 0) {
+        eng.barIdx++;
+        advanceHarmony(0);
+        // Trigger compact Gemini PanLang Decisions on phrase start (bar 0) or midpoint (bar 2)
+        if ((barIdx === 0 || barIdx === 2) && geminiApiKey && document.getElementById('gem-auto-toggle').checked) {
+          queryGeminiPanLang();
+        }
+      }
+
+      const isDownbeat = barStep === 0;
+      const isCadence = barIdx === 3 && barStep >= 6;
+      const isFinalCaesura = barIdx === 3 && barStep === 7;
+      const prefHand = eng.lastHand === 'R' ? 'L' : 'R';
+
+      // Decide event type: melodic note, rolled dyad, Tak/Gu accent, or grace-note cascade!
+      const probs = evaluatePitchProbs({
+        rowDir: 0,
+        hand: prefHand,
+        isDownbeat,
+        isCadence,
+        isFlurry: false,
+        power: 0.78
+      });
+
+      const nextIdx = sampleFromProbs(probs);
+      const timing = computeOrganicTiming({
+        phraseStep: stepInPhrase,
+        prevIdx: eng.lastPitch,
+        nextIdx,
+        prevType: eng.lastType,
+        nextType: nextIdx === 0 ? 'D' : 'N',
+        prevVel: eng.lastVel,
+        nextVel: 0.8
+      });
+
+      const baseVel = clamp(
+        (isDownbeat ? 0.90 : (barStep === 4 ? 0.82 : 0.70)) + timing.dynBoost + (ctrl.tension - 0.45) * 0.12,
+        0.30, 0.98
+      );
+
+      // Gentle breathing rest or harmonic shimmer on final bar step
+      if (isFinalCaesura && Math.random() < (0.48 + (1 - ctrl.tension) * 0.25)) {
+        const snapT = { ...timing };
+        const snapU = stepInPhrase / PHRASE_STEPS;
+        const uiDelay = Math.max(0, (playAt - audioCtx.currentTime) * 1000);
+        setTimeout(() => {
+          if (!ctrl.flowPlaying) return;
+          pendulum.breathHalo = 1.0;
+          eng.archTrace.push({
+            u: snapU,
+            stretchRatio: snapT.stretchRatio,
+            tempoRate: snapT.tempoRate,
+            isLuftpause: true,
+            timeSec: performance.now() / 1000
+          });
+          if (eng.archTrace.length > 44) eng.archTrace.shift();
+          updateReadouts(snapT.ioiMs, snapT.stretchRatio, snapU, 'LUFTPAUSE ○');
+        }, uiDelay);
+        nextFlowAudioTime += timing.ioiMs / 1000;
+        eng.phraseStep = (eng.phraseStep + 1) % PHRASE_STEPS;
+        return;
+      }
+
+      // Subtle Tak/Gu groove accent on unaccented backbeat
+      if (!isDownbeat && !isCadence && barStep === 4 && Math.random() < (0.14 + ctrl.tension * 0.24)) {
+        const isTak = Math.random() < 0.72;
+        if (isTak) scheduleTak(playAt, baseVel * 0.86);
+        else scheduleGu(playAt, baseVel * 0.90);
+        const uiDelay = Math.max(0, (playAt - audioCtx.currentTime) * 1000);
+        setTimeout(() => {
+          if (!ctrl.flowPlaying) return;
+          emitVisualNote({
+            idx: null,
+            type: isTak ? 'T' : 'G',
+            vel: baseVel,
+            source: 'flow',
+            ioiMs: timing.ioiMs,
+            stretchRatio: timing.stretchRatio,
+            tag: ''
+          });
+        }, uiDelay);
+        eng.lastHand = prefHand;
+        nextFlowAudioTime += timing.ioiMs / 1000;
+        eng.phraseStep = (eng.phraseStep + 1) % PHRASE_STEPS;
+        return;
+      }
+
+      // Layer 4 Ornament: Swift 42–68ms Grace-Note Cascade leading into phrase peak or downbeat!
+      const doCascade = E > 0.22 && !isCadence && (isDownbeat || barStep === 3 || barStep === 6)
+        && Math.random() < (0.14 + ctrl.tension * 0.20) * E;
+
+      if (doCascade) {
+        const count = Math.random() < 0.55 ? 2 : 3;
+        const stepMs = 44 + Math.random() * 22; // 44..66 ms authentic cascade ripple!
+        const dir = nextIdx >= 5 ? +1 : -1;
+        for (let k = count; k >= 1; k--) {
+          const gIdx = clamp(nextIdx - dir * k, 1, 8);
+          const gTime = playAt + (count - k) * (stepMs / 1000);
+          const gVel = clamp(baseVel * (0.48 + 0.12 * (count - k)), 0.28, 0.72);
+          scheduleTone(gIdx, gTime, { vel: gVel, type: 'g' });
+          const gDelay = Math.max(0, (gTime - audioCtx.currentTime) * 1000);
+          setTimeout(() => {
+            if (!ctrl.flowPlaying) return;
+            emitVisualNote({
+              idx: gIdx,
+              type: 'g',
+              vel: gVel,
+              source: 'flow',
+              ioiMs: stepMs,
+              stretchRatio: stepMs / getNominalIOIMs(),
+              tag: k === count ? 'CASCADE' : ''
+            });
+          }, gDelay);
+        }
+        playAt += count * (stepMs / 1000);
+      }
+
+      // Main note (or rolled harmonic dyad / 2f0 shimmer)
+      const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+      const doDyad = isDownbeat && pool.length >= 2 && Math.random() < (0.22 + ctrl.tension * 0.24);
+      let mainType = nextIdx === 0 ? 'D' : 'N';
+      let dyadPartner = null;
+
+      if (doDyad) {
+        dyadPartner = pool[pool.length - 1] !== nextIdx ? pool[pool.length - 1] : pool[0];
+        mainType = '~';
+        scheduleTone(nextIdx, playAt, { vel: baseVel * 0.90, type: 'N' });
+        scheduleTone(dyadPartner, playAt + 0.034, { vel: baseVel, type: 'N' });
+      } else {
+        if (nextIdx >= 6 && Math.random() < 0.14 + ctrl.tension * 0.14) mainType = 'H';
+        scheduleTone(nextIdx, playAt, { vel: baseVel, type: mainType });
+      }
+
+      const snapTiming = { ...timing };
+      const snapStep = stepInPhrase;
+      const uiDelay = Math.max(0, (playAt - audioCtx.currentTime) * 1000);
+      setTimeout(() => {
+        if (!ctrl.flowPlaying) return;
+        emitVisualNote({
+          idx: nextIdx,
+          type: mainType,
+          vel: baseVel,
+          source: 'flow',
+          ioiMs: snapTiming.ioiMs,
+          stretchRatio: snapTiming.stretchRatio,
+          tag: snapTiming.tag,
+          dyadPartnerIdx: dyadPartner,
+          isLuftpause: snapTiming.isLuftpause
+        });
+        updateReadouts(snapTiming.ioiMs, snapTiming.stretchRatio, snapStep / PHRASE_STEPS, snapTiming.phaseLabel);
+      }, uiDelay);
+
+      eng.lastPitch = nextIdx;
+      eng.lastHand = HAND_PAN[nextIdx]?.hand ?? 'R';
+      eng.lastType = mainType;
+      eng.lastVel = baseVel;
+
+      nextFlowAudioTime = Math.max(playAt, nextFlowAudioTime) + timing.ioiMs / 1000;
+      eng.phraseStep = (eng.phraseStep + 1) % PHRASE_STEPS;
+    }
+
+    // =========================================================================
+    // 10. Compact PanLang Encoder & Direct Gemini Decisions REST Integration
+    // =========================================================================
+    function encodePanLangPrompt() {
+      const sc = SCALES[activeScaleKey];
+      const u = (eng.phraseStep % PHRASE_STEPS) / PHRASE_STEPS;
+      const barNum = Math.floor((eng.phraseStep % PHRASE_STEPS) / 8) + 1;
+      const nom = Math.round(getNominalIOIMs());
+
+      // Compact elastic sequence notation (~12 recent events)
+      const recent = eng.memory.slice(-12);
+      const tokens = [];
+      for (let i = 0; i < recent.length; i++) {
+        const m = recent[i];
+        let glyph = m.type === 'T' ? 'T' : (m.type === 'G' ? 'G' : String(m.idx));
+        if (m.type === '~') glyph += '~';
+        else if (m.type === 'H') glyph += 'h';
+        if (m.vel > 0.87 && m.idx >= 6) glyph += '*';
+        if (m.stretchRatio > 1.32) glyph += ':';
+
+        // Connect rapid cascades with '-' or insert ',' for Luftpause
+        if (i > 0 && m.stretchRatio < 0.45 && tokens.length) {
+          tokens[tokens.length - 1] += '-' + glyph;
+        } else {
+          if (m.tag === 'LUFT' && tokens.length) tokens.push(',');
+          else if (m.stretchRatio < 0.82 && i === recent.length - 1) tokens.push('^');
+          else if (m.stretchRatio > 1.24 && i === recent.length - 1) tokens.push('v');
+          tokens.push(glyph);
+        }
+      }
+
+      const seqStr = tokens.length ? tokens.join(' ') : '0:';
+      const locked = getLockedBead();
+      const pinStr = locked ? ` | pin ${locked.idx}` : '';
+
+      return `PAN ${sc.short} | bar ${barNum}/4 u=${u.toFixed(2)} | ch ${eng.currentChord} | tens ${ctrl.tension.toFixed(2)} | elas ${getEffectiveElasticity().toFixed(2)} | ${nom}ms${pinStr}\nseq: ${seqStr}`;
+    }
+
+    function updatePanLangPreview() {
+      const txt = encodePanLangPrompt();
+      geminiState.lastPanLang = txt;
+      const el = document.getElementById('gem-panlang-view');
+      if (el) el.textContent = txt;
+    }
+
+    async function queryGeminiPanLang() {
+      if (!geminiApiKey) {
+        document.getElementById('gem-status').textContent = 'LOCAL ENGINE (NO KEY)';
+        return;
+      }
+
+      // Abort any previous in-flight request so decisions stay fresh & snappy
+      if (geminiController) {
+        try { geminiController.abort(); } catch (_) {}
+      }
+      geminiController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        try { geminiController.abort(); } catch (_) {}
+      }, 4500);
+
+      geminiInFlight = true;
+      document.getElementById('gem-status').textContent = 'QUERYING…';
+
+      const sc = SCALES[activeScaleKey];
+      const inputPrompt = encodePanLangPrompt();
+      document.getElementById('gem-panlang-view').textContent = inputPrompt;
+
+      const degCriteria = {};
+      for (let i = 0; i < 9; i++) {
+        degCriteria[String(i)] = `${sc.notes[i]} ^${sc.degrees[i]}${i === 0 ? ' Ding' : ''}`;
+      }
+
+      const payload = {
+        model: 'gemini-decision-1',
+        input: inputPrompt,
+        questions: {
+          rubato_shape: {
+            type: 'choice',
+            instructions: 'Pick next handpan rubato phrasing arc.',
+            criteria: {
+              breathe_open: 'Widen Luftpause breaths & stainless bloom space',
+              accelerate_lift: 'Forward Todd accelerando & lively cascades',
+              linger_apex: 'Poignant agogic suspension near phrase peak',
+              settle_home: 'Warm phrase-final ritardando resolving to Ding'
+            }
+          },
+          harmonic_pull: {
+            type: 'choice',
+            instructions: 'Pick modal chord gravity.',
+            criteria: {
+              i: 'Tonic home',
+              III: 'Warm relative lift',
+              iv: 'Contemplative depth',
+              bVI: 'Poignant emotional lift',
+              bVII: 'Modal forward tension',
+              v: 'Poised dominant'
+            }
+          },
+          focal_deg: {
+            type: 'choice',
+            instructions: 'Pick focal scale degree index 0..8.',
+            criteria: degCriteria
+          }
+        }
+      };
+
+      const t0 = performance.now();
+      try {
+        const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/decisions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': geminiApiKey
+          },
+          body: JSON.stringify(payload),
+          signal: geminiController.signal
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => '');
+          throw new Error(`HTTP ${resp.status} ${errText.slice(0, 120)}`);
+        }
+
+        const data = await resp.json();
+        const latencyMs = Math.round(performance.now() - t0);
+        geminiCallCount++;
+        geminiState.lastLatencyMs = latencyMs;
+
+        applyGeminiDecision(data, latencyMs);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        document.getElementById('gem-status').textContent = 'FALLBACK (LOCAL)';
+        document.getElementById('gem-answers-view').textContent = `Decision API error (local engine unaffected):\n${err?.message || String(err)}`;
+        document.getElementById('gemini-pill-badge').classList.remove('live');
+      } finally {
+        clearTimeout(timeoutId);
+        geminiInFlight = false;
+      }
+    }
+
+    function applyGeminiDecision(res, latencyMs) {
+      const ans = res?.answers || {};
+      const sc = SCALES[activeScaleKey];
+
+      if (ans.rubato_shape?.choice) {
+        geminiState.rubatoShape = ans.rubato_shape.choice;
+      }
+      if (ans.harmonic_pull?.probabilities) {
+        geminiState.harmonicProbs = ans.harmonic_pull.probabilities;
+        geminiState.harmonicPull = ans.harmonic_pull.choice;
+      }
+      if (ans.focal_deg?.probabilities) {
+        const fp = ans.focal_deg.probabilities;
+        const logs = [];
+        for (let i = 0; i < 9; i++) {
+          const p = fp[String(i)] ?? fp[`d${i}`] ?? 0.03;
+          logs.push(Math.log(p + 0.015));
+        }
+        const meanL = logs.reduce((a, b) => a + b, 0) / 9;
+        for (let i = 0; i < 9; i++) {
+          geminiState.focalBias[i] = lerp(geminiState.focalBias[i], clamp((logs[i] - meanL) * 0.9, -1.6, 1.8), 0.65);
+        }
+      }
+
+      document.getElementById('gem-status').textContent = `LIVE #${geminiCallCount}`;
+      document.getElementById('gem-latency').textContent = `${latencyMs} ms`;
+      document.getElementById('gemini-pill-badge').classList.add('live');
+
+      const inTok = res?.usage?.total_input_tokens ?? '?';
+      const focalIdx = ans.focal_deg?.choice != null ? parseInt(String(ans.focal_deg.choice).replace(/\D/g, ''), 10) : null;
+      const focalLbl = (focalIdx != null && sc.notes[focalIdx]) ? `${sc.notes[focalIdx]} (^${sc.degrees[focalIdx]})` : '—';
+
+      document.getElementById('gem-answers-view').textContent = [
+        `rubato_shape : ${ans.rubato_shape?.choice ?? '—'}`,
+        `harmonic_pull: ${ans.harmonic_pull?.choice ?? '—'}`,
+        `focal_deg    : ${focalLbl}`,
+        `tokens / ms  : ${inTok} in / 0 out · ${latencyMs} ms`
+      ].join('\n');
+    }
+
+    // =========================================================================
+    // 11. Unified Canvas Stage: Layout, Physical Rendering & Direct Manipulation
+    // =========================================================================
+    const stageContainer = document.getElementById('stage-container');
+    const canvas = document.getElementById('stage-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const geo = {
+      w: 960,
+      h: 520,
+      dpr: 1,
+      upperH: 182,
+      lowerTop: 183,
+      lowerH: 337,
+      leftGutter: 82,
+      strikeX: 790,
+      // Pendulum geometry
+      pendCX: 165,
+      pendPivotY: 46,
+      pendLen: 102,
+      // Todd Arch graph geometry
+      archX0: 356,
+      archX1: 930,
+      archY0: 46,
+      archY1: 162
+    };
+
+    function computeStageGeometry() {
+      const rect = stageContainer.getBoundingClientRect();
+      geo.w = Math.max(360, Math.floor(rect.width));
+      geo.h = Math.max(410, Math.floor(rect.height));
+      geo.dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      canvas.width = Math.round(geo.w * geo.dpr);
+      canvas.height = Math.round(geo.h * geo.dpr);
+
+      geo.upperH = Math.round(clamp(geo.h * 0.35, 148, 208));
+      geo.lowerTop = geo.upperH + 1;
+      geo.lowerH = geo.h - geo.lowerTop;
+      geo.leftGutter = geo.w < 640 ? 64 : 84;
+      geo.strikeX = Math.round(geo.w * (geo.w < 640 ? 0.80 : 0.84));
+
+      // Upper stage split: pendulum left, Todd phrase arch right
+      const pendZoneW = Math.min(320, Math.max(185, geo.w * 0.32));
+      geo.pendCX = Math.round(pendZoneW * 0.50);
+      geo.pendPivotY = 46;
+      geo.pendLen = Math.max(76, Math.min(112, geo.upperH - 76));
+
+      geo.archX0 = Math.round(pendZoneW + 18);
+      geo.archX1 = geo.w - 22;
+      geo.archY0 = 50;
+      geo.archY1 = geo.upperH - 22;
+
+      computeRibbonYPositions();
+    }
+
+    function computeRibbonYPositions() {
+      const sc = SCALES[activeScaleKey];
+      const semis = sc.notes.map(noteToSemitone);
+      const minS = semis[0];
+      const maxS = semis[semis.length - 1];
+      const spanS = Math.max(1, maxS - minS);
+
+      const padT = 26;
+      const padB = 34;
+      const usableH = Math.max(140, geo.lowerH - padT - padB);
+      const rawYs = semis.map(s => {
+        const norm = (s - minS) / spanS; // 0 = Ding bottom, 1 = top note
+        return geo.lowerTop + padT + (1 - norm) * usableH;
+      });
+
+      // Preserve genuine proportional semitone spacing while enforcing legible touch separation
+      const minGap = Math.min(27, usableH / 10.6);
+      for (let pass = 0; pass < 6; pass++) {
+        for (let i = 0; i < 8; i++) {
+          const gap = rawYs[i] - rawYs[i + 1];
+          if (gap < minGap) {
+            const push = (minGap - gap) * 0.5;
+            rawYs[i] = Math.min(geo.h - padB, rawYs[i] + push);
+            rawYs[i + 1] = Math.max(geo.lowerTop + padT, rawYs[i + 1] - push);
+          }
+        }
+      }
+
+      for (let i = 0; i < 9; i++) {
+        ribbons[i].y = rawYs[i];
+      }
+    }
+
+    function getPendulumBobPos() {
+      return {
+        x: geo.pendCX + Math.sin(pendulum.angle) * geo.pendLen,
+        y: geo.pendPivotY + Math.cos(pendulum.angle) * geo.pendLen
+      };
+    }
+
+    function archRateToY(rate) {
+      // rate 0.55 (slow) -> bottom, rate 1.45 (fast) -> top
+      const norm = clamp((rate - 0.52) / 0.96, 0, 1);
+      return lerp(geo.archY1, geo.archY0, norm);
+    }
+
+    function getToddApexHandlePos() {
+      const E = getEffectiveElasticity();
+      const rate = evaluateToddArch(ctrl.toddApexU, E).tempoRate;
+      return {
+        x: lerp(geo.archX0, geo.archX1, ctrl.toddApexU),
+        y: archRateToY(rate)
+      };
+    }
+
+    // ---- Direct Pointer Manipulation (Pendulum, Todd Apex, Bead Pinning, Ribbon Pluck/Strum) ----
+    const pointerState = {
+      mode: 'none',       // 'none' | 'pendulum' | 'apex' | 'strum'
+      lastStrumIdx: -1,
+      hoverBeadId: null,
+      hoverTarget: 'none', // 'pendulum' | 'apex' | 'bead' | 'ribbon'
+      lastApexDetent: 0
+    };
+
+    function getCanvasPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    }
+
+    function findNearestRibbon(y) {
+      let best = 0, bestD = Infinity;
+      for (let i = 0; i < 9; i++) {
+        const d = Math.abs(ribbons[i].y - y);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return bestD <= 24 ? best : -1;
+    }
+
+    function findHitBead(x, y, nowSec) {
+      if (x > geo.strikeX - 16 || y < geo.lowerTop) return null;
+      let best = null, bestD = 15;
+      for (let i = eng.trail.length - 1; i >= 0; i--) {
+        const b = eng.trail[i];
+        if (b.idx == null) continue;
+        const bx = geo.strikeX - (nowSec - b.timeSec) * PIXELS_PER_SEC;
+        if (bx < geo.leftGutter - 8) continue;
+        const by = ribbons[b.idx].y;
+        const d = Math.hypot(x - bx, y - by);
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      return best;
+    }
+
+    function handleStagePointerDown(e) {
+      e.preventDefault();
+      ensureAudio();
+      const { x, y } = getCanvasPos(e);
+      const nowSec = performance.now() / 1000;
+
+      // 1. Check Pendulum Bob Grab
+      const bob = getPendulumBobPos();
+      if (Math.hypot(x - bob.x, y - bob.y) <= 28 || (y < geo.upperH && x < geo.archX0 - 16)) {
+        pointerState.mode = 'pendulum';
+        pendulum.manualDragging = true;
+        pendulum.suspended = false;
+        canvas.setPointerCapture(e.pointerId);
+        updatePendulumDrag(x, y);
+        return;
+      }
+
+      // 2. Check Todd Arch Apex Handle Grab
+      const apex = getToddApexHandlePos();
+      if (Math.hypot(x - apex.x, y - apex.y) <= 22 || (y < geo.upperH && x >= geo.archX0 - 10)) {
+        pointerState.mode = 'apex';
+        canvas.setPointerCapture(e.pointerId);
+        updateApexDrag(x, y);
+        return;
+      }
+
+      // 3. Lower Stage: Check Past Bead Click -> Pin/Unpin Continuous Attention
+      const hitBead = findHitBead(x, y, nowSec);
+      if (hitBead) {
+        if (eng.lockedBeadId === hitBead.id) {
+          eng.lockedBeadId = null;
+          playDetentClick(0.45);
+          showToast('Attention unpinned — flowing freely.');
+        } else {
+          eng.lockedBeadId = hitBead.id;
+          playDetentClick(0.95);
+        }
+        eng.activeFilaments = computeAttentionOverTrail(nowSec);
+        syncUnpinUI();
+        return;
+      }
+
+      // 4. Lower Stage: Direct Pluck / Vertical Harp-Strum on the 9 Steel Ribbons!
+      if (y >= geo.lowerTop) {
+        const ribIdx = findNearestRibbon(y);
+        if (ribIdx >= 0) {
+          pointerState.mode = 'strum';
+          pointerState.lastStrumIdx = ribIdx;
+          canvas.setPointerCapture(e.pointerId);
+          const xNorm = clamp((x - geo.leftGutter) / Math.max(100, geo.w - geo.leftGutter), 0, 1);
+          const vel = clamp(0.68 + 0.28 * (1 - Math.abs(xNorm - 0.82)), 0.50, 0.96);
+          triggerDirectPitch(ribIdx, { vel, tag: '' });
+        }
+      }
+    }
+
+    function updatePendulumDrag(x, y) {
+      const dx = x - geo.pendCX;
+      const dy = Math.max(18, y - geo.pendPivotY);
+      const rawAngle = clamp(Math.atan2(dx, dy), -0.82, 0.82);
+      pendulum.angle = rawAngle;
+      pendulum.vel = 0;
+
+      // Horizontal angle bends time: left = slow/stretch, right = push/accelerate
+      // Pulling far left (< -0.58) or pulling straight down past bob radius suspends in Breath Hold!
+      const pullDist = Math.hypot(dx, dy);
+      pendulum.suspended = (rawAngle < -0.58) || (pullDist > geo.pendLen + 22 && Math.abs(rawAngle) < 0.22);
+      pendulum.manualBend = clamp(rawAngle / 0.72, -1.0, 1.0);
+      pendulum.breathHalo = pendulum.suspended ? 1.0 : Math.abs(pendulum.manualBend) * 0.65;
+
+      // Tactile micro-detent clicks every 0.14 rad
+      const bucket = Math.round(rawAngle / 0.14);
+      if (bucket !== pendulum.lastDetentBucket) {
+        pendulum.lastDetentBucket = bucket;
+        playDetentClick(pendulum.suspended ? 0.95 : 0.55);
+      }
+
+      const stretchPreview = Math.pow(1.65, -pendulum.manualBend);
+      updateReadouts(getNominalIOIMs() * stretchPreview, stretchPreview, (eng.phraseStep % PHRASE_STEPS) / PHRASE_STEPS,
+        pendulum.suspended ? 'BREATH HOLD ○' : (pendulum.manualBend > 0.15 ? 'PUSHING ↑' : (pendulum.manualBend < -0.15 ? 'STRETCHING ↓' : 'CENTER')));
+    }
+
+    function updateApexDrag(x, y) {
+      if (ctrl.rigidOverride) setRigidOverride(false);
+      ctrl.toddApexU = clamp((x - geo.archX0) / Math.max(80, geo.archX1 - geo.archX0), 0.26, 0.84);
+      const normY = clamp((geo.archY1 - y) / Math.max(40, geo.archY1 - geo.archY0), 0.25, 0.96);
+      ctrl.toddDepth = clamp((normY - 0.25) / 0.45, 0.35, 1.60);
+
+      const det = Math.round(ctrl.toddApexU * 20) + Math.round(ctrl.toddDepth * 10);
+      if (det !== pointerState.lastApexDetent) {
+        pointerState.lastApexDetent = det;
+        playDetentClick(0.45);
+      }
+      showToast(`Phrase Arch Apex: ${Math.round(ctrl.toddApexU * 100)}% · Swell ${Math.round(ctrl.toddDepth * 100)}%`);
+    }
+
+    function handleStagePointerMove(e) {
+      const { x, y } = getCanvasPos(e);
+      const nowSec = performance.now() / 1000;
+
+      eng.mouseInsideLower = y >= geo.lowerTop;
+      if (eng.mouseInsideLower) {
+        eng.mouseYNorm = clamp((y - geo.lowerTop) / Math.max(100, geo.lowerH), 0, 1);
+      }
+
+      if (pointerState.mode === 'pendulum') {
+        updatePendulumDrag(x, y);
+        return;
+      }
+      if (pointerState.mode === 'apex') {
+        updateApexDrag(x, y);
+        return;
+      }
+      if (pointerState.mode === 'strum') {
+        const ribIdx = findNearestRibbon(y);
+        if (ribIdx >= 0 && ribIdx !== pointerState.lastStrumIdx) {
+          pointerState.lastStrumIdx = ribIdx;
+          triggerDirectPitch(ribIdx, { vel: 0.74, tag: 'CASCADE' });
+        }
+        return;
+      }
+
+      // Hover cursor affordance
+      const bob = getPendulumBobPos();
+      const apex = getToddApexHandlePos();
+      const hitBead = findHitBead(x, y, nowSec);
+      pointerState.hoverBeadId = hitBead ? hitBead.id : null;
+
+      if (Math.hypot(x - bob.x, y - bob.y) <= 26) {
+        pointerState.hoverTarget = 'pendulum';
+        canvas.style.cursor = 'grab';
+      } else if (Math.hypot(x - apex.x, y - apex.y) <= 20) {
+        pointerState.hoverTarget = 'apex';
+        canvas.style.cursor = 'grab';
+      } else if (hitBead) {
+        pointerState.hoverTarget = 'bead';
+        canvas.style.cursor = 'pointer';
+      } else if (y >= geo.lowerTop) {
+        pointerState.hoverTarget = 'ribbon';
+        canvas.style.cursor = 'crosshair';
+      } else {
+        pointerState.hoverTarget = 'none';
+        canvas.style.cursor = 'default';
+      }
+    }
+
+    function handleStagePointerUp(e) {
+      if (pointerState.mode === 'pendulum') {
+        // Release pendulum with natural physical rebound sling!
+        pendulum.vel = -pendulum.angle * 4.2;
+        pendulum.manualDragging = false;
+        pendulum.suspended = false;
+        playDetentClick(0.65);
+      }
+      pointerState.mode = 'none';
+      pointerState.lastStrumIdx = -1;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+    }
+
+    // =========================================================================
+    // 12. 60fps Physics & Swiss-Precision Canvas Renderer
+    // =========================================================================
+    let lastFrameMs = performance.now();
+
+    function stepPhysics(dt, nowMs) {
+      // 1. Update Held Keys -> Agogic Sustain Shimmer + Pendulum Breath Hold
+      let anyAgogicHold = false;
+      for (const [, entry] of heldKeys.entries()) {
+        if (entry.idx == null) continue;
+        const heldFor = nowMs - entry.downMs;
+        const rib = ribbons[entry.idx];
+        if (heldFor > 130) {
+          rib.holdGlow = clamp((heldFor - 130) / 300, 0, 1);
+          rib.energy = Math.max(rib.energy, 0.34 + 0.25 * rib.holdGlow);
+          anyAgogicHold = true;
+        }
+        if (heldFor > 260 && !entry.shimmerFired && audioCtx) {
+          entry.shimmerFired = true;
+          scheduleTone(entry.idx, audioCtx.currentTime, { vel: 0.26, type: 'H' });
+          rib.overtone = 1.25;
+          pendulum.breathHalo = 0.85;
+          if (entry.bead && !entry.bead.tag) entry.bead.tag = 'AGOGIC';
+        }
+      }
+
+      // 2. Update 9-Ribbon Standing Wave Oscillators
+      for (let i = 0; i < 9; i++) {
+        const r = ribbons[i];
+        const freqVisual = 22 + i * 4.8; // harmonic visual ripple speed (deeper = slower wave, higher = faster)
+        r.phase += dt * freqVisual;
+        const effDamp = r.holdGlow > 0.1 ? r.dampRate * 0.45 : r.dampRate;
+        r.energy *= Math.exp(-effDamp * dt);
+        if (r.energy < 0.004) r.energy = 0;
+        r.overtone *= Math.exp(-effDamp * 0.65 * dt);
+      }
+
+      // 3. Coupled-Oscillator Breath Pendulum Physics
+      const E = getEffectiveElasticity();
+      const baseOmega = (Math.PI / (getNominalIOIMs() / 1000)) * 0.88;
+      if (!pendulum.manualDragging) {
+        pendulum.manualBend *= Math.exp(-4.5 * dt);
+        if (Math.abs(pendulum.manualBend) < 0.005) pendulum.manualBend = 0;
+
+        const targetAmp = (ctrl.flowPlaying || eng.echoState === 'echoing' || (nowMs - eng.lastHumanNoteMs) < 3800)
+          ? (0.44 + 0.18 * E)
+          : 0.16; // gentle alive ambient idle breathing
+
+        const effRate = anyAgogicHold ? pendulum.targetRate * 0.45 : pendulum.targetRate;
+        pendulum.phase += dt * baseOmega * clamp(effRate, 0.42, 1.65);
+
+        const targetAngle = Math.sin(pendulum.phase) * targetAmp;
+        // Spring-damper coupling toward oscillator target (gives buttery organic rebound after drag!)
+        const springK = 26;
+        const dampC = 6.2;
+        const accel = (targetAngle - pendulum.angle) * springK - pendulum.vel * dampC;
+        pendulum.vel += accel * dt;
+        pendulum.angle = clamp(pendulum.angle + pendulum.vel * dt, -0.86, 0.86);
+      }
+
+      pendulum.breathHalo *= Math.exp(-2.6 * dt);
+      pendulum.trail.push(pendulum.angle);
+      if (pendulum.trail.length > 14) pendulum.trail.shift();
+
+      eng.rimShock *= Math.exp(-5.2 * dt);
+    }
+
+    function renderStage(nowMs) {
+      const nowSec = nowMs / 1000;
+      const w = geo.w;
+      const h = geo.h;
+      const sc = SCALES[activeScaleKey];
+      const pool = sc.chords[eng.currentChord] || [0, 4, 6];
+      const E = getEffectiveElasticity();
+
+      ctx.save();
+      ctx.scale(geo.dpr, geo.dpr);
+
+      // Matte paper background
+      ctx.fillStyle = '#fbfaf6';
+      ctx.fillRect(0, 0, w, h);
+
+      // Subtle architectural vertical separator inside upper stage
+      const sepX = geo.archX0 - 18;
+      ctx.strokeStyle = '#e8e6df';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sepX, 44);
+      ctx.lineTo(sepX, geo.upperH - 12);
+      ctx.stroke();
+
+      // =====================================================================
+      // UPPER STAGE LEFT: COUPLED-OSCILLATOR BREATH PENDULUM
+      // =====================================================================
+      renderBreathPendulum();
+
+      // =====================================================================
+      // UPPER STAGE RIGHT: TODD PHRASE-ARCH & REAL-TIME RUBATO CURVE
+      // =====================================================================
+      renderToddPhraseArch(nowSec, E);
+
+      // =====================================================================
+      // HAIRLINE COUPLING DIVIDER BETWEEN UPPER & LOWER STAGE
+      // =====================================================================
+      ctx.strokeStyle = '#dedcd5';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, geo.upperH + 0.5);
+      ctx.lineTo(w, geo.upperH + 0.5);
+      ctx.stroke();
+
+      // Subtle coupling tick directly above Strike Bar
+      ctx.fillStyle = '#e5481b';
+      ctx.beginPath();
+      ctx.moveTo(geo.strikeX, geo.upperH + 1);
+      ctx.lineTo(geo.strikeX - 4, geo.upperH - 5);
+      ctx.lineTo(geo.strikeX + 4, geo.upperH - 5);
+      ctx.closePath();
+      ctx.fill();
+
+      // =====================================================================
+      // LOWER STAGE: 9-RIBBON HARMONIC STRING HARP + ELASTIC TRAIL + FILAMENTS
+      // =====================================================================
+      renderLowerHarpStage(nowSec, sc, pool);
+
+      ctx.restore();
+    }
+
+    function renderBreathPendulum() {
+      const cx = geo.pendCX;
+      const py = geo.pendPivotY;
+      const len = geo.pendLen;
+
+      // Precision calibrated arc track (-48° to +48°)
+      const maxA = 0.80;
+      ctx.strokeStyle = '#dedcd5';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.arc(cx, py, len, Math.PI * 0.5 - maxA, Math.PI * 0.5 + maxA);
+      ctx.stroke();
+
+      // Radial tick marks along calibration arc
+      for (let i = -4; i <= 4; i++) {
+        const a = (i / 4) * 0.72;
+        const rIn = i === 0 ? len - 7 : len - 4;
+        const rOut = i === 0 ? len + 7 : len + 4;
+        ctx.strokeStyle = i === 0 ? '#151517' : (i === -4 ? 'rgba(229,72,27,0.55)' : '#c8c5bc');
+        ctx.lineWidth = i === 0 ? 1.5 : 1;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.sin(a) * rIn, py + Math.cos(a) * rIn);
+        ctx.lineTo(cx + Math.sin(a) * rOut, py + Math.cos(a) * rOut);
+        ctx.stroke();
+      }
+
+      // Active angular trail along arc
+      if (pendulum.trail.length > 2) {
+        for (let i = 1; i < pendulum.trail.length; i++) {
+          const a0 = pendulum.trail[i - 1];
+          const a1 = pendulum.trail[i];
+          const alpha = (i / pendulum.trail.length) * 0.36;
+          ctx.strokeStyle = `rgba(229, 72, 27, ${alpha.toFixed(3)})`;
+          ctx.lineWidth = 2.6;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.sin(a0) * len, py + Math.cos(a0) * len);
+          ctx.lineTo(cx + Math.sin(a1) * len, py + Math.cos(a1) * len);
+          ctx.stroke();
+        }
+      }
+
+      const bob = getPendulumBobPos();
+
+      // Breath-suspension halo ring (when Luftpause or manual hold!)
+      if (pendulum.breathHalo > 0.04 || pendulum.suspended) {
+        const hAmt = pendulum.suspended ? 1.0 : pendulum.breathHalo;
+        ctx.strokeStyle = `rgba(229, 72, 27, ${(hAmt * 0.45).toFixed(3)})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(bob.x, bob.y, 16 + (1 - hAmt) * 14 + (pendulum.suspended ? 4 : 0), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Machined pivot rod
+      ctx.strokeStyle = '#151517';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(cx, py);
+      ctx.lineTo(bob.x, bob.y);
+      ctx.stroke();
+
+      // Pivot bearing pin
+      ctx.fillStyle = '#fbfaf6';
+      ctx.strokeStyle = '#151517';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(cx, py, 3.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pendulum bob (Braun tactile dial aesthetic)
+      const bobR = (pointerState.hoverTarget === 'pendulum' || pendulum.manualDragging) ? 14.5 : 12.5;
+      ctx.fillStyle = pendulum.suspended ? '#e5481b' : '#fbfaf6';
+      ctx.strokeStyle = pendulum.manualDragging ? '#e5481b' : '#151517';
+      ctx.lineWidth = 2.1;
+      ctx.beginPath();
+      ctx.arc(bob.x, bob.y, bobR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Vermilion inner core dot
+      ctx.fillStyle = pendulum.suspended ? '#fbfaf6' : '#e5481b';
+      ctx.beginPath();
+      ctx.arc(bob.x, bob.y, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Scale captions beneath arc
+      ctx.fillStyle = '#8e8b82';
+      ctx.font = '600 9px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('STRETCH / HOLD  ←   0   →  DRIVE', cx, geo.upperH - 9);
+    }
+
+    function renderToddPhraseArch(nowSec, E) {
+      const x0 = geo.archX0;
+      const x1 = geo.archX1;
+      const y0 = geo.archY0;
+      const y1 = geo.archY1;
+      const spanX = Math.max(80, x1 - x0);
+      const baseY = archRateToY(1.0);
+
+      // 4-Bar architectural columns
+      const barLabels = ['BAR 1 · IDEA', 'BAR 2 · LIFT', 'BAR 3 · APEX', 'BAR 4 · CLOSE'];
+      ctx.font = '500 9px "JetBrains Mono", ui-monospace, monospace';
+      for (let b = 0; b < 4; b++) {
+        const bx = x0 + (b / 4) * spanX;
+        ctx.strokeStyle = '#eceae2';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx, y0);
+        ctx.lineTo(bx, y1);
+        ctx.stroke();
+
+        ctx.fillStyle = '#9b978d';
+        ctx.textAlign = 'left';
+        ctx.fillText(barLabels[b], bx + 5, y1 + 11);
+      }
+
+      // Baseline 1.00x Rigid Grid dashed line
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#c5c2b8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x0, baseY);
+      ctx.lineTo(x1, baseY);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.fillStyle = '#9b978d';
+      ctx.textAlign = 'right';
+      ctx.fillText('1.00× GRID', x1 - 2, baseY - 4);
+      ctx.fillText('ACCEL ↑', x1 - 2, y0 + 8);
+      ctx.fillText('RIT / BREATH ↓', x1 - 2, y1 - 3);
+
+      // Draw Theoretical Todd Phrase-Arch Curve
+      const pts = [];
+      const steps = 64;
+      for (let i = 0; i <= steps; i++) {
+        const u = i / steps;
+        const ev = evaluateToddArch(u, E);
+        pts.push({
+          x: x0 + u * spanX,
+          y: archRateToY(ev.tempoRate)
+        });
+      }
+
+      // Soft warm wash between arch and 1.00x baseline
+      if (E > 0.01) {
+        ctx.fillStyle = 'rgba(229, 72, 27, 0.065)';
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, baseY);
+        for (const pt of pts) ctx.lineTo(pt.x, pt.y);
+        ctx.lineTo(pts[pts.length - 1].x, baseY);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Crisp charcoal Todd arch line
+      ctx.strokeStyle = E > 0.01 ? '#151517' : '#a8a59b';
+      ctx.lineWidth = 1.65;
+      ctx.beginPath();
+      pts.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.stroke();
+
+      // Overlay Real-Time Played Rubato Trace (vermilion signal dots + connected segments)
+      const recentTrace = eng.archTrace.filter(t => (nowSec - t.timeSec) < 18);
+      if (recentTrace.length > 0) {
+        ctx.strokeStyle = 'rgba(229, 72, 27, 0.52)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        let prevU = -1;
+        for (const tr of recentTrace) {
+          const tx = x0 + tr.u * spanX;
+          const ty = archRateToY(tr.tempoRate);
+          if (prevU < 0 || tr.u < prevU) ctx.moveTo(tx, ty);
+          else ctx.lineTo(tx, ty);
+          prevU = tr.u;
+        }
+        ctx.stroke();
+
+        for (const tr of recentTrace) {
+          const age = clamp(1 - (nowSec - tr.timeSec) / 18, 0.12, 1);
+          const tx = x0 + tr.u * spanX;
+          const ty = archRateToY(tr.tempoRate);
+          if (tr.isLuftpause) {
+            // Open circle glyph for Luftpause breath!
+            ctx.strokeStyle = `rgba(229, 72, 27, ${age.toFixed(2)})`;
+            ctx.fillStyle = '#fbfaf6';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(tx, ty, 4.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = `rgba(229, 72, 27, ${(age * 0.9).toFixed(2)})`;
+            ctx.beginPath();
+            ctx.arc(tx, ty, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      // Live Phrase Playhead Vertical Cursor
+      const curU = (eng.phraseStep % PHRASE_STEPS) / PHRASE_STEPS;
+      const playX = x0 + curU * spanX;
+      ctx.strokeStyle = 'rgba(229, 72, 27, 0.42)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(playX, y0);
+      ctx.lineTo(playX, y1);
+      ctx.stroke();
+
+      // Draggable Vermilion Apex Diamond Handle
+      const apex = getToddApexHandlePos();
+      const hotApex = pointerState.hoverTarget === 'apex' || pointerState.mode === 'apex';
+      const r = hotApex ? 7.5 : 6;
+      ctx.fillStyle = E > 0.01 ? '#e5481b' : '#8e8b82';
+      ctx.strokeStyle = '#fbfaf6';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(apex.x, apex.y - r);
+      ctx.lineTo(apex.x + r, apex.y);
+      ctx.lineTo(apex.x, apex.y + r);
+      ctx.lineTo(apex.x - r, apex.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = E > 0.01 ? '#e5481b' : '#8e8b82';
+      ctx.font = '600 9px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`APEX ${Math.round(ctrl.toddApexU * 100)}%`, apex.x, apex.y - 11);
+    }
+
+    function renderLowerHarpStage(nowSec, sc, pool) {
+      const w = geo.w;
+      const h = geo.h;
+      const strikeX = geo.strikeX;
+      const leftX = geo.leftGutter;
+
+      // Subtle vertical wall-clock time ruler ticks (-1s, -2s, -3s...) proving true elastic time!
+      ctx.font = '500 9px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      for (let sec = 1; sec <= 7; sec++) {
+        const tx = strikeX - sec * PIXELS_PER_SEC;
+        if (tx < leftX + 10) break;
+        ctx.strokeStyle = '#efede6';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(tx, geo.lowerTop + 6);
+        ctx.lineTo(tx, h - 20);
+        ctx.stroke();
+
+        ctx.fillStyle = '#a8a49a';
+        ctx.fillText(`-${sec}s`, tx, h - 7);
+      }
+
+      // Live Strike Bar vertical axis
+      ctx.strokeStyle = eng.rimShock > 0.08 ? '#e5481b' : '#151517';
+      ctx.lineWidth = eng.rimShock > 0.08 ? 2.2 : 1.25;
+      ctx.beginPath();
+      ctx.moveTo(strikeX, geo.lowerTop + 4);
+      ctx.lineTo(strikeX, h - 18);
+      ctx.stroke();
+
+      ctx.fillStyle = '#57554f';
+      ctx.font = '600 9px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('STRIKE BAR', strikeX, h - 7);
+
+      // Tak / Gu rim shock ring along strike bar
+      if (eng.rimShock > 0.04) {
+        const shockY = eng.rimLabel === 'GU' ? ribbons[0].y : (geo.lowerTop + geo.lowerH * 0.45);
+        ctx.strokeStyle = `rgba(229, 72, 27, ${(eng.rimShock * 0.7).toFixed(2)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(strikeX, shockY, 10 + (1 - eng.rimShock) * 44, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = `rgba(229, 72, 27, ${eng.rimShock.toFixed(2)})`;
+        ctx.font = '700 10px "JetBrains Mono", ui-monospace, monospace';
+        ctx.fillText(eng.rimLabel, strikeX + 24, shockY + 3);
+      }
+
+      // 1. Draw the 9 Horizontal Vibrating Steel Ribbons
+      const spanW = w - 16 - leftX;
+      for (let i = 0; i < 9; i++) {
+        const rib = ribbons[i];
+        const y0 = rib.y;
+        const inChord = pool.includes(i);
+        const gauge = 2.5 - i * 0.16; // thick bass Ding -> taut fine treble wire
+        const amp = rib.energy * (11.5 - i * 0.45);
+
+        // Left pitch label & scale degree
+        ctx.textAlign = 'right';
+        ctx.font = (i === 0 || rib.energy > 0.25)
+          ? '700 10.5px "JetBrains Mono", ui-monospace, monospace'
+          : '500 10px "JetBrains Mono", ui-monospace, monospace';
+        ctx.fillStyle = rib.energy > 0.22 ? '#e5481b' : (inChord ? '#151517' : '#8e8b82');
+        ctx.fillText(sc.notes[i], leftX - 30, y0 + 3.5);
+
+        ctx.font = '500 9px "JetBrains Mono", ui-monospace, monospace';
+        ctx.fillStyle = i === 0 ? '#151517' : '#9b978d';
+        ctx.fillText(i === 0 ? 'DING' : `^${sc.degrees[i]}`, leftX - 8, y0 + 3.5);
+
+        // Draw vibrating standing-wave steel ribbon
+        const hot = clamp(rib.energy * 1.15 + rib.holdGlow * 0.65, 0, 1);
+        const rCol = Math.round(lerp(inChord ? 42 : 178, 229, hot));
+        const gCol = Math.round(lerp(inChord ? 41 : 174, 72, hot));
+        const bCol = Math.round(lerp(inChord ? 39 : 165, 27, hot));
+
+        // Overtone 2f0 shimmer ghost wire when blooming!
+        if (rib.energy > 0.12 && rib.overtone > 0.2) {
+          ctx.strokeStyle = `rgba(229, 72, 27, ${(rib.energy * 0.24).toFixed(3)})`;
+          ctx.lineWidth = Math.max(0.9, gauge * 0.7);
+          ctx.beginPath();
+          const segs = 56;
+          for (let s = 0; s <= segs; s++) {
+            const u = s / segs;
+            const px = leftX + u * spanW;
+            const dy = -amp * 0.55 * Math.sin(u * Math.PI * 2) * Math.sin(rib.phase * 2.002);
+            if (s === 0) ctx.moveTo(px, y0 + dy);
+            else ctx.lineTo(px, y0 + dy);
+          }
+          ctx.stroke();
+        }
+
+        // Primary resonant steel wire
+        ctx.strokeStyle = `rgb(${rCol},${gCol},${bCol})`;
+        ctx.lineWidth = gauge + hot * 0.7;
+        ctx.beginPath();
+        if (amp < 0.25) {
+          ctx.moveTo(leftX, y0);
+          ctx.lineTo(w - 16, y0);
+        } else {
+          const segs = 64;
+          for (let s = 0; s <= segs; s++) {
+            const u = s / segs;
+            const px = leftX + u * spanW;
+            const env = Math.sin(u * Math.PI);
+            const fund = Math.sin(rib.phase) * env;
+            const oct = 0.28 * rib.overtone * Math.sin(u * Math.PI * 2) * Math.sin(rib.phase * 2.001);
+            const dy = amp * (fund + oct);
+            if (s === 0) ctx.moveTo(px, y0 + dy);
+            else ctx.lineTo(px, y0 + dy);
+          }
+        }
+        ctx.stroke();
+
+        // Strike Bar crossing node
+        ctx.fillStyle = hot > 0.25 ? '#e5481b' : (inChord ? '#151517' : '#c8c5bc');
+        ctx.beginPath();
+        ctx.arc(strikeX, y0, hot > 0.25 ? 3.5 : (inChord ? 2.6 : 1.8), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Right-of-Strike-Bar Anticipation Gravity Bars (live semantic probability field!)
+        const prob = eng.probs[i] ?? 0;
+        const barMaxW = Math.max(24, (w - 22) - (strikeX + 10));
+        const barW = clamp(prob * barMaxW * 2.4, 2, barMaxW);
+        ctx.fillStyle = prob > 0.20 ? 'rgba(229, 72, 27, 0.28)' : 'rgba(21, 21, 23, 0.11)';
+        ctx.fillRect(strikeX + 9, y0 - 3, barW, 6);
+        if (prob > 0.14) {
+          ctx.fillStyle = prob > 0.20 ? '#e5481b' : '#57554f';
+          ctx.fillRect(strikeX + 9 + barW - 2, y0 - 4, 2, 8);
+        }
+      }
+
+      // 2. Continuous Attention Filaments (Bezier Arcs: Length = Horizon, Weight/Ink = Pull Strength!)
+      const activeTargetIdx = eng.probs.reduce((best, p, i) => p > eng.probs[best] ? i : best, 0);
+      const targetY = ribbons[activeTargetIdx]?.y ?? (geo.lowerTop + geo.lowerH * 0.5);
+
+      for (const fil of eng.activeFilaments) {
+        const bead = eng.trail.find(b => b.id === fil.beadId);
+        if (!bead || bead.idx == null) continue;
+        const bx = strikeX - (nowSec - bead.timeSec) * PIXELS_PER_SEC;
+        if (bx < leftX + 2 || bx > strikeX - 10) continue;
+        const by = ribbons[bead.idx].y;
+        const dx = strikeX - bx;
+
+        // Arch height automatically scales with memory horizon distance!
+        const archDir = (bead.idx >= 5) ? 1 : -1;
+        const lift = Math.min(78, 16 + dx * 0.16) * archDir;
+        const c1x = bx + dx * 0.30;
+        const c2x = strikeX - dx * 0.26;
+        const c1y = by + lift;
+        const c2y = targetY + lift * 0.72;
+
+        const wgt = fil.weight;
+        ctx.save();
+        if (fil.locked) {
+          ctx.strokeStyle = 'rgba(229, 72, 27, 0.88)';
+          ctx.lineWidth = 2.4;
+        } else {
+          const alpha = clamp(0.10 + wgt * 0.52, 0.08, 0.65);
+          ctx.strokeStyle = wgt > 0.62
+            ? `rgba(229, 72, 27, ${alpha.toFixed(3)})`
+            : `rgba(21, 21, 23, ${(alpha * 0.75).toFixed(3)})`;
+          ctx.lineWidth = 0.75 + wgt * 2.1;
+        }
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.bezierCurveTo(c1x, c1y, c2x, c2y, strikeX, targetY);
+        ctx.stroke();
+
+        // Horizon distance micro-tag on pinned filament
+        if (fil.locked) {
+          const midX = (bx + strikeX) * 0.5;
+          const midY = (by + targetY) * 0.5 + lift * 0.68;
+          ctx.fillStyle = '#e5481b';
+          ctx.font = '700 9px "JetBrains Mono", ui-monospace, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`PINNED · -${(nowSec - bead.timeSec).toFixed(1)}s`, midX, midY - 4);
+        }
+        ctx.restore();
+      }
+
+      // 3. Elastic-Time Impulse Beads Streaming Leftward
+      for (const b of eng.trail) {
+        if (b.idx == null) continue;
+        const dt = nowSec - b.timeSec;
+        const bx = strikeX - dt * PIXELS_PER_SEC;
+        if (bx < leftX - 4 || bx > strikeX + 4) continue;
+        const by = ribbons[b.idx].y;
+        const fade = clamp(1 - (leftX + 36 - bx) / 40, 0.15, 1);
+
+        // Dyad bracket connecting simultaneous partner bead
+        if (b.dyadPartnerIdx != null && ribbons[b.dyadPartnerIdx]) {
+          const py = ribbons[b.dyadPartnerIdx].y;
+          ctx.strokeStyle = `rgba(21, 21, 23, ${(0.55 * fade).toFixed(2)})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx, py);
+          ctx.stroke();
+        }
+
+        const isLocked = b.id === eng.lockedBeadId;
+        const isHover = b.id === pointerState.hoverBeadId;
+        const agogicBonus = b.holdMs > 260 ? 2.4 : (b.stretchRatio > 1.3 ? 1.6 : 0);
+        const radius = clamp(3.2 + b.vel * 4.2 + agogicBonus, 2.8, 9.2);
+
+        // Outer harmonic halo for 2f0 ('H') or Ding ('D') bloom
+        if (b.type === 'H' || b.idx === 0 || b.holdMs > 260) {
+          ctx.strokeStyle = b.source === 'human'
+            ? `rgba(229, 72, 27, ${(0.42 * fade).toFixed(2)})`
+            : `rgba(21, 21, 23, ${(0.26 * fade).toFixed(2)})`;
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.arc(bx, by, radius + 3.4, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Bead core
+        ctx.beginPath();
+        ctx.arc(bx, by, radius, 0, Math.PI * 2);
+        if (b.source === 'human') {
+          ctx.fillStyle = `rgba(229, 72, 27, ${(0.92 * fade).toFixed(2)})`;
+          ctx.fill();
+          ctx.strokeStyle = '#fbfaf6';
+          ctx.lineWidth = 1.3;
+          ctx.stroke();
+        } else if (b.source === 'echo') {
+          ctx.fillStyle = `rgba(43, 103, 119, ${(0.90 * fade).toFixed(2)})`;
+          ctx.fill();
+        } else {
+          ctx.fillStyle = b.type === 'g'
+            ? `rgba(110, 107, 98, ${(0.72 * fade).toFixed(2)})`
+            : `rgba(21, 21, 23, ${(0.90 * fade).toFixed(2)})`;
+          ctx.fill();
+        }
+
+        // Pin Reticle for Locked or Hovered Bead
+        if (isLocked || isHover) {
+          ctx.strokeStyle = '#e5481b';
+          ctx.lineWidth = isLocked ? 2 : 1.3;
+          ctx.beginPath();
+          ctx.arc(bx, by, radius + 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Subtle rubato micro-tag beneath notable beads
+        if (b.tag && dt < 5.5) {
+          ctx.fillStyle = (b.tag === 'LUFT' || b.tag === 'APEX' || b.tag === 'AGOGIC')
+            ? `rgba(229, 72, 27, ${(0.85 * fade).toFixed(2)})`
+            : `rgba(98, 96, 91, ${(0.75 * fade).toFixed(2)})`;
+          ctx.font = '600 8px "JetBrains Mono", ui-monospace, monospace';
+          ctx.textAlign = 'center';
+          const lbl = b.tag === 'LUFT' ? '○ LUFT' : b.tag;
+          ctx.fillText(lbl, bx, by + radius + 11);
+        }
+      }
+
+      // Subtle Echo Countdown Breathing Bar on Strike Bar when waiting in Call & Echo
+      if (ctrl.mode === 'echo' && eng.echoState === 'listening' && eng.callPhrase.length > 0 && heldKeys.size === 0) {
+        const elapsed = performance.now() - eng.echoStartWaitMs;
+        const prog = clamp(elapsed / 700, 0, 1);
+        if (prog > 0.08 && prog < 1) {
+          const barH = (geo.lowerH - 36) * prog;
+          ctx.strokeStyle = 'rgba(43, 103, 119, 0.55)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(strikeX, h - 22);
+          ctx.lineTo(strikeX, h - 22 - barH);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function animationLoop(nowMs) {
+      const dt = Math.min(0.05, Math.max(0.001, (nowMs - lastFrameMs) / 1000));
+      lastFrameMs = nowMs;
+      stepPhysics(dt, nowMs);
+      renderStage(nowMs);
+      requestAnimationFrame(animationLoop);
+    }
+
+    // =========================================================================
+    // 13. UI Wiring: 3 Braun Controls, A/B Toggle, Scale/Timbre & Drawers
+    // =========================================================================
+    function populateScaleSelect() {
+      const sel = document.getElementById('scale-select');
+      sel.innerHTML = '';
+      for (const [key, sc] of Object.entries(SCALES)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = sc.name;
+        if (key === activeScaleKey) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+
+    function setAgencyMode(mode) {
+      ctrl.mode = mode;
+      document.getElementById('btn-mode-direct').classList.toggle('active', mode === 'direct');
+      document.getElementById('btn-mode-echo').classList.toggle('active', mode === 'echo');
+      document.getElementById('btn-mode-flow').classList.toggle('active', mode === 'flow');
+
+      const labels = {
+        direct: 'Direct Touch',
+        echo: 'Call & Echo',
+        flow: 'Master Flow'
+      };
+      document.getElementById('val-mode').textContent = labels[mode];
+
+      if (mode === 'flow') {
+        cancelPendingEcho();
+        startMasterFlow();
+        showToast('Master Flow active — drag the pendulum to bend rubato, drag Apex, or toggle Rigid Grid to A/B!');
+      } else {
+        stopMasterFlow();
+        if (mode === 'echo') {
+          eng.callPhrase = [];
+          eng.echoState = 'idle';
+          setLiveStatus('PLAY PHRASE', 'echo');
+          showToast('Call & Echo ready — tap or strum any phrase, pause ~700ms, and hear your exact rubato echoed back!');
+        } else {
+          cancelPendingEcho();
+          setLiveStatus('DIRECT TOUCH', 'on');
+          showToast('Direct Touch (<3ms) — Tap crisp or hold keys to bloom; pluck/strum ribbons directly.');
+        }
+      }
+    }
+
+    function syncPlayButtonUI() {
+      const btn = document.getElementById('btn-flow-play');
+      btn.textContent = ctrl.flowPlaying ? '❚❚' : '▶';
+      btn.classList.toggle('playing', ctrl.flowPlaying);
+    }
+
+    function setRigidOverride(isRigid) {
+      ctrl.rigidOverride = isRigid;
+      const btnOrg = document.getElementById('btn-ab-organic');
+      const btnRig = document.getElementById('btn-ab-rigid');
+      btnOrg.classList.toggle('active-organic', !isRigid);
+      btnRig.classList.toggle('active-rigid', isRigid);
+
+      const sl = document.getElementById('slider-elasticity');
+      if (isRigid) {
+        if (ctrl.elasticity > 0.02) ctrl.savedOrganicElast = ctrl.elasticity;
+        sl.value = '0';
+      } else {
+        ctrl.elasticity = Math.max(0.28, ctrl.savedOrganicElast);
+        sl.value = String(Math.round(ctrl.elasticity * 100));
+      }
+      syncElasticityReadout();
+      playDetentClick(0.75);
+      showToast(isRigid
+        ? 'A/B → RIGID GRID (0% Rubato): flat quantized clock for direct comparison.'
+        : `A/B → ORGANIC RUBATO (${Math.round(ctrl.elasticity * 100)}%): Todd Arch + KTH Breath + Agogic Bloom active.`
+      );
+    }
+
+    function syncElasticityReadout() {
+      const eff = Math.round(getEffectiveElasticity() * 100);
+      let desc = 'Speech-Rubato';
+      if (eff === 0) desc = 'Rigid Grid';
+      else if (eff < 30) desc = 'Subtle Swing';
+      else if (eff < 65) desc = 'Expressive Arch';
+      else if (eff > 86) desc = 'Free Vocal Breath';
+      const el = document.getElementById('val-elasticity');
+      el.textContent = `${eff}% · ${desc}`;
+      el.classList.toggle('accent', eff > 0);
+    }
+
+    function syncTensionReadout() {
+      const pct = Math.round(ctrl.tension * 100);
+      let desc = 'Warm Flow';
+      if (pct < 26) desc = 'Grounded Calm';
+      else if (pct < 55) desc = 'Warm Flow';
+      else if (pct < 78) desc = 'Yearning Lift';
+      else desc = 'Poignant Apex';
+      document.getElementById('val-tension').textContent = `${pct}% · ${desc}`;
+    }
+
+    // Drawer management
+    function openDrawer(drawerId) {
+      closeDrawers();
+      document.getElementById(drawerId).classList.add('open');
+      document.getElementById('drawer-backdrop').classList.add('open');
+      document.getElementById('btn-gemini-drawer').classList.toggle('active', drawerId === 'gemini-drawer');
+      document.getElementById('btn-notes-drawer').classList.toggle('active', drawerId === 'notes-drawer');
+    }
+
+    function closeDrawers() {
+      document.getElementById('gemini-drawer').classList.remove('open');
+      document.getElementById('notes-drawer').classList.remove('open');
+      document.getElementById('drawer-backdrop').classList.remove('open');
+      document.getElementById('btn-gemini-drawer').classList.remove('active');
+      document.getElementById('btn-notes-drawer').classList.remove('active');
+    }
+
+    function init() {
+      populateScaleSelect();
+      computeStageGeometry();
+      syncElasticityReadout();
+      syncTensionReadout();
+      syncChordUI();
+      updatePanLangPreview();
+      evaluatePitchProbs({});
+
+      // Resize observer for crisp HiDPI stage
+      if (window.ResizeObserver) {
+        new ResizeObserver(() => computeStageGeometry()).observe(stageContainer);
+      } else {
+        window.addEventListener('resize', computeStageGeometry);
+      }
+
+      // Unified Canvas Pointer Listeners
+      canvas.addEventListener('pointerdown', handleStagePointerDown);
+      canvas.addEventListener('pointermove', handleStagePointerMove);
+      canvas.addEventListener('pointerup', handleStagePointerUp);
+      canvas.addEventListener('pointercancel', handleStagePointerUp);
+      canvas.addEventListener('pointerleave', () => { eng.mouseInsideLower = false; });
+
+      // Keyboard Listeners
+      window.addEventListener('keydown', (e) => {
+        const tag = (e.target?.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+        if (e.key === 'Escape') {
+          closeDrawers();
+          if (ctrl.flowPlaying) stopMasterFlow();
+          return;
+        }
+        if (e.key === ' ') e.preventDefault();
+        if (e.repeat) return;
+
+        handleKinestheticKeyDown(e.key, e.shiftKey);
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const tag = (e.target?.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        handleKinestheticKeyUp(e.key);
+      });
+
+      // Control 1: Agency Mode & Play/Pause
+      document.getElementById('btn-mode-direct').addEventListener('click', () => setAgencyMode('direct'));
+      document.getElementById('btn-mode-echo').addEventListener('click', () => setAgencyMode('echo'));
+      document.getElementById('btn-mode-flow').addEventListener('click', () => setAgencyMode('flow'));
+      document.getElementById('btn-flow-play').addEventListener('click', () => {
+        if (ctrl.flowPlaying) {
+          stopMasterFlow();
+        } else {
+          if (ctrl.mode !== 'flow') setAgencyMode('flow');
+          else startMasterFlow();
+        }
+      });
+
+      // Control 2: Rubato Elasticity Slider & A/B Switch
+      const slElast = document.getElementById('slider-elasticity');
+      slElast.addEventListener('input', () => {
+        const v = parseInt(slElast.value, 10) / 100;
+        ctrl.elasticity = v;
+        if (v > 0.01) {
+          ctrl.savedOrganicElast = v;
+          ctrl.rigidOverride = false;
+          document.getElementById('btn-ab-organic').classList.add('active-organic');
+          document.getElementById('btn-ab-rigid').classList.remove('active-rigid');
+        } else {
+          ctrl.rigidOverride = true;
+          document.getElementById('btn-ab-organic').classList.remove('active-organic');
+          document.getElementById('btn-ab-rigid').classList.add('active-rigid');
+        }
+        syncElasticityReadout();
+      });
+
+      document.getElementById('btn-ab-organic').addEventListener('click', () => setRigidOverride(false));
+      document.getElementById('btn-ab-rigid').addEventListener('click', () => setRigidOverride(true));
+
+      // Control 3: Emotional Arc / Tension Slider
+      const slTens = document.getElementById('slider-tension');
+      slTens.addEventListener('input', () => {
+        ctrl.tension = parseInt(slTens.value, 10) / 100;
+        syncTensionReadout();
+        evaluatePitchProbs({});
+      });
+
+      // Unpin attention button
+      document.getElementById('btn-unpin-attn').addEventListener('click', () => {
+        eng.lockedBeadId = null;
+        eng.activeFilaments = computeAttentionOverTrail(performance.now() / 1000);
+        syncUnpinUI();
+        showToast('Attention unpinned — flowing freely.');
+      });
+
+      // Scale & Timbre selectors
+      document.getElementById('scale-select').addEventListener('change', (e) => {
+        activeScaleKey = e.target.value;
+        computeRibbonYPositions();
+        evaluatePitchProbs({});
+        updatePanLangPreview();
+        showToast(`Scale switched to ${SCALES[activeScaleKey].name}`);
+      });
+
+      document.getElementById('timbre-select').addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val.startsWith('bank:')) {
+          activeBankId = val.slice(5);
+          activeProfileKey = activeBankId.replace('yishama-', '');
+          ensureStudioBank(activeBankId);
+        } else {
+          activeBankId = null;
+          activeProfileKey = val.slice(4);
+        }
+        showToast(`Timbre: ${e.target.options[e.target.selectedIndex].text}`);
+      });
+
+      // Drawers
+      document.getElementById('btn-gemini-drawer').addEventListener('click', () => {
+        const isOpen = document.getElementById('gemini-drawer').classList.contains('open');
+        if (isOpen) closeDrawers();
+        else openDrawer('gemini-drawer');
+      });
+      document.getElementById('btn-notes-drawer').addEventListener('click', () => {
+        const isOpen = document.getElementById('notes-drawer').classList.contains('open');
+        if (isOpen) closeDrawers();
+        else openDrawer('notes-drawer');
+      });
+      document.getElementById('btn-close-gemini').addEventListener('click', closeDrawers);
+      document.getElementById('btn-close-notes').addEventListener('click', closeDrawers);
+      document.getElementById('drawer-backdrop').addEventListener('click', closeDrawers);
+
+      // Ephemeral Memory-Only Anti-Password-Manager Key Input
+      const keyInput = document.getElementById('gem-api-key');
+      keyInput.addEventListener('focus', () => { keyInput.removeAttribute('readonly'); });
+      keyInput.addEventListener('input', () => {
+        geminiApiKey = keyInput.value.trim();
+        document.getElementById('gem-status').textContent = geminiApiKey ? 'KEY READY (MEMORY)' : 'LOCAL ENGINE';
+      });
+      document.getElementById('btn-clear-key').addEventListener('click', () => {
+        geminiApiKey = '';
+        keyInput.value = '';
+        geminiState.rubatoShape = null;
+        geminiState.harmonicProbs = null;
+        geminiState.focalBias.fill(0);
+        document.getElementById('gem-status').textContent = 'LOCAL ENGINE';
+        document.getElementById('gem-latency').textContent = '—';
+        document.getElementById('gemini-pill-badge').classList.remove('live');
+        document.getElementById('gem-answers-view').textContent = 'Key cleared from memory. Local Todd+KTH & attention engine active.';
+      });
+      document.getElementById('btn-gem-test').addEventListener('click', () => {
+        if (!geminiApiKey) {
+          document.getElementById('gem-status').textContent = 'ENTER KEY ABOVE';
+          return;
+        }
+        queryGeminiPanLang();
+      });
+
+      // Clickable keycaps in the footer for extra touch discoverability + fast keyCapEls lookup map
+      document.querySelectorAll('.kcap[data-k]').forEach(el => {
+        const k = el.getAttribute('data-k');
+        keyCapEls.set(k, el);
+        el.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          handleKinestheticKeyDown(k, e.shiftKey);
+        });
+        el.addEventListener('pointerup', () => {
+          handleKinestheticKeyUp(k);
+        });
+        el.addEventListener('pointerleave', () => {
+          if (heldKeys.has(k)) handleKinestheticKeyUp(k);
+        });
+      });
+
+      requestAnimationFrame(animationLoop);
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

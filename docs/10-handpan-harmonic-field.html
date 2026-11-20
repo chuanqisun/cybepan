@@ -1,0 +1,3663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>10 — Semantic Gravity Field &amp; Kinetic Bow · Cyberpan</title>
+  <style>
+    :root {
+      --stone: #f6f4ef;
+      --stone-hi: #fbfaf6;
+      --stone-lo: #ebe7de;
+      --ink: #171614;
+      --ink-mid: #4a463f;
+      --ink-soft: #7e786d;
+      --hairline: rgba(23, 22, 20, 0.11);
+      --hairline-strong: rgba(23, 22, 20, 0.22);
+      --vermilion: #d9531e;
+      --vermilion-soft: rgba(217, 83, 30, 0.14);
+      --vermilion-glow: rgba(217, 83, 30, 0.34);
+      --glass: rgba(249, 247, 242, 0.84);
+      --glass-strong: rgba(251, 250, 246, 0.95);
+      --shadow-sm: 0 2px 10px rgba(23, 22, 20, 0.05), 0 1px 2px rgba(23, 22, 20, 0.04);
+      --shadow-md: 0 12px 36px rgba(23, 22, 20, 0.09), 0 2px 8px rgba(23, 22, 20, 0.05);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-serif: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--stone);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #field-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    /* =====================================================================
+       Floating Architectural Chrome — Whisper-Quiet & Minimal
+       ===================================================================== */
+    .hud-top {
+      position: fixed;
+      top: 18px;
+      left: 22px;
+      right: 22px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 20;
+      gap: 16px;
+    }
+
+    .title-plate {
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 10px 14px;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--hairline);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .title-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--vermilion);
+      font-weight: 600;
+    }
+
+    .title-main {
+      font-family: var(--font-serif);
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+    }
+
+    .telemetry-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      letter-spacing: 0.02em;
+    }
+
+    .breath-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ink-soft);
+      transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .breath-dot.live {
+      background: var(--vermilion);
+      box-shadow: 0 0 0 4px var(--vermilion-soft);
+    }
+
+    .corner-tools {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+    }
+
+    .icon-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      padding: 0 13px;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      box-shadow: var(--shadow-sm);
+      color: var(--ink-mid);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
+    }
+
+    .icon-pill:hover {
+      border-color: var(--hairline-strong);
+      color: var(--ink);
+      background: var(--glass-strong);
+    }
+
+    .icon-pill.active {
+      border-color: var(--vermilion);
+      color: var(--vermilion);
+      background: var(--glass-strong);
+    }
+
+    .icon-pill .mini-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ink-soft);
+      opacity: 0.45;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    .icon-pill .mini-dot.ok {
+      background: #2c7a4b;
+      opacity: 1;
+    }
+
+    .icon-pill .mini-dot.hot {
+      background: var(--vermilion);
+      opacity: 1;
+      box-shadow: 0 0 0 3px var(--vermilion-soft);
+    }
+
+    .icon-pill svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* =====================================================================
+       Bottom Minimal Control Dock — LITERALLY 3 CORE CONTROLS
+       ===================================================================== */
+    .hud-bottom {
+      position: fixed;
+      bottom: 20px;
+      left: 22px;
+      right: 22px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 20;
+      gap: 12px;
+    }
+
+    .dock-side {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 150px;
+    }
+
+    .dock-side.right {
+      justify-content: flex-end;
+    }
+
+    .core-dock {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 8px 14px 8px 8px;
+      background: var(--glass-strong);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      box-shadow: var(--shadow-md);
+      max-width: calc(100vw - 32px);
+    }
+
+    /* Control 1: Agency Mode Segmented Switch */
+    .mode-switch {
+      display: inline-flex;
+      align-items: center;
+      background: var(--stone-lo);
+      padding: 3px;
+      border-radius: 999px;
+      gap: 2px;
+    }
+
+    .mode-btn {
+      border: none;
+      background: transparent;
+      color: var(--ink-mid);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+
+    .mode-btn:hover {
+      color: var(--ink);
+    }
+
+    .mode-btn.active {
+      background: var(--ink);
+      color: var(--stone-hi);
+      box-shadow: 0 2px 6px rgba(23, 22, 20, 0.22);
+    }
+
+    .dock-sep {
+      width: 1px;
+      height: 22px;
+      background: var(--hairline);
+      flex-shrink: 0;
+    }
+
+    /* Control 2: Scale Selector */
+    .scale-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .scale-select {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 6px 26px 6px 10px;
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--ink);
+      cursor: pointer;
+      outline: none;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .scale-select:hover, .scale-select:focus {
+      background: var(--stone-lo);
+    }
+
+    .scale-chevron {
+      position: absolute;
+      right: 8px;
+      pointer-events: none;
+      width: 12px;
+      height: 12px;
+      stroke: var(--ink-soft);
+      fill: none;
+      stroke-width: 1.8;
+    }
+
+    /* Control 3: Resonance / Breath Feel Continuous Pill */
+    .breath-control {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding-right: 4px;
+    }
+
+    .breath-label {
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      color: var(--ink-soft);
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    .breath-label.end {
+      color: var(--ink-mid);
+    }
+
+    input[type="range"].breath-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 112px;
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(23, 22, 20, 0.16), rgba(217, 83, 30, 0.55));
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"].breath-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--stone-hi);
+      border: 2px solid var(--ink);
+      box-shadow: 0 1px 4px rgba(23, 22, 20, 0.25);
+      transition: transform 0.15s, border-color 0.15s;
+    }
+
+    input[type="range"].breath-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.14);
+      border-color: var(--vermilion);
+    }
+
+    input[type="range"].breath-slider::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--stone-hi);
+      border: 2px solid var(--ink);
+      box-shadow: 0 1px 4px rgba(23, 22, 20, 0.25);
+    }
+
+    /* Subtle whisper invitation */
+    .whisper-hint {
+      position: fixed;
+      bottom: 84px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 15;
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 13.5px;
+      color: var(--ink-soft);
+      letter-spacing: 0.01em;
+      padding: 6px 16px;
+      border-radius: 999px;
+      background: rgba(246, 244, 239, 0.72);
+      border: 1px solid rgba(23, 22, 20, 0.06);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+      white-space: nowrap;
+    }
+
+    .whisper-hint.faded {
+      opacity: 0;
+      transform: translateX(-50%) translateY(6px);
+    }
+
+    /* =====================================================================
+       Collapsible Popovers (Sound, Gemini PanLang, Theory Drawer)
+       ===================================================================== */
+    .popover {
+      position: fixed;
+      top: 66px;
+      right: 22px;
+      width: 348px;
+      max-width: calc(100vw - 32px);
+      background: var(--glass-strong);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--hairline-strong);
+      border-radius: 16px;
+      box-shadow: var(--shadow-md);
+      padding: 16px 18px;
+      z-index: 40;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    .popover.open {
+      display: flex;
+      animation: popIn 0.16s ease-out;
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .pop-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--hairline);
+      padding-bottom: 9px;
+    }
+
+    .pop-title {
+      font-family: var(--font-serif);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .pop-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--stone-lo);
+      color: var(--ink-mid);
+    }
+
+    .pop-badge.ok {
+      background: rgba(44, 122, 75, 0.12);
+      color: #21613b;
+    }
+
+    .pop-badge.hot {
+      background: var(--vermilion-soft);
+      color: var(--vermilion);
+    }
+
+    .bank-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .bank-opt {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 11px;
+      border: 1px solid var(--hairline);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.45);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .bank-opt:hover {
+      border-color: var(--hairline-strong);
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .bank-opt.selected {
+      border-color: var(--vermilion);
+      background: rgba(217, 83, 30, 0.06);
+    }
+
+    .bank-name {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--ink);
+      display: block;
+    }
+
+    .bank-desc {
+      font-size: 11px;
+      color: var(--ink-soft);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .bank-tag {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-soft);
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+
+    /* Gemini PanLang Popover Controls */
+    .gem-key-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .gem-input {
+      flex: 1;
+      height: 34px;
+      padding: 0 10px;
+      border-radius: 9px;
+      border: 1px solid var(--hairline-strong);
+      background: rgba(255, 255, 255, 0.72);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--ink);
+      outline: none;
+    }
+
+    .gem-input:focus {
+      border-color: var(--vermilion);
+    }
+
+    .mini-btn {
+      height: 34px;
+      padding: 0 11px;
+      border-radius: 9px;
+      border: 1px solid var(--hairline-strong);
+      background: var(--stone-hi);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .mini-btn:hover {
+      background: var(--ink);
+      color: var(--stone-hi);
+      border-color: var(--ink);
+    }
+
+    .mini-btn.accent {
+      background: var(--vermilion);
+      border-color: var(--vermilion);
+      color: #fff;
+    }
+
+    .mini-btn.accent:hover {
+      background: #bc4415;
+    }
+
+    .panlang-box {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--ink);
+      background: var(--stone-lo);
+      border: 1px solid var(--hairline);
+      border-radius: 9px;
+      padding: 9px 10px;
+      word-break: break-word;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .dist-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .dist-cell {
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid var(--hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .dist-cell-top {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--ink-mid);
+    }
+
+    .dist-bar-bg {
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(23, 22, 20, 0.1);
+      overflow: hidden;
+    }
+
+    .dist-bar-fill {
+      height: 100%;
+      background: var(--vermilion);
+      border-radius: 999px;
+      transition: width 0.35s ease;
+    }
+
+    .pop-meta {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--ink-soft);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .pop-note {
+      font-size: 11.5px;
+      line-height: 1.45;
+      color: var(--ink-soft);
+    }
+
+    /* Theory & Notes Drawer */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(23, 22, 20, 0.18);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      z-index: 50;
+      display: none;
+      justify-content: flex-end;
+    }
+
+    .drawer-backdrop.open {
+      display: flex;
+    }
+
+    .theory-drawer {
+      width: 440px;
+      max-width: 94vw;
+      height: 100%;
+      background: var(--stone-hi);
+      border-left: 1px solid var(--hairline-strong);
+      box-shadow: -16px 0 44px rgba(23, 22, 20, 0.12);
+      padding: 26px 26px 36px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .theory-drawer h2 {
+      font-family: var(--font-serif);
+      font-size: 21px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .theory-drawer h3 {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--vermilion);
+      margin-bottom: 5px;
+    }
+
+    .theory-drawer p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ink-mid);
+    }
+
+    .theory-card {
+      padding: 13px 14px;
+      border-radius: 12px;
+      background: var(--stone);
+      border: 1px solid var(--hairline);
+    }
+
+    .kbd-list {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-size: 12px;
+      color: var(--ink-mid);
+      margin-top: 6px;
+    }
+
+    kbd {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--stone-hi);
+      border: 1px solid var(--hairline-strong);
+      color: var(--ink);
+      text-align: center;
+    }
+
+    @media (max-width: 820px) {
+      .hud-top { top: 12px; left: 12px; right: 12px; }
+      .title-plate { padding: 8px 11px; }
+      .title-main { font-size: 14px; }
+      .hud-bottom { bottom: 12px; left: 10px; right: 10px; flex-wrap: wrap; justify-content: center; }
+      .dock-side { min-width: auto; order: 2; }
+      .core-dock { order: 1; padding: 6px 10px 6px 6px; gap: 8px; flex-wrap: wrap; justify-content: center; border-radius: 18px; }
+      .breath-label { display: none; }
+      .whisper-hint { bottom: 134px; font-size: 12px; max-width: 92vw; white-space: normal; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="field-canvas"></canvas>
+
+  <!-- TOP HUD: Architectural Plate + Utility Popover Triggers -->
+  <header class="hud-top">
+    <div class="title-plate">
+      <div class="title-row">
+        <span class="title-num">10</span>
+        <span class="title-main">Semantic Gravity Field &amp; Kinetic Bow</span>
+      </div>
+      <div class="telemetry-line">
+        <span class="breath-dot" id="breath-dot"></span>
+        <span id="hud-status">D Kurd · Core Gravity · Ready</span>
+      </div>
+    </div>
+
+    <div class="corner-tools">
+      <button class="icon-pill" id="btn-sound" type="button" title="Acoustic Engine & Studio Soundbanks">
+        <svg viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <span>Sound</span>
+        <span class="mini-dot" id="dot-sound"></span>
+      </button>
+
+      <button class="icon-pill" id="btn-gemini" type="button" title="Silent PanLang Gemini Decisions Co-Pilot">
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4L12 2z"/></svg>
+        <span>PanLang</span>
+        <span class="mini-dot" id="dot-gemini"></span>
+      </button>
+
+      <button class="icon-pill" id="btn-notes" type="button" title="Theory, Architecture & Gestures">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>Notes</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- WHISPER INVITATION -->
+  <div class="whisper-hint" id="whisper-hint">
+    Glide across the field to bow · Click any well to pluck · Hold to swell · Shift/Right-click to anchor gravity
+  </div>
+
+  <!-- BOTTOM HUD: 3 CORE CONTROLS + Subtle Tactile Mode Pills -->
+  <footer class="hud-bottom">
+    <div class="dock-side left">
+      <button class="icon-pill" id="btn-hover-bow" type="button" title="Toggle effortless hover bowing without holding mouse button (Shortcut: H)">
+        <svg viewBox="0 0 24 24"><path d="M2 12c4-6 8-6 12 0s8 6 8 0"/></svg>
+        <span>Hover Bow</span>
+      </button>
+    </div>
+
+    <!-- LITERALLY 3 CORE CONTROLS: Agency Mode | Scale | Resonance / Breath Feel -->
+    <div class="core-dock" role="toolbar" aria-label="Core Instrument Controls">
+      <div class="mode-switch" role="radiogroup" aria-label="Agency Mode">
+        <button class="mode-btn active" data-mode="solo" type="button">Solo Bow</button>
+        <button class="mode-btn" data-mode="cobreath" type="button">Co-Breath</button>
+        <button class="mode-btn" data-mode="orbit" type="button">Orbit Flow</button>
+      </div>
+
+      <div class="dock-sep"></div>
+
+      <div class="scale-wrap">
+        <select class="scale-select" id="scale-select" aria-label="Handpan Scale">
+          <option value="d-kurd">D Kurd</option>
+          <option value="d-amara">D Amara</option>
+          <option value="fs-pygmy">F# Pygmy</option>
+          <option value="cs-hijaz">C# Hijaz</option>
+          <option value="e-sabye">E Sabye</option>
+        </select>
+        <svg class="scale-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+
+      <div class="dock-sep"></div>
+
+      <div class="breath-control" title="Resonance & Breath Feel: Dry Pocket to Lush Rubato">
+        <span class="breath-label">Dry Pocket</span>
+        <input class="breath-slider" id="breath-slider" type="range" min="0" max="1" step="0.01" value="0.62" aria-label="Resonance and Breath Feel" />
+        <span class="breath-label end">Lush Rubato</span>
+      </div>
+    </div>
+
+    <div class="dock-side right">
+      <button class="icon-pill" id="btn-anchor-mode" type="button" title="Drop Semantic Gravity Anchors (or Right-click / Shift-click anywhere)">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></svg>
+        <span id="anchor-btn-label">Anchor 0/2</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- SOUND POPOVER -->
+  <aside class="popover" id="pop-sound" aria-label="Sound Engine">
+    <div class="pop-head">
+      <span class="pop-title">Acoustic Material</span>
+      <span class="pop-badge" id="sound-status-badge">Ready</span>
+    </div>
+    <div class="bank-list" id="bank-list">
+      <button class="bank-opt selected" data-sound="bank:yishama-stainless" type="button">
+        <span>
+          <span class="bank-name">Yishama Stainless</span>
+          <span class="bank-desc">140–185ms 2f₀/3f₀ bloom · inverted τ₃ shimmer</span>
+        </span>
+        <span class="bank-tag">Studio</span>
+      </button>
+      <button class="bank-opt" data-sound="bank:yishama-ember" type="button">
+        <span>
+          <span class="bank-name">Yishama Ember Steel</span>
+          <span class="bank-desc">Crystalline extended overtone halo · quick rise</span>
+        </span>
+        <span class="bank-tag">Studio</span>
+      </button>
+      <button class="bank-opt" data-sound="bank:yishama-nitrided" type="button">
+        <span>
+          <span class="bank-name">Classic Nitrided Hang</span>
+          <span class="bank-desc">Woody finger-pad transient · focused dry decay</span>
+        </span>
+        <span class="bank-tag">Studio</span>
+      </button>
+      <button class="bank-opt" data-sound="dsp:stainless" type="button">
+        <span>
+          <span class="bank-name">Live Coupled-Bloom DSP</span>
+          <span class="bank-desc">Zero-download Web Audio physical partial model</span>
+        </span>
+        <span class="bank-tag">DSP</span>
+      </button>
+    </div>
+    <p class="pop-note">
+      Studio soundbanks load lazily from <code>./soundbanks/</code> and seamlessly cross-fade from live Web Audio DSP with zero latency.
+    </p>
+  </aside>
+
+  <!-- GEMINI PANLANG POPOVER -->
+  <aside class="popover" id="pop-gemini" aria-label="Gemini PanLang Gravity Co-Pilot">
+    <div class="pop-head">
+      <span class="pop-title">PanLang Gravity Co-Pilot</span>
+      <span class="pop-badge" id="gem-status-badge">Local Inference</span>
+    </div>
+
+    <div class="gem-key-row">
+      <input
+        class="gem-input"
+        id="gem-key"
+        type="password"
+        placeholder="Gemini API key (memory only)"
+        autocomplete="new-password"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-bwignore="true"
+        data-form-type="other"
+      />
+      <button class="mini-btn" id="btn-gem-clear" type="button" title="Clear key from memory">Clear</button>
+      <button class="mini-btn accent" id="btn-gem-ask" type="button" title="Query gemini-decision-1 now">Ask</button>
+    </div>
+
+    <p class="pop-note">
+      Held strictly in ephemeral RAM (never stored). Calls <code>v1beta/decisions</code> (<code>gemini-decision-1</code>) silently on phrase boundaries to illuminate harmonic Gravity Auras.
+    </p>
+
+    <div>
+      <div class="pop-meta" style="margin-bottom:5px;">
+        <span>LIVE PANLANG STREAM</span>
+        <span id="gem-token-est">~0 tok</span>
+      </div>
+      <div class="panlang-box" id="panlang-stream">DKurd @i · awaiting first gesture</div>
+    </div>
+
+    <div>
+      <div class="pop-meta" style="margin-bottom:5px;">
+        <span>GRAVITY BASIN FIELD</span>
+        <span id="gem-arc-tag">arc: suspend</span>
+      </div>
+      <div class="dist-grid" id="basin-dist-grid"></div>
+    </div>
+
+    <div class="pop-meta">
+      <span id="gem-latency">0 calls · local harmonic model</span>
+      <span id="gem-source-tag">LOCAL</span>
+    </div>
+  </aside>
+
+  <!-- THEORY & NOTES DRAWER -->
+  <div class="drawer-backdrop" id="notes-backdrop" aria-hidden="true">
+    <div class="theory-drawer" role="dialog" aria-label="Research Notes and Gestures">
+      <div class="pop-head">
+        <h2>Semantic Gravity Field</h2>
+        <button class="mini-btn" id="btn-close-notes" type="button">Close</button>
+      </div>
+
+      <div class="theory-card">
+        <h3>1 · Comparator-Loop Musician Agency</h3>
+        <p>
+          Grounded in Haggard's <em>Intentional Binding</em> and Wessel &amp; Wright's <em>Intimate Musical Control</em>, you supply 100% of the physical kinetic energy while the harmonic field voices your trajectory. Slow glides breathe spacious single tones; fast sweeping arcs ignite 35–65ms cascades and <code>2f₀</code> shimmer; resting opens resonant silence.
+        </p>
+      </div>
+
+      <div class="theory-card">
+        <h3>2 · Spiral-Array / Tonnetz Instrument = Score</h3>
+        <p>
+          Abandoning both literal steel ergonomics and linear timelines, the 9 scale tones sit in semantic gravity basins: <strong>Core</strong> (grounded Ding <code>^1</code> &amp; fifth <code>^5</code>), <strong>Inner Consonance</strong> (<code>^1'</code>, <code>i</code>, <code>III</code>, <code>iv</code>), and <strong>Outer Horizon</strong> (poignant <code>bVI</code>, driving <code>bVII</code>, and the upper <code>2f₀</code> overtone shimmer rim). Your recent phrase weaves a living orbital score trail with continuous curved Attention Filaments whose geometric length encodes temporal horizon directly.
+        </p>
+      </div>
+
+      <div class="theory-card">
+        <h3>3 · Decay-Aware Organic Rubato</h3>
+        <p>
+          In <strong>Co-Breath</strong> and <strong>Orbit Flow</strong>, there is no rigid step grid. Phrase timing follows a continuous <strong>Todd Parabolic Phrase-Arch</strong> (inhale → slight push to climax → warm ritardando), KTH phrase-final caesurae, agogic apex lengthening, and acoustic decay-aware breathing around Ding strikes. Touching the field immediately yields agency back to your hand.
+        </p>
+      </div>
+
+      <div class="theory-card">
+        <h3>4 · Hyper-Compact PanLang + Gravity Anchors</h3>
+        <p>
+          Phrases compress into ~35–55 tokens of <code>PanLang</code> (e.g. <code>DKurd @i 0: 4-6 8' , | @bVI 2 6~</code>) for low-latency 2-head <code>gemini-decision-1</code> queries (<code>gravity_basin</code> &amp; <code>breath_arc</code>). Instead of hijacking your cursor, Gemini softly illuminates Gravity Auras in the field.
+        </p>
+      </div>
+
+      <div class="theory-card">
+        <h3>Gestures &amp; Shortcuts</h3>
+        <div class="kbd-list">
+          <kbd>Drag / Glide</kbd><span>Bow across wells (speed → density &amp; cascades)</span>
+          <kbd>Click / Tap</kbd><span>Instant &lt;3ms tactile pluck of a resonant well</span>
+          <kbd>Press &amp; Hold</kbd><span>Build harmonic swell ring → release for rolled dyad / cadence</span>
+          <kbd>Right / Shift+Click</kbd><span>Drop &amp; drag up to 2 Magnetic Gravity Anchors (double-click to dissolve)</span>
+          <kbd>1 – 9</kbd><span>Direct keyboard strike for wells 0 (Ding) through 8</span>
+          <kbd>Space</kbd><span>Strike Ding <code>^1</code> (or pause/resume Orbit Flow)</span>
+          <kbd>T / G</kbd><span>Crisp rim Tak / warm cavity Gu breath accent</span>
+          <kbd>H / A</kbd><span>Toggle Hover Bow / Anchor drop mode</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // =========================================================================
+    // 1. Scales, Acoustic Theory & Topological Harmonic Field Layouts
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    // Topological (nx, ny) coordinates in normalized [-1..1] Semantic Gravity Field:
+    // Center Core (r ~ 0..0.28): Tonic Ding ^1 & grounded ^5 anchor
+    // Inner Ring (r ~ 0.42..0.54): Consonance ^1', ^b3' (III), ^4' (iv)
+    // Outer Horizon (r ~ 0.74..0.88): Modal Color (^b6 bVI, ^b7 bVII) & Upper 2f0 Shimmer Rim
+    const SCALES = {
+      'd-kurd': {
+        code: 'DKurd',
+        name: 'D Kurd',
+        sub: 'Aeolian',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1\'', '2\'', 'b3\'', '4\'', '5\''],
+        chords: {
+          i:       [0, 1, 4, 6, 8],
+          III:     [1, 3, 6, 8],
+          iv:      [0, 2, 4, 7],
+          bVI:     [2, 4, 6],
+          bVII:    [3, 5, 7],
+          shimmer: [5, 6, 7, 8]
+        },
+        coords: [
+          { nx:  0.00, ny:  0.05, tier: 'core',  basin: 'i' },       // 0: D3 Ding ^1
+          { nx: -0.21, ny:  0.22, tier: 'core',  basin: 'i' },       // 1: A3 ^5
+          { nx: -0.76, ny:  0.24, tier: 'outer', basin: 'bVI' },     // 2: Bb3 ^b6
+          { nx:  0.76, ny:  0.24, tier: 'outer', basin: 'bVII' },    // 3: C4 ^b7
+          { nx:  0.00, ny: -0.40, tier: 'inner', basin: 'i' },       // 4: D4 ^1'
+          { nx: -0.53, ny: -0.66, tier: 'outer', basin: 'shimmer' }, // 5: E4 ^2'
+          { nx:  0.47, ny: -0.14, tier: 'inner', basin: 'III' },     // 6: F4 ^b3'
+          { nx: -0.47, ny: -0.14, tier: 'inner', basin: 'iv' },      // 7: G4 ^4'
+          { nx:  0.53, ny: -0.66, tier: 'outer', basin: 'shimmer' }  // 8: A4 ^5'
+        ],
+        edges: [[0,1],[0,4],[1,4],[4,6],[4,7],[1,2],[2,7],[0,6],[6,3],[3,8],[7,5],[4,5],[4,8],[6,8],[5,8]]
+      },
+      'd-amara': {
+        code: 'DAmara',
+        name: 'D Amara',
+        sub: 'Celtic Minor',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1\'', '2\'', 'b3\'', '4\'', '5\'', 'b7\''],
+        chords: {
+          i:       [0, 1, 3, 5, 7],
+          III:     [1, 2, 5, 7, 8],
+          iv:      [0, 3, 6, 8],
+          bVI:     [2, 5, 7],
+          bVII:    [2, 4, 6, 8],
+          shimmer: [4, 6, 7, 8]
+        },
+        coords: [
+          { nx:  0.00, ny:  0.05, tier: 'core',  basin: 'i' },       // 0: D3 ^1
+          { nx: -0.21, ny:  0.22, tier: 'core',  basin: 'i' },       // 1: A3 ^5
+          { nx:  0.76, ny:  0.24, tier: 'outer', basin: 'bVII' },    // 2: C4 ^b7
+          { nx:  0.00, ny: -0.40, tier: 'inner', basin: 'i' },       // 3: D4 ^1'
+          { nx: -0.56, ny: -0.62, tier: 'outer', basin: 'bVII' },    // 4: E4 ^2'
+          { nx:  0.47, ny: -0.14, tier: 'inner', basin: 'III' },     // 5: F4 ^b3'
+          { nx: -0.47, ny: -0.14, tier: 'inner', basin: 'iv' },      // 6: G4 ^4'
+          { nx:  0.54, ny: -0.62, tier: 'outer', basin: 'shimmer' }, // 7: A4 ^5'
+          { nx:  0.00, ny: -0.84, tier: 'outer', basin: 'shimmer' }  // 8: C5 ^b7'
+        ],
+        edges: [[0,1],[0,3],[1,3],[3,5],[3,6],[5,2],[6,4],[3,4],[3,7],[5,7],[7,8],[4,8],[2,7],[1,6]]
+      },
+      'fs-pygmy': {
+        code: 'F#Pyg',
+        name: 'F# Pygmy',
+        sub: 'Dorian Pent.',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1\'', '2\'', 'b3\'', '5\''],
+        chords: {
+          i:       [0, 2, 3, 5, 7],
+          III:     [2, 3, 4, 7, 8],
+          iv:      [0, 1, 5, 6],
+          bVI:     [2, 4, 5, 7],
+          bVII:    [1, 4, 6, 8],
+          shimmer: [5, 6, 7, 8]
+        },
+        coords: [
+          { nx:  0.00, ny:  0.05, tier: 'core',  basin: 'i' },       // 0: F#3 ^1
+          { nx: -0.74, ny:  0.24, tier: 'outer', basin: 'iv' },      // 1: G#3 ^2
+          { nx:  0.45, ny:  0.14, tier: 'inner', basin: 'III' },     // 2: A3 ^b3
+          { nx: -0.22, ny:  0.22, tier: 'core',  basin: 'i' },       // 3: C#4 ^5
+          { nx:  0.76, ny:  0.24, tier: 'outer', basin: 'bVII' },    // 4: E4 ^b7
+          { nx:  0.00, ny: -0.40, tier: 'inner', basin: 'i' },       // 5: F#4 ^1'
+          { nx: -0.53, ny: -0.65, tier: 'outer', basin: 'shimmer' }, // 6: G#4 ^2'
+          { nx:  0.46, ny: -0.26, tier: 'inner', basin: 'bVI' },     // 7: A4 ^b3'
+          { nx:  0.53, ny: -0.66, tier: 'outer', basin: 'shimmer' }  // 8: C#5 ^5'
+        ],
+        edges: [[0,3],[0,5],[0,2],[3,1],[3,5],[5,7],[5,6],[2,4],[2,7],[4,8],[7,8],[6,8],[1,6]]
+      },
+      'cs-hijaz': {
+        code: 'C#Hij',
+        name: 'C# Hijaz',
+        sub: 'Phrygian Dom.',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1\'', '2\'', 'b3\'', '5\'', 'b6\''],
+        chords: {
+          i:       [0, 1, 4, 6, 7],
+          III:     [1, 3, 6, 7],
+          iv:      [0, 2, 4, 8],
+          bVI:     [2, 4, 6, 8],
+          bVII:    [3, 5, 7],
+          shimmer: [5, 6, 7, 8]
+        },
+        coords: [
+          { nx:  0.00, ny:  0.05, tier: 'core',  basin: 'i' },       // 0: C#3 ^1
+          { nx: -0.21, ny:  0.22, tier: 'core',  basin: 'i' },       // 1: G#3 ^5
+          { nx: -0.76, ny:  0.24, tier: 'outer', basin: 'bVI' },     // 2: A3 ^b6
+          { nx:  0.76, ny:  0.24, tier: 'outer', basin: 'bVII' },    // 3: C4 ^7
+          { nx:  0.00, ny: -0.40, tier: 'inner', basin: 'i' },       // 4: C#4 ^1'
+          { nx: -0.52, ny: -0.66, tier: 'outer', basin: 'shimmer' }, // 5: D#4 ^2'
+          { nx:  0.47, ny: -0.14, tier: 'inner', basin: 'III' },     // 6: E4 ^b3'
+          { nx: -0.46, ny: -0.16, tier: 'inner', basin: 'iv' },      // 7: G#4 ^5'
+          { nx:  0.52, ny: -0.66, tier: 'outer', basin: 'shimmer' }  // 8: A4 ^b6'
+        ],
+        edges: [[0,1],[0,4],[1,2],[1,4],[4,6],[4,7],[2,7],[6,3],[3,8],[7,5],[4,5],[4,8],[6,8],[5,8]]
+      },
+      'e-sabye': {
+        code: 'ESab',
+        name: 'E Sabye',
+        sub: 'Major / Ionian',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1\'', '2\'', '3\'', '4\'', '5\''],
+        chords: {
+          i:       [0, 1, 4, 6, 8],
+          III:     [1, 3, 6, 8],
+          iv:      [0, 2, 4, 7],
+          bVI:     [2, 4, 6],
+          bVII:    [3, 5, 7],
+          shimmer: [5, 6, 7, 8]
+        },
+        coords: [
+          { nx:  0.00, ny:  0.05, tier: 'core',  basin: 'i' },       // 0: E3 ^1
+          { nx: -0.21, ny:  0.22, tier: 'core',  basin: 'i' },       // 1: B3 ^5
+          { nx: -0.76, ny:  0.24, tier: 'outer', basin: 'bVI' },     // 2: C#4 ^6
+          { nx:  0.76, ny:  0.24, tier: 'outer', basin: 'bVII' },    // 3: D#4 ^7
+          { nx:  0.00, ny: -0.40, tier: 'inner', basin: 'i' },       // 4: E4 ^1'
+          { nx: -0.53, ny: -0.66, tier: 'outer', basin: 'shimmer' }, // 5: F#4 ^2'
+          { nx:  0.47, ny: -0.14, tier: 'inner', basin: 'III' },     // 6: G#4 ^3'
+          { nx: -0.47, ny: -0.14, tier: 'inner', basin: 'iv' },      // 7: A4 ^4'
+          { nx:  0.53, ny: -0.66, tier: 'outer', basin: 'shimmer' }  // 8: B4 ^5'
+        ],
+        edges: [[0,1],[0,4],[1,4],[4,6],[4,7],[1,2],[2,7],[0,6],[6,3],[3,8],[7,5],[4,5],[4,8],[6,8],[5,8]]
+      }
+    };
+
+    const BASIN_KEYS = ['i', 'III', 'iv', 'bVI', 'bVII', 'shimmer'];
+    const BASIN_META = {
+      i:       { label: 'i · Core',    nx:  0.00, ny: -0.08 },
+      III:     { label: 'III · Warm',  nx:  0.48, ny: -0.16 },
+      iv:      { label: 'iv · Depth',  nx: -0.48, ny: -0.14 },
+      bVI:     { label: 'bVI · Color', nx: -0.72, ny:  0.22 },
+      bVII:    { label: 'bVII · Drive',nx:  0.72, ny:  0.22 },
+      shimmer: { label: '2f₀ · Rim',   nx:  0.00, ny: -0.72 }
+    };
+
+    // =========================================================================
+    // 2. Yishama-Calibrated Coupled-Bloom Web Audio Engine + Studio Banks
+    // =========================================================================
+    const PROFILES = {
+      stainless: { tau1: 0.56, tau2: 0.78, tau3: 1.15, f1Atk: 0.028, f2Bloom: 0.135, f3Bloom: 0.185, oct: 0.48, fifth: 0.30, p4: 0.11, beat: 0.85, skin: 0.14, body: 0.22, brightness: 4400 },
+      ember:     { tau1: 0.48, tau2: 0.74, tau3: 1.25, f1Atk: 0.020, f2Bloom: 0.105, f3Bloom: 0.155, oct: 0.56, fifth: 0.36, p4: 0.16, beat: 0.65, skin: 0.16, body: 0.16, brightness: 5800 },
+      nitrided:  { tau1: 0.36, tau2: 0.44, tau3: 0.55, f1Atk: 0.012, f2Bloom: 0.060, f3Bloom: 0.085, oct: 0.34, fifth: 0.18, p4: 0.06, beat: 0.35, skin: 0.24, body: 0.28, brightness: 3100 }
+    };
+
+    const ENHARMONIC = { 'Db':'C#', 'D#':'Eb', 'Gb':'F#', 'Ab':'G#', 'A#':'Bb' };
+    const studioBanks = new Map();
+    const bankLoadPromises = new Map();
+
+    let audioCtx = null, dryGain = null, reverbSend = null, noiseBuffer = null;
+    let activeBankId = 'yishama-stainless';
+    let activeProfileKey = 'stainless';
+
+    // Anticipation hold swell voice
+    let swellOsc = null, swellOsc2 = null, swellGain = null, swellPan = null;
+
+    function canonicalNote(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      return m ? (ENHARMONIC[m[1]] || m[1]) + m[2] : note;
+    }
+
+    function b64ToBuf(b64) {
+      const bin = atob(b64);
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return u8.buffer;
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createWarmRoomIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const t = i / len;
+          const env = Math.pow(1 - t, decay) * (i < 900 ? 0.65 : 1.0);
+          const w = (Math.random() * 2 - 1) * env;
+          lp = lp * 0.78 + w * 0.22;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -11;
+        comp.ratio.value = 3.5;
+        comp.knee.value = 18;
+        comp.connect(audioCtx.destination);
+
+        const master = audioCtx.createGain();
+        master.gain.value = 0.82;
+        master.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(master);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createWarmRoomIR(audioCtx, 2.3, 2.8);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.18 + app.breath * 0.28;
+        reverbSend.connect(conv);
+        conv.connect(master);
+
+        noiseBuffer = createNoise(audioCtx, 0.35);
+
+        if (activeBankId) {
+          ensureStudioBank(activeBankId);
+        }
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function syncReverbToBreath() {
+      if (reverbSend && audioCtx) {
+        reverbSend.gain.setTargetAtTime(0.14 + app.breath * 0.30, audioCtx.currentTime, 0.08);
+      }
+    }
+
+    async function ensureStudioBank(bankId) {
+      ensureAudio();
+      if (studioBanks.has(bankId)) {
+        updateSoundBadge('Studio Ready', 'ok');
+        return studioBanks.get(bankId);
+      }
+      if (bankLoadPromises.has(bankId)) return bankLoadPromises.get(bankId);
+
+      updateSoundBadge('Loading…', 'hot');
+      const promise = (async () => {
+        try {
+          if (!window.__HANDPAN_BANKS__?.[bankId]) {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = `./soundbanks/${bankId}.bank.js`;
+              s.onload = resolve;
+              s.onerror = () => reject(new Error('Bank script unavailable'));
+              document.head.appendChild(s);
+            });
+          }
+          const raw = window.__HANDPAN_BANKS__?.[bankId];
+          if (!raw?.samples) throw new Error('Empty bank');
+          const map = new Map();
+          const entries = Object.entries(raw.samples);
+          for (let i = 0; i < entries.length; i += 8) {
+            const sl = entries.slice(i, i + 8);
+            const bufs = await Promise.all(sl.map(([, b64]) => audioCtx.decodeAudioData(b64ToBuf(b64))));
+            bufs.forEach((ab, k) => map.set(sl[k][0], ab));
+          }
+          studioBanks.set(bankId, map);
+          if (activeBankId === bankId) updateSoundBadge(`Studio · ${map.size}`, 'ok');
+          return map;
+        } catch (_) {
+          if (activeBankId === bankId) updateSoundBadge('Live DSP', '');
+          return null;
+        } finally {
+          bankLoadPromises.delete(bankId);
+        }
+      })();
+      bankLoadPromises.set(bankId, promise);
+      return promise;
+    }
+
+    function playStudioBankBuffer(key, when, gainVal, panVal = 0) {
+      if (!activeBankId) return false;
+      const map = studioBanks.get(activeBankId);
+      const ab = map?.get(key);
+      if (!ab) return false;
+      const src = audioCtx.createBufferSource();
+      src.buffer = ab;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(gainVal, when);
+      if (panVal !== 0 && audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = clamp(panVal, -0.75, 0.75);
+        src.connect(g); g.connect(sp); sp.connect(dryGain); sp.connect(reverbSend);
+      } else {
+        src.connect(g); g.connect(dryGain); g.connect(reverbSend);
+      }
+      src.start(when);
+      return true;
+    }
+
+    function getWellPan(idx) {
+      const sc = SCALES[app.scaleKey];
+      const c = sc.coords[idx];
+      return c ? clamp(c.nx * 0.62, -0.58, 0.58) : 0;
+    }
+
+    function getAcousticTau3(idx) {
+      const sc = SCALES[app.scaleKey];
+      const freq = noteToFreq(sc.notes[idx] || 'D4');
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+      return p.tau3 * pitchScale * (idx === 0 ? 1.18 : 1.0) * (0.78 + app.breath * 0.44);
+    }
+
+    function scheduleTone(idx, when, opts = {}) {
+      ensureAudio();
+      const sc = SCALES[app.scaleKey];
+      const note = sc.notes[idx];
+      if (!note) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      const vel = clamp(opts.vel ?? 0.76, 0.08, 1.0);
+      const type = opts.type ?? 'N';
+      const panVal = opts.pan ?? getWellPan(idx);
+
+      if (activeBankId && type !== 'M') {
+        const cNote = canonicalNote(note);
+        const key = type === 'H' ? `${cNote}|H|v0|r0` : `${cNote}|N|v${vel < 0.62 ? 0 : 1}|r0`;
+        const bakedV = type === 'H' ? 0.86 : (vel < 0.62 ? 0.42 : 0.94);
+        const gScale = clamp((vel / bakedV) * (type === 'g' ? 0.58 : 0.92), 0.12, 1.12);
+        if (playStudioBankBuffer(key, t0, gScale, panVal)) return;
+      }
+
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey] || PROFILES.stainless;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.24);
+      const breathScale = 0.80 + app.breath * 0.36;
+
+      let t1 = p.tau1 * pitchScale * (isDing ? 1.15 : 1.0) * breathScale;
+      let t2 = p.tau2 * pitchScale * (isDing ? 1.12 : 1.0) * breathScale;
+      let t3 = p.tau3 * pitchScale * (isDing ? 1.15 : 1.0) * breathScale;
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') { t1 *= 0.45; t2 *= 0.38; t3 *= 0.30; octMul = 0.42; fifthMul = 0.25; }
+      else if (type === 'H') { f0Mul = 0.07; octMul = 1.85; fifthMul = 1.05; t2 *= 1.18; }
+      else if (type === 'M') { t1 *= 0.22; t2 *= 0.18; t3 *= 0.15; octMul = 0.45; fifthMul = 0.25; }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.54, t0);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(10000, p.brightness * (0.65 + 0.50 * vel));
+      lp.frequency.setValueAtTime(cut, t0);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(850, cut * 0.52), t0 + t3 * 3.4);
+
+      const panner = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = panVal;
+        vg.connect(lp); lp.connect(panner);
+        panner.connect(dryGain); panner.connect(reverbSend);
+      } else {
+        vg.connect(lp); lp.connect(dryGain); lp.connect(reverbSend);
+      }
+
+      function addBloomMode(hz, amp, riseSec, tauSec) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.003 * vel), t0);
+        osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.05);
+        const totalDur = Math.min(5.2, riseSec + tauSec * 5.2);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(amp, t0 + riseSec);
+        g.gain.setTargetAtTime(0.0001, t0 + riseSec, tauSec);
+        osc.connect(g); g.connect(vg);
+        osc.start(t0);
+        osc.stop(t0 + totalDur);
+      }
+
+      addBloomMode(freq, 0.60 * f0Mul, p.f1Atk, t1);
+      if (p.beat > 0.05 && f0Mul > 0.2) {
+        addBloomMode(freq + p.beat, 0.22 * f0Mul, p.f1Atk * 1.35, t1 * 0.96);
+      }
+      addBloomMode(freq * 2.001, p.oct * octMul * (0.55 + 0.55 * vel), p.f2Bloom, t2);
+      addBloomMode(freq * 2.999, p.fifth * fifthMul * (0.45 + 0.65 * vel), p.f3Bloom, t3);
+      addBloomMode(freq * 4.001, p.p4 * vel * (isDing ? 1.4 : 0.7), p.f3Bloom * 1.15, t2 * 0.75);
+
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = isDing ? 420 : 680;
+      bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.skin * vel * (type === 'g' ? 1.3 : 0.85), t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.018);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(t0); noise.stop(t0 + 0.025);
+
+      if (isDing || idx <= 2) {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(isDing ? 98 : 92, t0);
+        bo.frequency.exponentialRampToValueAtTime(78, t0 + 0.08);
+        bg.gain.setValueAtTime(0.0001, t0);
+        bg.gain.linearRampToValueAtTime(p.body * vel * (isDing ? 1.0 : 0.35), t0 + 0.008);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.24 : 0.12));
+        bo.connect(bg); bg.connect(vg);
+        bo.start(t0); bo.stop(t0 + 0.28);
+      }
+    }
+
+    function scheduleTak(when, vel = 0.72, panVal = 0) {
+      ensureAudio();
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|TAK', t0, vel * 0.76, panVal)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.50, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 2650; bp.Q.value = 1.3;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.85, t0);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.028);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(t0); n.stop(t0 + 0.036);
+
+      [880, 1620].forEach((hz, i) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, t0);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.87, t0 + 0.032);
+        g.gain.setValueAtTime(0.28 / (i + 1), t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.038);
+        o.connect(g); g.connect(out);
+        o.start(t0); o.stop(t0 + 0.042);
+      });
+    }
+
+    function scheduleGu(when, vel = 0.78, panVal = 0) {
+      ensureAudio();
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when);
+      if (playStudioBankBuffer('PERC|GU', t0, vel * 0.84, panVal)) return;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.68, t0);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(118, t0);
+      o.frequency.exponentialRampToValueAtTime(78, t0 + 0.14);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(0.92, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+
+    // Delicate stereo vernier tactile micro-click for Gravity Anchors
+    function playTactileClick(panVal = 0, pitchMul = 1.0, vol = 0.085) {
+      ensureAudio();
+      const t0 = audioCtx.currentTime + 0.001;
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 2150 * pitchMul;
+      bp.Q.value = 5.5;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.011);
+
+      const o = audioCtx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(1320 * pitchMul, t0);
+      o.frequency.exponentialRampToValueAtTime(640 * pitchMul, t0 + 0.009);
+      const og = audioCtx.createGain();
+      og.gain.setValueAtTime(vol * 0.55, t0);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.010);
+
+      if (audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner();
+        sp.pan.value = clamp(panVal, -0.8, 0.8);
+        n.connect(bp); bp.connect(g); g.connect(sp);
+        o.connect(og); og.connect(sp);
+        sp.connect(dryGain);
+      } else {
+        n.connect(bp); bp.connect(g); g.connect(dryGain);
+        o.connect(og); og.connect(dryGain);
+      }
+      n.start(t0); n.stop(t0 + 0.015);
+      o.start(t0); o.stop(t0 + 0.014);
+    }
+
+    function startHoldSwell(idx) {
+      ensureAudio();
+      stopHoldSwell();
+      const sc = SCALES[app.scaleKey];
+      const f0 = noteToFreq(sc.notes[idx] || 'D4');
+      const t0 = audioCtx.currentTime;
+      swellGain = audioCtx.createGain();
+      swellGain.gain.setValueAtTime(0.0001, t0);
+      swellGain.gain.linearRampToValueAtTime(0.048, t0 + 1.15);
+
+      swellOsc = audioCtx.createOscillator();
+      swellOsc.type = 'sine';
+      swellOsc.frequency.setValueAtTime(f0 * 2.0, t0);
+
+      swellOsc2 = audioCtx.createOscillator();
+      swellOsc2.type = 'sine';
+      swellOsc2.frequency.setValueAtTime(f0 * 3.001, t0);
+      const g2 = audioCtx.createGain();
+      g2.gain.value = 0.35;
+
+      swellPan = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+      if (swellPan) {
+        swellPan.pan.value = getWellPan(idx);
+        swellOsc.connect(swellGain);
+        swellOsc2.connect(g2); g2.connect(swellGain);
+        swellGain.connect(swellPan);
+        swellPan.connect(reverbSend);
+        swellPan.connect(dryGain);
+      } else {
+        swellOsc.connect(swellGain);
+        swellOsc2.connect(g2); g2.connect(swellGain);
+        swellGain.connect(reverbSend);
+      }
+      swellOsc.start(t0);
+      swellOsc2.start(t0);
+    }
+
+    function stopHoldSwell() {
+      if (swellGain && audioCtx) {
+        const t = audioCtx.currentTime;
+        try {
+          swellGain.gain.cancelScheduledValues(t);
+          swellGain.gain.setTargetAtTime(0.0001, t, 0.04);
+          swellOsc?.stop(t + 0.18);
+          swellOsc2?.stop(t + 0.18);
+        } catch (_) {}
+      }
+      swellOsc = null; swellOsc2 = null; swellGain = null; swellPan = null;
+    }
+
+    // =========================================================================
+    // 3. Application State, Semantic Field Geometry & Continuous Memory
+    // =========================================================================
+    const app = {
+      mode: 'solo',          // 'solo' | 'cobreath' | 'orbit'
+      scaleKey: 'd-kurd',
+      breath: 0.62,          // 0 = Dry Pocket .. 1 = Lush Rubato
+      hoverBow: false,
+      anchorDropMode: false,
+      hasInteracted: false,
+      orbitPaused: false,
+
+      // Viewport geometry
+      w: window.innerWidth,
+      h: window.innerHeight,
+      cx: window.innerWidth / 2,
+      cy: window.innerHeight / 2,
+      fieldR: Math.min(window.innerWidth, window.innerHeight) * 0.37,
+
+      // Resonant Wells (9 acoustic nodes)
+      wells: [],
+
+      // Kinetic Bow (spring-inertia cursor exciter)
+      bow: {
+        active: false,
+        pointerDown: false,
+        targetX: 0, targetY: 0,
+        x: 0, y: 0,
+        vx: 0, vy: 0,
+        speed: 0,
+        lastWellIdx: -1,
+        holdWellIdx: -1,
+        holdStartMs: 0,
+        holdCharge: 0,
+        holdSwellStarted: false,
+        cascadeCount: 0,
+        lastStrikeMs: 0,
+        lastWellTriggerMs: Array(9).fill(0),
+        trail: [] // short silky kinetic bow ribbon
+      },
+
+      // Companion Exciter (Co-Breath & Orbit Flow)
+      companion: {
+        visible: false,
+        x: 0, y: 0,
+        targetX: 0, targetY: 0,
+        vx: 0, vy: 0,
+        phase: 'idle', // 'idle' | 'inhale' | 'flow' | 'apex' | 'ritard' | 'caesura'
+        phaseProg: 0,
+        energy: 0
+      },
+
+      // Magnetic Gravity Anchors (max 2)
+      anchors: [], // { id, nx, ny, x, y, basin, energy, dragging, lastClickX, lastClickY }
+      draggingAnchorId: null,
+      anchorSeq: 1,
+
+      // Living Orbital Score Trail & Rolling Attention Memory
+      history: [],  // up to 28 recent note/perc events
+      ripples: [],  // expanding standing-wave acoustic bloom rings
+      sparks: [],   // live electric filament sparks
+
+      // Semantic Gravity & Gemini Decisions State
+      activeBasin: 'i',
+      basinProbs: { i: 0.42, III: 0.16, iv: 0.15, bVI: 0.11, bVII: 0.09, shimmer: 0.07 },
+      displayBasinProbs: { i: 0.42, III: 0.16, iv: 0.15, bVI: 0.11, bVII: 0.09, shimmer: 0.07 },
+      breathArc: 'suspend', // 'suspend' | 'climb' | 'cascade' | 'resolve'
+      arcProbs: { suspend: 0.35, climb: 0.25, cascade: 0.20, resolve: 0.20 },
+
+      // Co-Breath & Orbit Flow Schedulers
+      scheduleGen: 0,
+      coBreathWaitTimer: null,
+      coBreathSpeaking: false,
+      userPhraseBuffer: [],
+      lastUserEventMs: 0,
+      orbitTimer: null,
+
+      // Gemini Decisions API (in-memory only!)
+      geminiKey: '',
+      geminiCalls: 0,
+      geminiInFlight: false,
+      geminiAbort: null,
+      geminiLastMs: 0,
+      geminiLastQueryAt: 0,
+      geminiSource: 'LOCAL'
+    };
+
+    function initWells() {
+      const sc = SCALES[app.scaleKey];
+      app.wells = sc.notes.map((note, idx) => {
+        const c = sc.coords[idx];
+        return {
+          idx,
+          note,
+          degree: sc.degrees[idx],
+          nx: c.nx,
+          ny: c.ny,
+          x: app.cx + c.nx * app.fieldR,
+          y: app.cy + c.ny * app.fieldR,
+          tier: c.tier,
+          basin: c.basin,
+          baseR: idx === 0 ? 34 : (c.tier === 'core' ? 27 : (c.tier === 'inner' ? 25 : 23)),
+          energy: 0,
+          bloom: 0,
+          gravityAura: 0,
+          lastStruckAt: -10
+        };
+      });
+      syncWellScreenPositions();
+    }
+
+    function syncWellScreenPositions() {
+      const scaleR = clamp(app.fieldR / 300, 0.68, 1.18);
+      for (const w of app.wells) {
+        w.x = app.cx + w.nx * app.fieldR;
+        w.y = app.cy + w.ny * app.fieldR;
+        w.r = w.baseR * scaleR;
+      }
+      for (const a of app.anchors) {
+        a.x = app.cx + a.nx * app.fieldR;
+        a.y = app.cy + a.ny * app.fieldR;
+      }
+    }
+
+    function nearestBasinForNormalized(nx, ny) {
+      const dist = Math.hypot(nx, ny);
+      if (ny < -0.50 || dist > 0.86) return 'shimmer';
+      let best = 'i', bestD = Infinity;
+      for (const k of BASIN_KEYS) {
+        const m = BASIN_META[k];
+        const d = Math.hypot(nx - m.nx, ny - m.ny);
+        if (d < bestD) { bestD = d; best = k; }
+      }
+      return best;
+    }
+
+    function findNearestWell(x, y) {
+      let best = null, bestD = Infinity;
+      for (const w of app.wells) {
+        const d = Math.hypot(x - w.x, y - w.y);
+        if (d < bestD) { bestD = d; best = w; }
+      }
+      return { well: best, dist: bestD };
+    }
+
+    // =========================================================================
+    // 4. Unified Acoustic Triggering, Living Score Trail & Attention Sparks
+    // =========================================================================
+    function triggerWell(idx, opts = {}) {
+      const w = app.wells[idx];
+      if (!w) return;
+      const nowSec = performance.now() / 1000;
+      const nowMs = performance.now();
+      const vel = clamp(opts.vel ?? 0.76, 0.14, 1.0);
+      const type = opts.type ?? 'N'; // 'N' | 'H' | 'g'
+      const source = opts.source ?? 'user'; // 'user' | 'cobreath' | 'orbit'
+      const delaySec = Math.max(0, opts.delaySec ?? 0);
+      const isFlam = !!opts.flam;
+
+      ensureAudio();
+      const audioWhen = audioCtx.currentTime + 0.003 + delaySec;
+      scheduleTone(idx, audioWhen, { vel, type, pan: getWellPan(idx) });
+
+      const commitVisual = () => {
+        const tNow = performance.now() / 1000;
+        const tau3 = getAcousticTau3(idx);
+        w.energy = clamp(w.energy * 0.35 + vel * 1.05, 0.25, 1.3);
+        w.bloom = clamp(w.bloom * 0.3 + (type === 'H' ? 1.25 : vel), 0.3, 1.35);
+        w.lastStruckAt = tNow;
+
+        // Spawn acoustic standing-wave bloom ripples proportional to real tau3
+        const rippleCount = type === 'H' ? 3 : (vel > 0.65 ? 2 : 1);
+        for (let r = 0; r < rippleCount; r++) {
+          app.ripples.push({
+            x: w.x,
+            y: w.y,
+            startR: w.r * (0.9 + r * 0.14),
+            maxR: w.r + (idx === 0 ? 155 : 108) * (0.65 + vel * 0.55) * (1 + r * 0.22),
+            bornAt: tNow + r * 0.075,
+            life: clamp(tau3 * (1.25 + r * 0.25), 0.9, 3.6),
+            vel,
+            isHarmonic: type === 'H',
+            source
+          });
+        }
+        if (app.ripples.length > 48) app.ripples.splice(0, app.ripples.length - 48);
+
+        // Compute IOI from previous event for PanLang articulation
+        const prev = app.history[app.history.length - 1];
+        const ioiMs = prev ? (performance.now() - prev.timeMs) : 500;
+        if (prev) prev.gapAfterMs = ioiMs;
+
+        // Slight organic spatial offset for living orbital history node
+        const jitterAngle = (app.history.length * 2.39996) % (Math.PI * 2);
+        const jDist = w.r * 0.22;
+        const ev = {
+          id: performance.now() + Math.random(),
+          kind: 'tone',
+          idx,
+          note: w.note,
+          degree: w.degree,
+          basin: w.basin,
+          type,
+          vel,
+          flam: isFlam,
+          source,
+          timeSec: tNow,
+          timeMs: performance.now(),
+          gapAfterMs: 0,
+          nx: w.nx + Math.cos(jitterAngle) * (jDist / Math.max(120, app.fieldR)),
+          ny: w.ny + Math.sin(jitterAngle) * (jDist / Math.max(120, app.fieldR))
+        };
+        app.history.push(ev);
+        if (app.history.length > 28) app.history.shift();
+
+        // Spawn electric attention filament sparks from top recent influential events
+        const excX = source === 'user' ? (app.bow.active ? app.bow.x : w.x) : app.companion.x;
+        const excY = source === 'user' ? (app.bow.active ? app.bow.y : w.y) : app.companion.y;
+        const pullLinks = computeContinuousAttentionLinks(excX, excY).slice(0, 4);
+        for (const lk of pullLinks) {
+          app.sparks.push({
+            fromX: lk.x, fromY: lk.y,
+            ctrlX: lk.ctrlX, ctrlY: lk.ctrlY,
+            toX: w.x, toY: w.y,
+            t: 0,
+            speed: 2.2 + Math.random() * 1.4,
+            strength: lk.weight
+          });
+        }
+        if (app.sparks.length > 26) app.sparks.splice(0, app.sparks.length - 26);
+
+        // Update local semantic gravity & PanLang display
+        updateLocalGravityInference(ev);
+        refreshPanLangDisplay();
+        updateHudStatus(source, w);
+
+        // Track user phrase for Co-Breath response & silent Gemini trigger
+        if (source === 'user') {
+          app.lastUserEventMs = performance.now();
+          app.userPhraseBuffer.push(ev);
+          if (app.userPhraseBuffer.length > 14) app.userPhraseBuffer.shift();
+          markInteracted();
+          if (app.mode === 'cobreath') {
+            armCoBreathListener();
+          }
+          // Silently query Gemini on meaningful phrase punctuation (every ~5 user notes)
+          if (app.geminiKey && app.userPhraseBuffer.length >= 4 && (performance.now() - app.geminiLastQueryAt > 3600)) {
+            queryGeminiDecisions();
+          }
+        }
+      };
+
+      if (delaySec > 0.005) {
+        const gen = app.scheduleGen;
+        setTimeout(() => {
+          if (source !== 'user' && gen !== app.scheduleGen) return;
+          commitVisual();
+        }, delaySec * 1000);
+      } else {
+        commitVisual();
+      }
+    }
+
+    function triggerPercussion(kind, x, y, source = 'user', vel = 0.72) {
+      ensureAudio();
+      const nx = (x - app.cx) / Math.max(120, app.fieldR);
+      const pan = clamp(nx * 0.55, -0.5, 0.5);
+      if (kind === 'TAK') scheduleTak(audioCtx.currentTime + 0.003, vel, pan);
+      else scheduleGu(audioCtx.currentTime + 0.003, vel, pan);
+
+      const tNow = performance.now() / 1000;
+      app.ripples.push({
+        x, y,
+        startR: 6,
+        maxR: kind === 'GU' ? 92 : 52,
+        bornAt: tNow,
+        life: kind === 'GU' ? 0.95 : 0.45,
+        vel,
+        isHarmonic: false,
+        isPerc: kind,
+        source
+      });
+
+      const prev = app.history[app.history.length - 1];
+      if (prev) prev.gapAfterMs = performance.now() - prev.timeMs;
+      app.history.push({
+        id: performance.now() + Math.random(),
+        kind: 'perc',
+        percType: kind,
+        idx: null,
+        basin: app.activeBasin,
+        vel,
+        source,
+        timeSec: tNow,
+        timeMs: performance.now(),
+        gapAfterMs: 0,
+        nx: clamp((x - app.cx) / Math.max(120, app.fieldR), -0.95, 0.95),
+        ny: clamp((y - app.cy) / Math.max(120, app.fieldR), -0.95, 0.95)
+      });
+      if (app.history.length > 28) app.history.shift();
+      refreshPanLangDisplay();
+      if (source === 'user') markInteracted();
+    }
+
+    function markInteracted() {
+      if (!app.hasInteracted) {
+        app.hasInteracted = true;
+        document.getElementById('whisper-hint').classList.add('faded');
+      }
+    }
+
+    // =========================================================================
+    // 5. Continuous Spatial Attention Kernel (NO 4 Discrete Buckets!)
+    // =========================================================================
+    function computeContinuousAttentionLinks(excX, excY) {
+      const nowSec = performance.now() / 1000;
+      const sc = SCALES[app.scaleKey];
+      const activePool = sc.chords[app.activeBasin] || [0, 4];
+      const links = [];
+
+      const n = app.history.length;
+      if (n < 2) return links;
+
+      for (let i = 0; i < n; i++) {
+        const ev = app.history[i];
+        if (ev.kind !== 'tone') continue;
+        const ageSec = Math.max(0.01, nowSec - ev.timeSec);
+        if (ageSec > 24) continue;
+
+        const ex = app.cx + ev.nx * app.fieldR;
+        const ey = app.cy + ev.ny * app.fieldR;
+
+        // Continuous multi-scale temporal kernel: immediate phrasing + smooth harmonic echo + motif memory
+        const recency = Math.exp(-ageSec / (2.4 + app.breath * 2.2));
+        const echoWave = 0.28 * Math.exp(-Math.pow((ageSec - 4.2) / 2.2, 2)) +
+                         0.22 * Math.exp(-Math.pow((ageSec - 9.0) / 3.5, 2));
+        const harmPull = activePool.includes(ev.idx) ? 0.32 : 0.08;
+
+        // Spatial pull from active Gravity Anchors
+        let anchorPull = 0;
+        for (const a of app.anchors) {
+          const dA = Math.hypot(ev.nx - a.nx, ev.ny - a.ny);
+          anchorPull += 0.48 * Math.exp(-dA * 2.6);
+        }
+
+        // Spatial proximity to current exciter
+        const distNorm = Math.hypot(ex - excX, ey - excY) / Math.max(120, app.fieldR);
+        const prox = 0.22 * Math.exp(-distNorm * 1.4);
+
+        const weight = clamp(recency * 0.72 + echoWave + harmPull + anchorPull + prox, 0, 1.25);
+        if (weight < 0.15) continue;
+
+        // Compute organic curved control point bowed gracefully away from center
+        const midX = (ex + excX) * 0.5;
+        const midY = (ey + excY) * 0.5;
+        const dx = excX - ex, dy = excY - ey;
+        const len = Math.hypot(dx, dy) || 1;
+        const bend = Math.min(48, len * 0.22) * ((i % 2 === 0) ? 1 : -1);
+        const ctrlX = midX - (dy / len) * bend;
+        const ctrlY = midY + (dx / len) * bend;
+
+        links.push({
+          ev,
+          x: ex, y: ey,
+          ctrlX, ctrlY,
+          weight: clamp(weight, 0, 1),
+          ageSec,
+          freshness: Math.exp(-ageSec * 1.8)
+        });
+      }
+
+      links.sort((a, b) => b.weight - a.weight);
+      return links.slice(0, 12);
+    }
+
+    // =========================================================================
+    // 6. PanLang Encoder + Local Inference + Silent Gemini Decisions Co-Pilot
+    // =========================================================================
+    function encodePanLang() {
+      const sc = SCALES[app.scaleKey];
+      const recent = app.history.slice(-14);
+      const tokens = [];
+
+      for (let i = 0; i < recent.length; i++) {
+        const ev = recent[i];
+        const prev = i > 0 ? recent[i - 1] : null;
+        const ioi = prev ? (ev.timeMs - prev.timeMs) : 450;
+
+        if (ev.kind === 'perc') {
+          tokens.push(ev.percType === 'TAK' ? 't' : 'g');
+          continue;
+        }
+
+        if (prev && ioi > 1250) {
+          tokens.push('|');
+        } else if (prev && ioi > 760) {
+          tokens.push(',');
+        }
+
+        let tok = String(ev.idx);
+        if (ev.type === 'H') tok += '\'';
+        if (ev.flam) tok += '~';
+        if (ev.gapAfterMs > 520) tok += ':';
+
+        // Connect rapid cascade/arpeggio runs with '-'
+        if (prev && prev.kind === 'tone' && ioi < 135 && tokens.length > 0 && tokens[tokens.length - 1] !== '|' && tokens[tokens.length - 1] !== ',') {
+          tokens[tokens.length - 1] = `${tokens[tokens.length - 1]}-${tok}`;
+        } else {
+          tokens.push(tok);
+        }
+      }
+
+      // Spatial bow sector telemetry
+      const refX = app.bow.active ? app.bow.x : (app.companion.visible ? app.companion.x : app.cx);
+      const refY = app.bow.active ? app.bow.y : (app.companion.visible ? app.companion.y : app.cy);
+      const rNorm = Math.hypot((refX - app.cx) / Math.max(120, app.fieldR), (refY - app.cy) / Math.max(120, app.fieldR));
+      const yNorm = (refY - app.cy) / Math.max(120, app.fieldR);
+      const posTag = rNorm < 0.30 ? 'core-still'
+                   : (yNorm < -0.52 ? 'rim-shimmer'
+                   : (rNorm > 0.66 ? 'outer-lift' : 'inner-glide'));
+
+      const ancTag = app.anchors.length > 0
+        ? ` | ANC:${app.anchors.map(a => a.basin).join(',')}`
+        : '';
+      const feelTag = app.breath < 0.34 ? 'pocket' : (app.breath > 0.68 ? 'rubato' : 'flow');
+
+      const body = tokens.length ? tokens.join(' ') : '0:';
+      return `${sc.code} @${app.activeBasin} ${body} | POS:${posTag}${ancTag} | FEEL:${feelTag}`;
+    }
+
+    function updateLocalGravityInference(ev) {
+      // Smooth local Markov + anchor harmonic gravity estimator (always active; blended when Gemini responds)
+      const scores = { i: 0.22, III: 0.14, iv: 0.14, bVI: 0.12, bVII: 0.12, shimmer: 0.10 };
+      const b = ev?.basin || app.activeBasin;
+
+      // Natural modal pull transitions
+      const nextPull = {
+        i:       { i: 0.24, bVI: 0.24, III: 0.20, iv: 0.18, bVII: 0.10, shimmer: 0.14 },
+        III:     { bVII: 0.30, i: 0.22, bVI: 0.18, shimmer: 0.18, iv: 0.12 },
+        iv:      { i: 0.34, bVII: 0.22, bVI: 0.16, shimmer: 0.14, III: 0.12 },
+        bVI:     { bVII: 0.34, iv: 0.22, III: 0.18, shimmer: 0.16, i: 0.14 },
+        bVII:    { i: 0.44, III: 0.20, shimmer: 0.18, bVI: 0.12, iv: 0.10 },
+        shimmer: { i: 0.30, III: 0.24, bVI: 0.22, bVII: 0.14, iv: 0.14 }
+      }[b] || {};
+
+      for (const k of BASIN_KEYS) {
+        scores[k] = (scores[k] + (nextPull[k] || 0)) * 0.5;
+      }
+
+      // Strong attraction from user-dropped Magnetic Gravity Anchors
+      for (const a of app.anchors) {
+        scores[a.basin] = (scores[a.basin] || 0) + 0.55;
+      }
+
+      // Normalize
+      const sum = BASIN_KEYS.reduce((s, k) => s + scores[k], 0) || 1;
+      const alpha = app.geminiSource === 'GEMINI' ? 0.18 : 0.42;
+      for (const k of BASIN_KEYS) {
+        app.basinProbs[k] = lerp(app.basinProbs[k], scores[k] / sum, alpha);
+      }
+
+      // Determine winning basin
+      let winK = 'i', winV = -1;
+      for (const k of BASIN_KEYS) {
+        if (app.basinProbs[k] > winV) { winV = app.basinProbs[k]; winK = k; }
+      }
+      app.activeBasin = winK;
+
+      // Local breath_arc deduction from velocity & register when Gemini isn't driving
+      if (app.geminiSource !== 'GEMINI') {
+        if (ev && ev.idx === 0) app.breathArc = 'climb';
+        else if (app.bow.speed > 560) app.breathArc = 'cascade';
+        else if (ev && (ev.basin === 'bVII' || ev.basin === 'shimmer')) app.breathArc = 'resolve';
+        else app.breathArc = app.breath > 0.65 ? 'suspend' : 'climb';
+      }
+      renderBasinDistUI();
+    }
+
+    async function queryGeminiDecisions() {
+      const apiKey = app.geminiKey.trim();
+      if (!apiKey) {
+        setGeminiStatus('Local Inference', '');
+        return;
+      }
+
+      // Abort stale in-flight query cleanly
+      if (app.geminiAbort) {
+        try { app.geminiAbort.abort(); } catch (_) {}
+      }
+      const controller = new AbortController();
+      app.geminiAbort = controller;
+      app.geminiInFlight = true;
+      app.geminiLastQueryAt = performance.now();
+      setGeminiStatus('Querying…', 'hot');
+
+      const panlang = encodePanLang();
+      const body = {
+        model: 'gemini-decision-1',
+        input: panlang,
+        questions: {
+          gravity_basin: {
+            type: 'choice',
+            instructions: 'Choose the next harmonic gravity basin for expressive handpan continuation.',
+            criteria: {
+              i:       'Tonic core home — grounded Ding and fifth warmth',
+              III:     'Relative bright lift — open lyrical consonance',
+              iv:      'Subdominant depth — contemplative inward turn',
+              bVI:     'Poignant modal departure — emotional bittersweet color',
+              bVII:    'Modal forward tension — suspended narrative drive',
+              shimmer: 'Upper horizon 2f0 overtone shimmer — crystalline height'
+            }
+          },
+          breath_arc: {
+            type: 'choice',
+            instructions: 'Choose the organic temporal rubato gesture for the next handpan phrase.',
+            criteria: {
+              suspend: 'Slow spacious breath, hovering stillness, wide caesura',
+              climb:   'Gradual lyrical ascent with gentle Todd phrase-arch acceleration',
+              cascade: 'Expressive sweeping 40-60ms arpeggiated flams and radiant shimmer',
+              resolve: 'Warm ritardando cadence landing gently on tonic Ding'
+            }
+          }
+        }
+      };
+
+      const t0 = performance.now();
+      try {
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/decisions', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => res.statusText);
+          throw new Error(`HTTP ${res.status}: ${errText.slice(0, 90)}`);
+        }
+
+        const data = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        app.geminiCalls++;
+        app.geminiLastMs = ms;
+        app.geminiSource = 'GEMINI';
+
+        const ans = data.answers || {};
+        if (ans.gravity_basin?.probabilities) {
+          const gp = ans.gravity_basin.probabilities;
+          let sum = 0;
+          const nextP = {};
+          for (const k of BASIN_KEYS) {
+            // Respect user Gravity Anchors softly even under Gemini guidance
+            const anchorBoost = app.anchors.some(a => a.basin === k) ? 0.16 : 0;
+            nextP[k] = (gp[k] ?? 0.05) + anchorBoost;
+            sum += nextP[k];
+          }
+          for (const k of BASIN_KEYS) {
+            app.basinProbs[k] = lerp(app.basinProbs[k], nextP[k] / (sum || 1), 0.72);
+          }
+          if (ans.gravity_basin.choice && BASIN_KEYS.includes(ans.gravity_basin.choice)) {
+            app.activeBasin = ans.gravity_basin.choice;
+          }
+        }
+
+        if (ans.breath_arc?.choice) {
+          app.breathArc = ans.breath_arc.choice;
+          if (ans.breath_arc.probabilities) app.arcProbs = ans.breath_arc.probabilities;
+        }
+
+        const inTok = data.usage?.total_input_tokens ?? data.usageMetadata?.promptTokenCount ?? Math.ceil(panlang.length / 3.8);
+        setGeminiStatus(`Live · ${ms}ms`, 'ok');
+        document.getElementById('gem-latency').textContent = `#${app.geminiCalls} · ${ms}ms (${inTok} in / 0 out)`;
+        document.getElementById('gem-source-tag').textContent = 'GEMINI';
+        document.getElementById('dot-gemini').className = 'mini-dot ok';
+        renderBasinDistUI();
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        app.geminiSource = 'LOCAL';
+        setGeminiStatus('Fallback Local', '');
+        document.getElementById('gem-latency').textContent = `Err: ${(err.message || 'API error').slice(0, 48)}`;
+        document.getElementById('gem-source-tag').textContent = 'LOCAL';
+        document.getElementById('dot-gemini').className = 'mini-dot';
+      } finally {
+        if (app.geminiAbort === controller) {
+          app.geminiInFlight = false;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 7. Organic Non-Grid Timing Engine (Todd Phrase-Arch + KTH Caesura)
+    // =========================================================================
+    function sampleWeighted(entries) {
+      const total = entries.reduce((s, e) => s + Math.max(0, e.w), 0);
+      if (total <= 0) return entries[0].v;
+      let r = Math.random() * total;
+      for (const e of entries) {
+        r -= Math.max(0, e.w);
+        if (r <= 0) return e.v;
+      }
+      return entries[entries.length - 1].v;
+    }
+
+    function pickBasinFromProbs() {
+      return sampleWeighted(BASIN_KEYS.map(k => ({ v: k, w: app.basinProbs[k] })));
+    }
+
+    // Build an organic, non-grid phrase (3..8 gestures) shaped by Todd arch, anchors, memory, and breath feel
+    function composeOrganicPhrase(seedEvents = []) {
+      const sc = SCALES[app.scaleKey];
+      const basin = pickBasinFromProbs();
+      app.activeBasin = basin;
+      const pool = sc.chords[basin] || sc.chords.i;
+      const arc = app.breathArc;
+
+      // Phrase length naturally scales with breath feel and arc
+      const len = arc === 'suspend' ? (3 + Math.floor(Math.random() * 2))
+                : arc === 'cascade' ? (5 + Math.floor(Math.random() * 3))
+                : (4 + Math.floor(Math.random() * 3));
+
+      // Extract user motif contour if responding in Co-Breath
+      const motifNotes = seedEvents.filter(e => e.kind === 'tone').slice(-4).map(e => e.idx);
+      let cursorIdx = motifNotes.length ? motifNotes[motifNotes.length - 1] : pool[0];
+
+      const events = [];
+      for (let i = 0; i < len; i++) {
+        const u = len > 1 ? i / (len - 1) : 0.5;
+        let idx;
+
+        if (arc === 'resolve' && i === len - 1) {
+          idx = Math.random() < 0.72 ? 0 : (sc.chords.i[2] ?? 4);
+        } else if (i < motifNotes.length && Math.random() < 0.42 && arc !== 'resolve') {
+          // Organic echo / variation of user's recent gesture
+          const m = motifNotes[i];
+          idx = Math.random() < 0.55 ? m : pool[Math.floor(Math.random() * pool.length)];
+        } else {
+          // Score every well by basin pool + melodic continuity + arc contour + Gravity Anchors
+          const cands = [];
+          for (let j = 0; j < 9; j++) {
+            let score = pool.includes(j) ? 2.4 : 0.45;
+            const stepDist = Math.abs(j - cursorIdx);
+            score += Math.exp(-Math.abs(stepDist - 1.6) * 0.65) * 1.4;
+            if (j === cursorIdx) score *= 0.25;
+            if (arc === 'climb') score += (j / 8) * (0.4 + u * 1.4);
+            if (arc === 'resolve') score += ((8 - j) / 8) * (0.5 + u * 1.5);
+            if (arc === 'cascade') score += (stepDist >= 1 && stepDist <= 3) ? 1.1 : 0.2;
+            // Gravity Anchor spatial pull
+            for (const a of app.anchors) {
+              const w = app.wells[j];
+              const dA = Math.hypot(w.nx - a.nx, w.ny - a.ny);
+              score += 2.6 * Math.exp(-dA * 2.8);
+            }
+            cands.push({ v: j, w: Math.max(0.05, score) });
+          }
+          idx = sampleWeighted(cands);
+        }
+
+        cursorIdx = idx;
+
+        // 2f0 harmonic shimmer when in shimmer basin or high outer rim
+        const isShimmer = (basin === 'shimmer' && idx >= 5 && Math.random() < (0.35 + app.breath * 0.40))
+                       || (arc === 'cascade' && i === len - 1 && idx >= 6 && Math.random() < 0.55);
+
+        // Todd Parabolic Phrase-Arch tempo curve:
+        // Accelerates gently toward lyrical apex (u ~ 0.42), relaxes into ritardando toward phrase close
+        const baseStepMs = lerp(235, 560, app.breath);
+        const archDepth = lerp(0.16, 0.42, app.breath);
+        const archSpeed = 1.0 + archDepth * (1 - 4 * Math.pow(u - 0.42, 2)); // >1 near climax, <1 at edges
+        let ioiMs = baseStepMs / clamp(archSpeed, 0.55, 1.55);
+
+        // Agogic accent on phrase climax & final landing
+        if (Math.abs(u - 0.45) < 0.16) ioiMs *= (1.12 + app.breath * 0.16);
+        if (i === len - 1) ioiMs *= (1.35 + app.breath * 0.45);
+
+        // Decay-aware floor for resonant Ding strikes so 78Hz Helmholtz body blooms cleanly
+        if (idx === 0) ioiMs = Math.max(ioiMs, lerp(360, 680, app.breath));
+
+        // Cascade flam pair (40–62ms rolled arpeggio grace)
+        let flamIdx = null;
+        if ((arc === 'cascade' || (app.breath > 0.52 && Math.abs(u - 0.45) < 0.2)) && Math.random() < (arc === 'cascade' ? 0.55 : 0.24)) {
+          const neighbors = pool.filter(n => n !== idx && Math.abs(n - idx) <= 3);
+          if (neighbors.length) {
+            flamIdx = neighbors[Math.floor(Math.random() * neighbors.length)];
+            if (arc === 'cascade') ioiMs *= 0.72;
+          }
+        }
+
+        // Dynamic velocity arch (crescendo toward apex, tender decrescendo on close)
+        const velArch = 0.52 + 0.34 * Math.sin(u * Math.PI) + (idx === 0 ? 0.08 : 0);
+        const vel = clamp(velArch + (Math.random() - 0.5) * 0.12, 0.34, 0.94);
+
+        // Subtle dry-pocket percussive punctuation (Tak/Gu) when breath slider leans toward Dry Pocket
+        const percAccent = (app.breath < 0.44 && i === Math.floor(len * 0.5) && Math.random() < (0.45 - app.breath))
+          ? (Math.random() < 0.65 ? 'TAK' : 'GU')
+          : null;
+
+        const phaseLabel = i === 0 ? 'inhale'
+                         : (u < 0.36 ? 'flow'
+                         : (u < 0.62 ? 'apex' : 'ritard'));
+
+        events.push({
+          idx,
+          flamIdx,
+          type: isShimmer ? 'H' : 'N',
+          vel,
+          ioiMs: Math.round(ioiMs),
+          percAccent,
+          phaseLabel,
+          u
+        });
+      }
+
+      // KTH Phrase-Final Caesura (genuine breathing silence before next phrase)
+      const caesuraMs = Math.round(lerp(420, 1450, app.breath) * (arc === 'suspend' ? 1.35 : (arc === 'cascade' ? 0.75 : 1.0)));
+      return { basin, arc, events, caesuraMs };
+    }
+
+    function cancelCompanionPhrase() {
+      app.scheduleGen++;
+      clearTimeout(app.coBreathWaitTimer);
+      clearTimeout(app.orbitTimer);
+      app.coBreathSpeaking = false;
+      if (app.mode !== 'orbit') {
+        app.companion.phase = 'idle';
+      }
+    }
+
+    function playCompanionPhrase(phrase, source, onDone) {
+      const gen = app.scheduleGen;
+      const comp = app.companion;
+      comp.visible = true;
+
+      let stepIdx = 0;
+
+      function runStep() {
+        if (gen !== app.scheduleGen) return;
+        if (source === 'orbit' && (app.mode !== 'orbit' || app.orbitPaused)) return;
+        if (source === 'cobreath' && app.mode !== 'cobreath') return;
+
+        if (stepIdx >= phrase.events.length) {
+          // Enter luminous KTH Caesura
+          comp.phase = 'caesura';
+          comp.phaseProg = 0;
+          updateBreathDot(false);
+          if (app.geminiKey && (performance.now() - app.geminiLastQueryAt > 3000)) {
+            queryGeminiDecisions();
+          }
+          app.orbitTimer = setTimeout(() => {
+            if (gen !== app.scheduleGen) return;
+            if (onDone) onDone();
+          }, phrase.caesuraMs);
+          return;
+        }
+
+        const ev = phrase.events[stepIdx++];
+        let targetIdx = ev.idx;
+
+        // In Orbit Flow, if user's cursor is hovering/dragging, gently warp target well toward cursor!
+        if (source === 'orbit' && app.bow.active) {
+          const { well, dist } = findNearestWell(app.bow.x, app.bow.y);
+          if (well && dist < app.fieldR * 0.42 && Math.random() < (app.bow.pointerDown ? 0.85 : 0.48)) {
+            targetIdx = well.idx;
+          }
+        }
+
+        const w = app.wells[targetIdx];
+        if (w) {
+          comp.targetX = w.x;
+          comp.targetY = w.y;
+          comp.phase = ev.phaseLabel;
+          comp.phaseProg = ev.u;
+          comp.energy = clamp(ev.vel * 1.1, 0.4, 1.0);
+          updateBreathDot(true);
+
+          if (ev.flamIdx != null && ev.flamIdx !== targetIdx) {
+            // Rolled 44–58ms flam cascade (~)
+            const flamMs = 42 + Math.random() * 18;
+            triggerWell(ev.flamIdx, { vel: ev.vel * 0.72, type: 'N', source, flam: true });
+            triggerWell(targetIdx, { vel: ev.vel, type: ev.type, source, delaySec: flamMs / 1000, flam: true });
+          } else {
+            triggerWell(targetIdx, { vel: ev.vel, type: ev.type, source });
+          }
+
+          if (ev.percAccent) {
+            const pDelay = Math.max(95, ev.ioiMs * 0.48);
+            setTimeout(() => {
+              if (gen !== app.scheduleGen) return;
+              const px = ev.percAccent === 'GU' ? app.cx : w.x * 0.85 + app.cx * 0.15;
+              const py = ev.percAccent === 'GU' ? app.cy : w.y * 0.85 + app.cy * 0.15;
+              triggerPercussion(ev.percAccent, px, py, source, 0.56);
+            }, pDelay);
+          }
+        }
+
+        app.orbitTimer = setTimeout(runStep, ev.ioiMs);
+      }
+
+      // Brief organic inhale before first note
+      comp.phase = 'inhale';
+      const firstW = app.wells[phrase.events[0]?.idx ?? 0];
+      if (firstW) {
+        if (!comp.x && !comp.y) { comp.x = app.cx; comp.y = app.cy; }
+        comp.targetX = firstW.x;
+        comp.targetY = firstW.y;
+      }
+      app.orbitTimer = setTimeout(runStep, 160 + app.breath * 160);
+    }
+
+    function armCoBreathListener() {
+      if (app.mode !== 'cobreath') return;
+      clearTimeout(app.coBreathWaitTimer);
+      const waitMs = Math.round(lerp(560, 960, app.breath));
+      const gen = app.scheduleGen;
+      app.coBreathWaitTimer = setTimeout(() => {
+        if (gen !== app.scheduleGen || app.mode !== 'cobreath') return;
+        if (app.bow.pointerDown || app.bow.speed > 45) {
+          armCoBreathListener();
+          return;
+        }
+        if (app.userPhraseBuffer.length < 2) return;
+
+        const seed = [...app.userPhraseBuffer];
+        app.userPhraseBuffer = [];
+        app.coBreathSpeaking = true;
+
+        // Place companion gently where the user paused
+        app.companion.x = app.bow.x || app.cx;
+        app.companion.y = app.bow.y || app.cy;
+        const phrase = composeOrganicPhrase(seed);
+        playCompanionPhrase(phrase, 'cobreath', () => {
+          app.coBreathSpeaking = false;
+          app.companion.phase = 'idle';
+        });
+      }, waitMs);
+    }
+
+    function startOrbitFlow() {
+      cancelCompanionPhrase();
+      app.orbitPaused = false;
+      app.companion.visible = true;
+      if (!app.companion.x && !app.companion.y) {
+        app.companion.x = app.cx;
+        app.companion.y = app.cy;
+      }
+      const nextOrbit = () => {
+        if (app.mode !== 'orbit' || app.orbitPaused) return;
+        const phrase = composeOrganicPhrase(app.history.slice(-4));
+        playCompanionPhrase(phrase, 'orbit', nextOrbit);
+      };
+      nextOrbit();
+    }
+
+    // =========================================================================
+    // 8. Magnetic Gravity Anchors (Idea #5 — Tactile Steering Locks)
+    // =========================================================================
+    function findAnchorAt(x, y) {
+      for (let i = app.anchors.length - 1; i >= 0; i--) {
+        if (Math.hypot(x - app.anchors[i].x, y - app.anchors[i].y) < 28) {
+          return app.anchors[i];
+        }
+      }
+      return null;
+    }
+
+    function dropGravityAnchor(x, y) {
+      const nx = clamp((x - app.cx) / Math.max(120, app.fieldR), -0.92, 0.92);
+      const ny = clamp((y - app.cy) / Math.max(120, app.fieldR), -0.92, 0.92);
+      const basin = nearestBasinForNormalized(nx, ny);
+
+      if (app.anchors.length >= 2) {
+        app.anchors.shift(); // keep max 2 crisp anchors
+      }
+      const anchor = {
+        id: app.anchorSeq++,
+        nx, ny,
+        x: app.cx + nx * app.fieldR,
+        y: app.cy + ny * app.fieldR,
+        basin,
+        energy: 1.0,
+        bornAt: performance.now() / 1000,
+        lastClickX: x,
+        lastClickY: y
+      };
+      app.anchors.push(anchor);
+      playTactileClick(clamp(nx * 0.65, -0.65, 0.65), 1.15, 0.11);
+      updateAnchorUI();
+      updateLocalGravityInference({ basin });
+      refreshPanLangDisplay();
+      markInteracted();
+      if (app.geminiKey) queryGeminiDecisions();
+      return anchor;
+    }
+
+    function removeGravityAnchor(id) {
+      const idx = app.anchors.findIndex(a => a.id === id);
+      if (idx === -1) return;
+      const a = app.anchors[idx];
+      app.ripples.push({
+        x: a.x, y: a.y,
+        startR: 22, maxR: 56,
+        bornAt: performance.now() / 1000,
+        life: 0.45, vel: 0.5, isHarmonic: false, source: 'user'
+      });
+      playTactileClick(clamp(a.nx * 0.65, -0.65, 0.65), 0.72, 0.08);
+      app.anchors.splice(idx, 1);
+      updateAnchorUI();
+      refreshPanLangDisplay();
+    }
+
+    function updateAnchorUI() {
+      const lbl = document.getElementById('anchor-btn-label');
+      lbl.textContent = `Anchor ${app.anchors.length}/2`;
+      const btn = document.getElementById('btn-anchor-mode');
+      btn.classList.toggle('active', app.anchorDropMode || app.anchors.length > 0);
+    }
+
+    // =========================================================================
+    // 9. Kinetic Bow Kinematics & Direct Pointer / Keyboard Interaction
+    // =========================================================================
+    const canvas = document.getElementById('field-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function handleUserInterrupt() {
+      // In Co-Breath, the instant the musician touches or bows, yield immediately!
+      if (app.mode === 'cobreath' && app.coBreathSpeaking) {
+        cancelCompanionPhrase();
+      }
+    }
+
+    function evaluateBowExcitation(nowMs) {
+      const bow = app.bow;
+      const bowingEnabled = bow.pointerDown || (app.hoverBow && app.hasInteracted && bow.active);
+      if (!bowingEnabled || app.draggingAnchorId != null) return;
+
+      const { well, dist } = findNearestWell(bow.x, bow.y);
+      if (!well) return;
+
+      const speed = bow.speed; // px/sec
+      const captureR = well.r * (speed > 420 ? 1.85 : 1.48);
+
+      if (dist <= captureR) {
+        // Decay-aware minimum refractory window: wider on low Ding, faster on rapid sweeping arcs
+        const isDing = well.idx === 0;
+        const speedFactor = clamp(1.0 - (speed - 120) / 1100, 0.28, 1.0);
+        const wellRefractoryMs = (isDing ? 340 : 195) * (0.68 + app.breath * 0.58) * speedFactor;
+        const globalCascadeGapMs = speed > 520 ? 40 : (speed > 260 ? 78 : 135);
+
+        const sinceWell = nowMs - bow.lastWellTriggerMs[well.idx];
+        const sinceAny = nowMs - bow.lastStrikeMs;
+
+        // Require actual kinetic motion to bow (resting cleanly opens silence!)
+        const minSpeed = well.idx !== bow.lastWellIdx ? 28 : 165;
+
+        if (speed >= minSpeed && sinceWell >= wellRefractoryMs && sinceAny >= globalCascadeGapMs) {
+          handleUserInterrupt();
+
+          const rNorm = Math.hypot((bow.x - app.cx) / Math.max(120, app.fieldR), (bow.y - app.cy) / Math.max(120, app.fieldR));
+          const yNorm = (bow.y - app.cy) / Math.max(120, app.fieldR);
+          const inShimmerRim = (rNorm > 0.76 && yNorm < -0.18) || (well.tier === 'outer' && yNorm < -0.52 && speed > 440);
+
+          const vel = clamp(0.32 + (speed / 920) * 0.64, 0.30, 0.96);
+          const type = inShimmerRim ? 'H' : 'N';
+          const isFastCascade = speed > 560;
+
+          triggerWell(well.idx, { vel, type, source: 'user', flam: isFastCascade });
+
+          // Fast sweeping arcs ignite lush 38–60ms sympathetic cascade harmonics!
+          if (isFastCascade && sinceAny < 180) {
+            const sc = SCALES[app.scaleKey];
+            const pool = sc.chords[well.basin] || sc.chords.i;
+            const companionNotes = pool.filter(n => n !== well.idx && n > well.idx);
+            if (companionNotes.length && Math.random() < (0.42 + app.breath * 0.35)) {
+              const overIdx = companionNotes[0];
+              const flamDelay = (38 + Math.random() * 24) / 1000;
+              triggerWell(overIdx, {
+                vel: vel * 0.64,
+                type: overIdx >= 5 ? 'H' : 'N',
+                source: 'user',
+                delaySec: flamDelay,
+                flam: true
+              });
+            }
+          }
+
+          bow.lastWellIdx = well.idx;
+          bow.lastStrikeMs = nowMs;
+          bow.lastWellTriggerMs[well.idx] = nowMs;
+        }
+      }
+    }
+
+    function updateHoldAnticipation(nowMs, dt) {
+      const bow = app.bow;
+      if (!bow.pointerDown || app.draggingAnchorId != null) {
+        if (bow.holdCharge > 0) {
+          bow.holdCharge = Math.max(0, bow.holdCharge - dt * 4.5);
+        }
+        return;
+      }
+
+      const { well, dist } = findNearestWell(bow.x, bow.y);
+      if (well && dist < well.r * 1.55 && bow.speed < 55) {
+        if (bow.holdWellIdx !== well.idx) {
+          bow.holdWellIdx = well.idx;
+          bow.holdStartMs = nowMs;
+          bow.holdSwellStarted = false;
+        }
+        const heldMs = nowMs - bow.holdStartMs;
+        if (heldMs > 240) {
+          bow.holdCharge = clamp((heldMs - 240) / 980, 0, 1);
+          if (!bow.holdSwellStarted && bow.holdCharge > 0.08) {
+            bow.holdSwellStarted = true;
+            startHoldSwell(well.idx);
+          }
+        }
+      } else {
+        if (bow.holdSwellStarted) stopHoldSwell();
+        bow.holdWellIdx = -1;
+        bow.holdSwellStarted = false;
+        bow.holdCharge = Math.max(0, bow.holdCharge - dt * 5);
+      }
+    }
+
+    function releaseHoldCadence() {
+      const bow = app.bow;
+      stopHoldSwell();
+      if (bow.holdWellIdx >= 0 && bow.holdCharge > 0.24) {
+        const idx = bow.holdWellIdx;
+        const w = app.wells[idx];
+        const sc = SCALES[app.scaleKey];
+        const vel = clamp(0.56 + bow.holdCharge * 0.40, 0.56, 0.96);
+
+        if (w.tier === 'outer') {
+          // Agogic cadence rolling gracefully from tension back toward tonic core!
+          const resolveIdx = bow.holdCharge > 0.65 ? 0 : (sc.chords.i[2] ?? 4);
+          triggerWell(idx, { vel: vel * 0.85, type: w.ny < -0.45 ? 'H' : 'N', source: 'user', flam: true });
+          triggerWell(resolveIdx, { vel, type: 'N', source: 'user', delaySec: 0.052, flam: true });
+        } else {
+          // Lush rolled dyad (~) pairing the held well with its consonant fifth/octave partner
+          const pool = sc.chords[w.basin] || sc.chords.i;
+          const partner = pool.find(n => n !== idx && Math.abs(n - idx) >= 2) ?? (idx === 0 ? 4 : 0);
+          triggerWell(idx, { vel, type: 'N', source: 'user', flam: true });
+          triggerWell(partner, { vel: vel * 0.82, type: partner >= 6 ? 'H' : 'N', source: 'user', delaySec: 0.046, flam: true });
+        }
+      }
+      bow.holdWellIdx = -1;
+      bow.holdCharge = 0;
+      bow.holdSwellStarted = false;
+    }
+
+    // Canvas Pointer Events
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    canvas.addEventListener('pointerdown', e => {
+      closeAllPopovers();
+      ensureAudio();
+      markInteracted();
+
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Right-click, Shift-click, or Anchor Drop Mode
+      const existingAnchor = findAnchorAt(x, y);
+      if (e.button === 2) {
+        if (existingAnchor) {
+          removeGravityAnchor(existingAnchor.id);
+        } else {
+          dropGravityAnchor(x, y);
+        }
+        return;
+      }
+
+      if (existingAnchor) {
+        app.draggingAnchorId = existingAnchor.id;
+        canvas.setPointerCapture(e.pointerId);
+        playTactileClick(clamp(existingAnchor.nx * 0.65, -0.65, 0.65), 1.05, 0.08);
+        return;
+      }
+
+      if (e.shiftKey || app.anchorDropMode) {
+        const a = dropGravityAnchor(x, y);
+        app.draggingAnchorId = a.id;
+        canvas.setPointerCapture(e.pointerId);
+        if (app.anchorDropMode) {
+          app.anchorDropMode = false;
+          updateAnchorUI();
+        }
+        return;
+      }
+
+      // Standard Bow / Direct Tactile Pluck
+      handleUserInterrupt();
+      const bow = app.bow;
+      bow.active = true;
+      bow.pointerDown = true;
+      bow.targetX = x; bow.targetY = y;
+      bow.x = x; bow.y = y;
+      bow.vx = 0; bow.vy = 0;
+      bow.speed = 0;
+      bow.trail = [{ x, y, t: performance.now() / 1000 }];
+      canvas.setPointerCapture(e.pointerId);
+
+      // Instantaneous <3ms direct pluck if pressing a resonant well
+      const { well, dist } = findNearestWell(x, y);
+      const nowMs = performance.now();
+      if (well && dist <= well.r * 1.65) {
+        const rNorm = Math.hypot((x - app.cx) / Math.max(120, app.fieldR), (y - app.cy) / Math.max(120, app.fieldR));
+        const isRim = well.tier === 'outer' && rNorm > 0.84 && dist > well.r * 0.72;
+        triggerWell(well.idx, { vel: 0.80, type: isRim ? 'H' : 'N', source: 'user' });
+        bow.lastWellIdx = well.idx;
+        bow.lastStrikeMs = nowMs;
+        bow.lastWellTriggerMs[well.idx] = nowMs;
+        bow.holdWellIdx = well.idx;
+        bow.holdStartMs = nowMs;
+        bow.holdCharge = 0;
+        bow.holdSwellStarted = false;
+      } else {
+        // Soft open-field breath accent: outer rim = delicate Tak, deep center = warm Gu
+        const rNorm = Math.hypot((x - app.cx) / Math.max(120, app.fieldR), (y - app.cy) / Math.max(120, app.fieldR));
+        if (rNorm > 0.88) {
+          triggerPercussion('TAK', x, y, 'user', 0.56);
+        } else if (rNorm < 0.16) {
+          triggerPercussion('GU', x, y, 'user', 0.64);
+        }
+      }
+    });
+
+    canvas.addEventListener('pointermove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (app.draggingAnchorId != null) {
+        const a = app.anchors.find(item => item.id === app.draggingAnchorId);
+        if (a) {
+          a.nx = clamp((x - app.cx) / Math.max(120, app.fieldR), -0.92, 0.92);
+          a.ny = clamp((y - app.cy) / Math.max(120, app.fieldR), -0.92, 0.92);
+          a.x = app.cx + a.nx * app.fieldR;
+          a.y = app.cy + a.ny * app.fieldR;
+          a.basin = nearestBasinForNormalized(a.nx, a.ny);
+          a.energy = 1.0;
+
+          // Tactile stereo vernier micro-click every ~20px dragged
+          if (Math.hypot(a.x - a.lastClickX, a.y - a.lastClickY) >= 20) {
+            a.lastClickX = a.x;
+            a.lastClickY = a.y;
+            const rDist = Math.hypot(a.nx, a.ny);
+            playTactileClick(clamp(a.nx * 0.65, -0.65, 0.65), 0.82 + rDist * 0.55, 0.075);
+            updateLocalGravityInference({ basin: a.basin });
+            refreshPanLangDisplay();
+          }
+        }
+        return;
+      }
+
+      app.bow.active = true;
+      app.bow.targetX = x;
+      app.bow.targetY = y;
+      if (!app.bow.x && !app.bow.y) {
+        app.bow.x = x; app.bow.y = y;
+      }
+    });
+
+    function endPointerInteraction(e) {
+      if (app.draggingAnchorId != null) {
+        app.draggingAnchorId = null;
+        if (app.geminiKey) queryGeminiDecisions();
+        return;
+      }
+      if (app.bow.pointerDown) {
+        app.bow.pointerDown = false;
+        releaseHoldCadence();
+      }
+      if (e && canvas.hasPointerCapture && canvas.hasPointerCapture(e.pointerId)) {
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+    }
+
+    canvas.addEventListener('pointerup', endPointerInteraction);
+    canvas.addEventListener('pointercancel', endPointerInteraction);
+    canvas.addEventListener('pointerleave', () => {
+      if (!app.bow.pointerDown) {
+        app.bow.active = false;
+      }
+    });
+
+    canvas.addEventListener('dblclick', e => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const a = findAnchorAt(x, y);
+      if (a) removeGravityAnchor(a.id);
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', e => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) return;
+
+      if (e.key >= '1' && e.key <= '9') {
+        ensureAudio();
+        handleUserInterrupt();
+        const idx = parseInt(e.key, 10) - 1;
+        triggerWell(idx, { vel: e.shiftKey ? 0.88 : 0.78, type: e.shiftKey ? 'H' : 'N', source: 'user' });
+        return;
+      }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        ensureAudio();
+        if (app.mode === 'orbit') {
+          app.orbitPaused = !app.orbitPaused;
+          if (!app.orbitPaused) startOrbitFlow();
+          else cancelCompanionPhrase();
+        } else {
+          handleUserInterrupt();
+          triggerWell(0, { vel: 0.84, type: 'N', source: 'user' });
+        }
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === 't') {
+        ensureAudio();
+        triggerPercussion('TAK', app.cx + app.fieldR * 0.78, app.cy - app.fieldR * 0.25, 'user', 0.74);
+      } else if (k === 'g') {
+        ensureAudio();
+        triggerPercussion('GU', app.cx, app.cy + app.fieldR * 0.08, 'user', 0.80);
+      } else if (k === 'h') {
+        toggleHoverBow();
+      } else if (k === 'a') {
+        app.anchorDropMode = !app.anchorDropMode;
+        updateAnchorUI();
+      } else if (k === 'escape') {
+        closeAllPopovers();
+        closeNotesDrawer();
+      }
+    });
+
+    // =========================================================================
+    // 10. HiDPI 60 FPS Canvas Renderer — Luminous Architectural Sculpture
+    // =========================================================================
+    function resizeCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      app.w = window.innerWidth;
+      app.h = window.innerHeight;
+      canvas.width = Math.floor(app.w * dpr);
+      canvas.height = Math.floor(app.h * dpr);
+      canvas.style.width = `${app.w}px`;
+      canvas.style.height = `${app.h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      app.cx = app.w * 0.5;
+      app.cy = app.h * 0.505;
+      const topPad = 86;
+      const botPad = 104;
+      const availH = Math.max(240, app.h - topPad - botPad);
+      const availW = Math.max(280, app.w - 64);
+      app.fieldR = Math.min(availW * 0.45, availH * 0.49, 360);
+      syncWellScreenPositions();
+    }
+
+    function drawBackgroundField(nowSec) {
+      // Warm alabaster gallery stone radial wash
+      const grad = ctx.createRadialGradient(app.cx, app.cy - app.fieldR * 0.12, app.fieldR * 0.06, app.cx, app.cy, Math.max(app.w, app.h) * 0.72);
+      grad.addColorStop(0, '#fbf9f4');
+      grad.addColorStop(0.55, '#f6f4ef');
+      grad.addColorStop(1, '#ece8df');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, app.w, app.h);
+
+      // Subtle architectural crosshairs & vernier compass ticks
+      ctx.save();
+      ctx.strokeStyle = 'rgba(23, 22, 20, 0.055)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(app.cx - app.fieldR * 1.08, app.cy);
+      ctx.lineTo(app.cx + app.fieldR * 1.08, app.cy);
+      ctx.moveTo(app.cx, app.cy - app.fieldR * 1.06);
+      ctx.lineTo(app.cx, app.cy + app.fieldR * 1.04);
+      ctx.stroke();
+
+      // Concentric Semantic Gravity Horizon Rings (Core, Consonance, 2f0 Rim)
+      const rings = [
+        { r: app.fieldR * 0.30, label: 'CORE · TONIC GRAVITY', dash: [] },
+        { r: app.fieldR * 0.58, label: 'CONSONANCE · i / III / iv', dash: [3, 5] },
+        { r: app.fieldR * 0.90, label: 'HORIZON · MODAL COLOR & 2f₀ SHIMMER', dash: [] }
+      ];
+
+      ctx.font = '500 9.5px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      rings.forEach((rg, idx) => {
+        ctx.save();
+        ctx.setLineDash(rg.dash);
+        ctx.strokeStyle = idx === 2 ? 'rgba(23, 22, 20, 0.11)' : 'rgba(23, 22, 20, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(app.cx, app.cy, rg.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Whisper-quiet architectural ring label at bottom arc
+        ctx.fillStyle = 'rgba(23, 22, 20, 0.30)';
+        ctx.fillText(rg.label, app.cx, app.cy + rg.r + (idx === 2 ? 14 : 11));
+      });
+
+      // Upper 2f0 Shimmer Rim luminous arc hint
+      ctx.save();
+      const shimP = app.displayBasinProbs.shimmer || 0.08;
+      ctx.strokeStyle = `rgba(217, 83, 30, ${0.12 + shimP * 0.42})`;
+      ctx.lineWidth = 1.5 + shimP * 2.0;
+      ctx.beginPath();
+      ctx.arc(app.cx, app.cy, app.fieldR * 0.90, -Math.PI * 0.80, -Math.PI * 0.20);
+      ctx.stroke();
+      ctx.restore();
+
+      // Subtle compass vernier ticks around the outer horizon
+      ctx.strokeStyle = 'rgba(23, 22, 20, 0.14)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 48; i++) {
+        const ang = (i / 48) * Math.PI * 2;
+        const major = i % 6 === 0;
+        const r0 = app.fieldR * 0.90;
+        const r1 = r0 + (major ? 7 : 3.5);
+        ctx.beginPath();
+        ctx.moveTo(app.cx + Math.cos(ang) * r0, app.cy + Math.sin(ang) * r0);
+        ctx.lineTo(app.cx + Math.cos(ang) * r1, app.cy + Math.sin(ang) * r1);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Breathing Gemini / Local Harmonic Gravity Basin Auras
+      const sc = SCALES[app.scaleKey];
+      for (const k of BASIN_KEYS) {
+        const p = app.displayBasinProbs[k] || 0;
+        if (p < 0.12) continue;
+        const meta = BASIN_META[k];
+        const bx = app.cx + meta.nx * app.fieldR;
+        const by = app.cy + meta.ny * app.fieldR;
+        const pulse = 1 + 0.05 * Math.sin(nowSec * 1.9 + meta.nx * 3);
+        const auraR = app.fieldR * (0.34 + p * 0.34) * pulse;
+        const alpha = clamp((p - 0.10) * 0.32, 0, 0.20);
+        const ag = ctx.createRadialGradient(bx, by, 4, bx, by, auraR);
+        ag.addColorStop(0, `rgba(217, 83, 30, ${alpha})`);
+        ag.addColorStop(0.55, `rgba(217, 83, 30, ${alpha * 0.35})`);
+        ag.addColorStop(1, 'rgba(217, 83, 30, 0)');
+        ctx.fillStyle = ag;
+        ctx.beginPath();
+        ctx.arc(bx, by, auraR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Tonnetz / Spiral-Array Consonant Lattice Edges
+      ctx.save();
+      for (const [aIdx, bIdx] of sc.edges) {
+        const wa = app.wells[aIdx], wb = app.wells[bIdx];
+        if (!wa || !wb) continue;
+        const hot = Math.min(1, (wa.energy + wb.energy) * 0.45);
+        ctx.strokeStyle = hot > 0.08
+          ? `rgba(217, 83, 30, ${0.12 + hot * 0.36})`
+          : 'rgba(23, 22, 20, 0.075)';
+        ctx.lineWidth = hot > 0.08 ? 1.1 + hot * 1.1 : 0.9;
+        ctx.beginPath();
+        ctx.moveTo(wa.x, wa.y);
+        ctx.lineTo(wb.x, wb.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawLivingOrbitalScoreTrail(nowSec) {
+      const tones = app.history.filter(e => e.kind === 'tone');
+      if (tones.length < 2) return;
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      for (let i = 1; i < tones.length; i++) {
+        const p0 = tones[i - 1];
+        const p1 = tones[i];
+        const age = nowSec - p1.timeSec;
+        if (age > 22) continue;
+
+        const x0 = app.cx + p0.nx * app.fieldR;
+        const y0 = app.cy + p0.ny * app.fieldR;
+        const x1 = app.cx + p1.nx * app.fieldR;
+        const y1 = app.cy + p1.ny * app.fieldR;
+
+        // Smooth curved orbital arc between sequential strikes
+        const mx = (x0 + x1) * 0.5;
+        const my = (y0 + y1) * 0.5;
+        const dx = x1 - x0, dy = y1 - y0;
+        const curve = ((i % 2 === 0 ? 1 : -1) * Math.min(34, Math.hypot(dx, dy) * 0.18));
+        const cxp = mx - (dy / (Math.hypot(dx, dy) || 1)) * curve;
+        const cyp = my + (dx / (Math.hypot(dx, dy) || 1)) * curve;
+
+        const life = clamp(1 - age / 20, 0, 1);
+        const recencyFlash = Math.exp(-age * 1.65);
+
+        // Fresh segments glow molten bronze-vermilion, settling into fine charcoal ink
+        const r = Math.round(lerp(23, 217, recencyFlash));
+        const g = Math.round(lerp(22, 83, recencyFlash));
+        const b = Math.round(lerp(20, 30, recencyFlash));
+        const alpha = life * (0.14 + recencyFlash * 0.62);
+
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.lineWidth = 0.8 + life * 1.3 + recencyFlash * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(cxp, cyp, x1, y1);
+        ctx.stroke();
+
+        // Subtle score articulation knot on the node
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 1.1})`;
+        ctx.beginPath();
+        ctx.arc(x1, y1, p1.type === 'H' ? 3.2 : (1.8 + p1.vel * 1.6), 0, Math.PI * 2);
+        if (p1.type === 'H') {
+          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 1.2})`;
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+        } else {
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawContinuousAttentionFilaments(nowSec) {
+      const excX = (app.mode === 'orbit' && !app.bow.pointerDown) || app.coBreathSpeaking
+        ? app.companion.x
+        : (app.bow.active ? app.bow.x : app.cx);
+      const excY = (app.mode === 'orbit' && !app.bow.pointerDown) || app.coBreathSpeaking
+        ? app.companion.y
+        : (app.bow.active ? app.bow.y : app.cy);
+
+      const links = computeContinuousAttentionLinks(excX, excY);
+      if (!links.length) return;
+
+      ctx.save();
+      for (const lk of links) {
+        const flash = lk.freshness;
+        const r = Math.round(lerp(23, 217, flash));
+        const g = Math.round(lerp(22, 83, flash));
+        const b = Math.round(lerp(20, 30, flash));
+        const alpha = lk.weight * (0.12 + flash * 0.45);
+
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.lineWidth = 0.65 + lk.weight * 1.35;
+        ctx.beginPath();
+        ctx.moveTo(lk.x, lk.y);
+        ctx.quadraticCurveTo(lk.ctrlX, lk.ctrlY, excX, excY);
+        ctx.stroke();
+
+        // Tiny historical anchor dot
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 1.25})`;
+        ctx.beginPath();
+        ctx.arc(lk.x, lk.y, 1.5 + lk.weight * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Live electric diff-trace sparks traveling along fresh filaments
+      for (const sp of app.sparks) {
+        const u = clamp(sp.t, 0, 1);
+        const inv = 1 - u;
+        const sx = inv * inv * sp.fromX + 2 * inv * u * sp.ctrlX + u * u * sp.toX;
+        const sy = inv * inv * sp.fromY + 2 * inv * u * sp.ctrlY + u * u * sp.toY;
+        const alpha = Math.sin(u * Math.PI) * 0.9 * sp.strength;
+        ctx.fillStyle = `rgba(217, 83, 30, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.2 + sp.strength * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawAcousticRipples(nowSec) {
+      ctx.save();
+      for (let i = app.ripples.length - 1; i >= 0; i--) {
+        const rp = app.ripples[i];
+        const age = nowSec - rp.bornAt;
+        if (age < 0) continue;
+        if (age >= rp.life) {
+          app.ripples.splice(i, 1);
+          continue;
+        }
+        const u = age / rp.life;
+        // Ease-out acoustic wave propagation
+        const ease = 1 - Math.pow(1 - u, 2.4);
+        const radius = lerp(rp.startR, rp.maxR, ease);
+        const fade = Math.pow(1 - u, 1.85);
+        const hot = Math.pow(1 - u, 3.2);
+
+        const r = Math.round(lerp(23, 217, hot));
+        const g = Math.round(lerp(22, 83, hot));
+        const b = Math.round(lerp(20, 30, hot));
+        const alpha = fade * (rp.isHarmonic ? 0.62 : 0.48) * (0.55 + rp.vel * 0.55);
+
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.lineWidth = (rp.isHarmonic ? 1.1 : 1.7) * (1 - u * 0.55);
+        if (rp.isHarmonic) ctx.setLineDash([4, 4]);
+        else ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    function drawResonantWells(nowSec) {
+      const sc = SCALES[app.scaleKey];
+      const activePool = sc.chords[app.activeBasin] || [];
+
+      for (const w of app.wells) {
+        const inActiveBasin = activePool.includes(w.idx);
+        const targetAura = inActiveBasin ? clamp(app.displayBasinProbs[app.activeBasin] * 1.4, 0.25, 1) : 0;
+        w.gravityAura = lerp(w.gravityAura, targetAura, 0.08);
+
+        const e = clamp(w.energy, 0, 1.2);
+        const r = w.r + e * 4.5;
+
+        // First-visit gentle invitation pulse on central Ding ^1
+        if (!app.hasInteracted && w.idx === 0) {
+          const inv = (nowSec * 0.55) % 1;
+          ctx.strokeStyle = `rgba(217, 83, 30, ${(1 - inv) * 0.34})`;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(w.x, w.y, r + inv * 56, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Subtle outer harmonic contour ring (illuminates softly when inside active Gravity Basin)
+        if (w.gravityAura > 0.04 || e > 0.04) {
+          ctx.strokeStyle = `rgba(217, 83, 30, ${w.gravityAura * 0.26 + e * 0.45})`;
+          ctx.lineWidth = 1.1 + e * 1.3;
+          ctx.beginPath();
+          ctx.arc(w.x, w.y, r + 6.5 + e * 3, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Sculptural alabaster acoustic well body
+        const wg = ctx.createRadialGradient(w.x - r * 0.25, w.y - r * 0.25, r * 0.1, w.x, w.y, r);
+        if (e > 0.06) {
+          wg.addColorStop(0, `rgba(255, 249, 244, 0.98)`);
+          wg.addColorStop(0.62, `rgba(247, 232, 223, ${0.85 + e * 0.14})`);
+          wg.addColorStop(1, `rgba(217, 83, 30, ${0.16 + e * 0.26})`);
+        } else {
+          wg.addColorStop(0, '#fcfbf7');
+          wg.addColorStop(0.75, '#f2eee6');
+          wg.addColorStop(1, '#e6e0d4');
+        }
+
+        ctx.fillStyle = wg;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Crisp gallery rim stroke
+        ctx.strokeStyle = e > 0.08
+          ? `rgba(217, 83, 30, ${0.42 + e * 0.55})`
+          : (w.idx === 0 ? 'rgba(23, 22, 20, 0.48)' : 'rgba(23, 22, 20, 0.24)');
+        ctx.lineWidth = w.idx === 0 ? 1.7 : (1.1 + e * 1.1);
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner acoustic harmonic partial ring (Chladni resonance ring)
+        ctx.strokeStyle = e > 0.08
+          ? `rgba(217, 83, 30, ${0.22 + e * 0.45})`
+          : 'rgba(23, 22, 20, 0.08)';
+        ctx.lineWidth = 0.85;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, r * 0.70, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Pitch label + scale degree micro-label
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = e > 0.35 ? '#a6380d' : '#171614';
+        ctx.font = `${w.idx === 0 ? '600 14px' : '600 12px'} "Inter", -apple-system, sans-serif`;
+        ctx.fillText(w.note, w.x, w.y - 4.5);
+
+        ctx.fillStyle = e > 0.35 ? 'rgba(217, 83, 30, 0.92)' : 'rgba(23, 22, 20, 0.52)';
+        ctx.font = '500 9.5px "JetBrains Mono", ui-monospace, monospace';
+        ctx.fillText(`^${w.degree}`, w.x, w.y + 8.5);
+      }
+    }
+
+    function drawGravityAnchors(nowSec) {
+      if (!app.anchors.length) return;
+      const excX = app.bow.active ? app.bow.x : (app.companion.visible ? app.companion.x : app.cx);
+      const excY = app.bow.active ? app.bow.y : (app.companion.visible ? app.companion.y : app.cy);
+
+      ctx.save();
+      for (const a of app.anchors) {
+        const pulse = 1 + 0.05 * Math.sin(nowSec * 3.2 + a.id);
+
+        // Magnetic tether filament to active exciter with ruler ticks
+        const dx = excX - a.x, dy = excY - a.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 28) {
+          ctx.strokeStyle = 'rgba(217, 83, 30, 0.28)';
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(excX, excY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // Vernier ruler ticks along tether
+          const steps = Math.min(10, Math.floor(dist / 32));
+          const ux = dx / dist, uy = dy / dist;
+          const px = -uy, py = ux;
+          ctx.strokeStyle = 'rgba(217, 83, 30, 0.36)';
+          ctx.lineWidth = 1;
+          for (let s = 1; s <= steps; s++) {
+            const tx = a.x + ux * (s * 32);
+            const ty = a.y + uy * (s * 32);
+            const tl = s % 2 === 0 ? 4.5 : 2.5;
+            ctx.beginPath();
+            ctx.moveTo(tx - px * tl, ty - py * tl);
+            ctx.lineTo(tx + px * tl, ty + py * tl);
+            ctx.stroke();
+          }
+        }
+
+        // Translucent warm gravity field aura
+        const ag = ctx.createRadialGradient(a.x, a.y, 4, a.x, a.y, 76 * pulse);
+        ag.addColorStop(0, 'rgba(217, 83, 30, 0.20)');
+        ag.addColorStop(1, 'rgba(217, 83, 30, 0)');
+        ctx.fillStyle = ag;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 76 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Sculptural Vernier Anchor Ring
+        ctx.strokeStyle = '#d9531e';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 20 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Radial vernier dial ticks
+        ctx.strokeStyle = 'rgba(217, 83, 30, 0.65)';
+        ctx.lineWidth = 1;
+        for (let t = 0; t < 12; t++) {
+          const ang = (t / 12) * Math.PI * 2 + nowSec * 0.22;
+          ctx.beginPath();
+          ctx.moveTo(a.x + Math.cos(ang) * 16, a.y + Math.sin(ang) * 16);
+          ctx.lineTo(a.x + Math.cos(ang) * 23, a.y + Math.sin(ang) * 23);
+          ctx.stroke();
+        }
+
+        // Core dot
+        ctx.fillStyle = '#d9531e';
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Basin label tag
+        ctx.font = '600 9.5px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#a6380d';
+        ctx.fillText(`ANCHOR · ${a.basin}`, a.x, a.y + 32);
+      }
+      ctx.restore();
+    }
+
+    function drawCompanionOrbitalExciter(nowSec) {
+      const comp = app.companion;
+      const shouldShow = (app.mode === 'orbit' && !app.orbitPaused) || (app.mode === 'cobreath' && app.coBreathSpeaking);
+      if (!shouldShow && comp.energy < 0.03) return;
+
+      ctx.save();
+      const alpha = shouldShow ? 0.92 : clamp(comp.energy, 0, 1);
+
+      // Organic Breath Phase Halo visibly breathing (inhale -> flow -> apex -> ritard -> caesura)
+      const breathWave = comp.phase === 'caesura'
+        ? 0.5 + 0.5 * Math.sin(nowSec * 2.1)
+        : (comp.phase === 'apex' ? 1.0 : 0.72 + 0.25 * Math.sin(nowSec * 4.2));
+      const haloR = 16 + breathWave * 18 + comp.energy * 10;
+
+      const hg = ctx.createRadialGradient(comp.x, comp.y, 2, comp.x, comp.y, haloR);
+      hg.addColorStop(0, `rgba(217, 83, 30, ${0.32 * alpha})`);
+      hg.addColorStop(1, 'rgba(217, 83, 30, 0)');
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(comp.x, comp.y, haloR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(217, 83, 30, ${0.58 * alpha})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash(comp.phase === 'caesura' ? [3, 4] : []);
+      ctx.beginPath();
+      ctx.arc(comp.x, comp.y, 12 + breathWave * 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Sculptural companion bead
+      ctx.fillStyle = `rgba(23, 22, 20, ${0.88 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(comp.x, comp.y, 5.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `rgba(251, 250, 246, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(comp.x, comp.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Tiny phase caption beside companion
+      ctx.font = '500 9.5px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = `rgba(217, 83, 30, ${0.78 * alpha})`;
+      const roleTag = app.mode === 'cobreath' ? 'CO-BREATH' : 'ORBIT';
+      ctx.fillText(`${roleTag} · ${comp.phase}`, comp.x + 18, comp.y + 3);
+      ctx.restore();
+    }
+
+    function drawKineticBow(nowSec) {
+      const bow = app.bow;
+      if (!bow.active && !bow.pointerDown) return;
+
+      ctx.save();
+      // Silky kinetic wake ribbon
+      if (bow.trail.length > 2) {
+        for (let i = 1; i < bow.trail.length; i++) {
+          const p0 = bow.trail[i - 1], p1 = bow.trail[i];
+          const age = nowSec - p1.t;
+          if (age > 0.42) continue;
+          const life = 1 - age / 0.42;
+          const hot = bow.pointerDown || app.hoverBow;
+          ctx.strokeStyle = hot
+            ? `rgba(217, 83, 30, ${life * 0.44})`
+            : `rgba(23, 22, 20, ${life * 0.14})`;
+          ctx.lineWidth = (hot ? 2.6 : 1.4) * life;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
+        }
+      }
+
+      const speedNorm = clamp(bow.speed / 780, 0, 1);
+      const engaged = bow.pointerDown || (app.hoverBow && app.hasInteracted);
+
+      // Kinetic energy halo
+      const haloR = 12 + speedNorm * 22 + (engaged ? 6 : 0);
+      const hg = ctx.createRadialGradient(bow.x, bow.y, 1, bow.x, bow.y, haloR);
+      hg.addColorStop(0, engaged ? `rgba(217, 83, 30, ${0.24 + speedNorm * 0.28})` : 'rgba(23, 22, 20, 0.08)');
+      hg.addColorStop(1, 'rgba(217, 83, 30, 0)');
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(bow.x, bow.y, haloR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Harmonic Anticipation Ring when Press-and-Holding
+      if (bow.holdCharge > 0.02) {
+        const ringR = 26 + bow.holdCharge * 18;
+        ctx.strokeStyle = `rgba(217, 83, 30, ${0.35 + bow.holdCharge * 0.60})`;
+        ctx.lineWidth = 2.0 + bow.holdCharge * 1.4;
+        ctx.beginPath();
+        ctx.arc(bow.x, bow.y, ringR, -Math.PI / 2, -Math.PI / 2 + bow.holdCharge * Math.PI * 2);
+        ctx.stroke();
+
+        ctx.font = '500 9px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#d9531e';
+        ctx.fillText('RELEASE TO SWELL', bow.x, bow.y - ringR - 8);
+      }
+
+      // Crisp Bow Reticle
+      ctx.strokeStyle = engaged ? '#d9531e' : 'rgba(23, 22, 20, 0.55)';
+      ctx.lineWidth = engaged ? 1.8 : 1.2;
+      ctx.beginPath();
+      ctx.arc(bow.x, bow.y, engaged ? 8.5 + speedNorm * 3.5 : 6.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = engaged ? '#d9531e' : '#171614';
+      ctx.beginPath();
+      ctx.arc(bow.x, bow.y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Main 60 FPS Simulation & Render Loop
+    let lastFrameMs = performance.now();
+
+    function frame(nowMs) {
+      const dt = clamp((nowMs - lastFrameMs) / 1000, 0.001, 0.05);
+      lastFrameMs = nowMs;
+      const nowSec = nowMs / 1000;
+
+      // 1. Critically-damped spring physics for Kinetic Bow
+      const bow = app.bow;
+      if (bow.active) {
+        const stiffness = 340;
+        const damping = 32;
+        const ax = (bow.targetX - bow.x) * stiffness - bow.vx * damping;
+        const ay = (bow.targetY - bow.y) * stiffness - bow.vy * damping;
+        bow.vx += ax * dt;
+        bow.vy += ay * dt;
+        bow.x += bow.vx * dt;
+        bow.y += bow.vy * dt;
+        bow.speed = Math.hypot(bow.vx, bow.vy);
+
+        if (bow.speed > 18) {
+          bow.trail.push({ x: bow.x, y: bow.y, t: nowSec });
+          if (bow.trail.length > 26) bow.trail.shift();
+        }
+        evaluateBowExcitation(nowMs);
+        updateHoldAnticipation(nowMs, dt);
+      } else {
+        bow.speed *= Math.exp(-dt * 12);
+      }
+
+      // 2. Smooth orbital glide for Co-Breath / Orbit Flow companion
+      const comp = app.companion;
+      if (comp.visible) {
+        const cStiff = 28;
+        const cDamp = 8.5;
+        let tx = comp.targetX, ty = comp.targetY;
+        // Subtle live magnetic deflection by user cursor during Orbit Flow
+        if (app.mode === 'orbit' && app.bow.active) {
+          tx = lerp(tx, app.bow.x, app.bow.pointerDown ? 0.42 : 0.16);
+          ty = lerp(ty, app.bow.y, app.bow.pointerDown ? 0.42 : 0.16);
+        }
+        const ax = (tx - comp.x) * cStiff - comp.vx * cDamp;
+        const ay = (ty - comp.y) * cStiff - comp.vy * cDamp;
+        comp.vx += ax * dt;
+        comp.vy += ay * dt;
+        comp.x += comp.vx * dt;
+        comp.y += comp.vy * dt;
+        comp.energy *= Math.exp(-dt * 1.4);
+      }
+
+      // 3. Acoustic well energy decay synced to tau3 & smooth basin probabilities
+      for (const w of app.wells) {
+        const tau = getAcousticTau3(w.idx);
+        w.energy *= Math.exp(-dt / Math.max(0.42, tau * 0.72));
+        w.bloom *= Math.exp(-dt / Math.max(0.65, tau));
+      }
+      for (const k of BASIN_KEYS) {
+        app.displayBasinProbs[k] = lerp(app.displayBasinProbs[k], app.basinProbs[k], clamp(dt * 3.5, 0, 1));
+      }
+
+      // 4. Advance filament sparks
+      for (let i = app.sparks.length - 1; i >= 0; i--) {
+        app.sparks[i].t += dt * app.sparks[i].speed;
+        if (app.sparks[i].t >= 1) app.sparks.splice(i, 1);
+      }
+
+      // 5. Render layered sculpture
+      drawBackgroundField(nowSec);
+      drawLivingOrbitalScoreTrail(nowSec);
+      drawContinuousAttentionFilaments(nowSec);
+      drawAcousticRipples(nowSec);
+      drawResonantWells(nowSec);
+      drawGravityAnchors(nowSec);
+      drawCompanionOrbitalExciter(nowSec);
+      drawKineticBow(nowSec);
+
+      requestAnimationFrame(frame);
+    }
+
+    // =========================================================================
+    // 11. Minimal UI Bindings & Popover Management
+    // =========================================================================
+    function updateSoundBadge(text, cls) {
+      const b = document.getElementById('sound-status-badge');
+      b.textContent = text;
+      b.className = 'pop-badge' + (cls ? ' ' + cls : '');
+      const dot = document.getElementById('dot-sound');
+      dot.className = 'mini-dot' + (cls ? ' ' + cls : '');
+    }
+
+    function setGeminiStatus(text, cls) {
+      const b = document.getElementById('gem-status-badge');
+      b.textContent = text;
+      b.className = 'pop-badge' + (cls ? ' ' + cls : '');
+    }
+
+    function updateBreathDot(hot) {
+      document.getElementById('breath-dot').classList.toggle('live', !!hot);
+    }
+
+    function updateHudStatus(source, well) {
+      const sc = SCALES[app.scaleKey];
+      const modeName = app.mode === 'solo' ? 'Solo Bow' : (app.mode === 'cobreath' ? 'Co-Breath' : 'Orbit Flow');
+      const noteTxt = well ? `${well.note} (^${well.degree})` : 'Ready';
+      document.getElementById('hud-status').textContent = `${sc.name} · @${app.activeBasin} · ${noteTxt} · ${modeName}`;
+      updateBreathDot(true);
+      clearTimeout(updateHudStatus._t);
+      updateHudStatus._t = setTimeout(() => updateBreathDot(false), 420);
+    }
+
+    function refreshPanLangDisplay() {
+      const pl = encodePanLang();
+      document.getElementById('panlang-stream').textContent = pl;
+      const tokEst = Math.max(12, Math.ceil(pl.length / 3.6) + 18);
+      document.getElementById('gem-token-est').textContent = `~${tokEst} tok`;
+      document.getElementById('gem-arc-tag').textContent = `arc: ${app.breathArc}`;
+    }
+
+    function renderBasinDistUI() {
+      const grid = document.getElementById('basin-dist-grid');
+      if (!grid.children.length) {
+        for (const k of BASIN_KEYS) {
+          const cell = document.createElement('div');
+          cell.className = 'dist-cell';
+          cell.innerHTML = `<div class="dist-cell-top"><span>${k}</span><span id="bp-val-${k}">0%</span></div><div class="dist-bar-bg"><div class="dist-bar-fill" id="bp-bar-${k}" style="width:0%"></div></div>`;
+          grid.appendChild(cell);
+        }
+      }
+      for (const k of BASIN_KEYS) {
+        const pct = Math.round((app.basinProbs[k] || 0) * 100);
+        const vEl = document.getElementById(`bp-val-${k}`);
+        const bEl = document.getElementById(`bp-bar-${k}`);
+        if (vEl) vEl.textContent = `${pct}%`;
+        if (bEl) bEl.style.width = `${clamp(pct, 0, 100)}%`;
+      }
+      document.getElementById('gem-arc-tag').textContent = `arc: ${app.breathArc}`;
+    }
+
+    function closeAllPopovers() {
+      document.getElementById('pop-sound').classList.remove('open');
+      document.getElementById('pop-gemini').classList.remove('open');
+      document.getElementById('btn-sound').classList.remove('active');
+      document.getElementById('btn-gemini').classList.remove('active');
+    }
+
+    function togglePopover(popId, btnId) {
+      const pop = document.getElementById(popId);
+      const wasOpen = pop.classList.contains('open');
+      closeAllPopovers();
+      if (!wasOpen) {
+        pop.classList.add('open');
+        document.getElementById(btnId).classList.add('active');
+      }
+    }
+
+    function closeNotesDrawer() {
+      const bd = document.getElementById('notes-backdrop');
+      bd.classList.remove('open');
+      bd.setAttribute('aria-hidden', 'true');
+      document.getElementById('btn-notes').classList.remove('active');
+    }
+
+    function toggleHoverBow() {
+      ensureAudio();
+      markInteracted();
+      app.hoverBow = !app.hoverBow;
+      document.getElementById('btn-hover-bow').classList.toggle('active', app.hoverBow);
+    }
+
+    // Core Control 1: Agency Mode Switch
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        ensureAudio();
+        markInteracted();
+        const nextMode = btn.dataset.mode;
+        if (nextMode === app.mode) {
+          if (nextMode === 'orbit' && app.orbitPaused) startOrbitFlow();
+          return;
+        }
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+        app.mode = nextMode;
+        cancelCompanionPhrase();
+
+        if (nextMode === 'solo') {
+          app.companion.visible = false;
+        } else if (nextMode === 'cobreath') {
+          app.companion.visible = true;
+          app.companion.x = app.cx;
+          app.companion.y = app.cy;
+          if (app.userPhraseBuffer.length >= 2) armCoBreathListener();
+        } else if (nextMode === 'orbit') {
+          startOrbitFlow();
+        }
+        updateHudStatus('mode', null);
+      });
+    });
+
+    // Core Control 2: Scale Selector
+    document.getElementById('scale-select').addEventListener('change', e => {
+      app.scaleKey = e.target.value;
+      app.history = [];
+      app.userPhraseBuffer = [];
+      app.activeBasin = 'i';
+      initWells();
+      for (const a of app.anchors) {
+        a.basin = nearestBasinForNormalized(a.nx, a.ny);
+      }
+      refreshPanLangDisplay();
+      updateHudStatus('scale', null);
+      if (audioCtx) {
+        triggerWell(0, { vel: 0.70, type: 'N', source: 'user' });
+      }
+    });
+
+    // Core Control 3: Resonance / Breath Feel
+    document.getElementById('breath-slider').addEventListener('input', e => {
+      app.breath = parseFloat(e.target.value);
+      syncReverbToBreath();
+      refreshPanLangDisplay();
+    });
+
+    // Corner Utility Buttons & Side Pills
+    document.getElementById('btn-sound').addEventListener('click', () => togglePopover('pop-sound', 'btn-sound'));
+    document.getElementById('btn-gemini').addEventListener('click', () => {
+      refreshPanLangDisplay();
+      renderBasinDistUI();
+      togglePopover('pop-gemini', 'btn-gemini');
+    });
+    document.getElementById('btn-notes').addEventListener('click', () => {
+      closeAllPopovers();
+      const bd = document.getElementById('notes-backdrop');
+      bd.classList.add('open');
+      bd.setAttribute('aria-hidden', 'false');
+      document.getElementById('btn-notes').classList.add('active');
+    });
+    document.getElementById('btn-close-notes').addEventListener('click', closeNotesDrawer);
+    document.getElementById('notes-backdrop').addEventListener('click', e => {
+      if (e.target === e.currentTarget) closeNotesDrawer();
+    });
+
+    document.getElementById('btn-hover-bow').addEventListener('click', toggleHoverBow);
+    document.getElementById('btn-anchor-mode').addEventListener('click', () => {
+      ensureAudio();
+      app.anchorDropMode = !app.anchorDropMode;
+      updateAnchorUI();
+    });
+
+    // Soundbank selector inside Sound popover
+    document.querySelectorAll('.bank-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        ensureAudio();
+        document.querySelectorAll('.bank-opt').forEach(o => o.classList.toggle('selected', o === opt));
+        const val = opt.dataset.sound;
+        if (val.startsWith('bank:')) {
+          activeBankId = val.slice(5);
+          activeProfileKey = activeBankId.includes('ember') ? 'ember' : (activeBankId.includes('nitrided') ? 'nitrided' : 'stainless');
+          ensureStudioBank(activeBankId);
+        } else {
+          activeBankId = null;
+          activeProfileKey = val.slice(4) || 'stainless';
+          updateSoundBadge('Live DSP', 'ok');
+        }
+      });
+    });
+
+    // Ephemeral Gemini API Key (RAM only)
+    document.getElementById('gem-key').addEventListener('input', e => {
+      app.geminiKey = e.target.value.trim();
+      if (app.geminiKey) {
+        setGeminiStatus('Key Ready', 'hot');
+        document.getElementById('dot-gemini').className = 'mini-dot hot';
+      } else {
+        app.geminiSource = 'LOCAL';
+        setGeminiStatus('Local Inference', '');
+        document.getElementById('dot-gemini').className = 'mini-dot';
+        document.getElementById('gem-source-tag').textContent = 'LOCAL';
+      }
+    });
+
+    document.getElementById('btn-gem-clear').addEventListener('click', () => {
+      app.geminiKey = '';
+      app.geminiSource = 'LOCAL';
+      document.getElementById('gem-key').value = '';
+      if (app.geminiAbort) { try { app.geminiAbort.abort(); } catch (_) {} }
+      setGeminiStatus('Local Inference', '');
+      document.getElementById('dot-gemini').className = 'mini-dot';
+      document.getElementById('gem-source-tag').textContent = 'LOCAL';
+    });
+
+    document.getElementById('btn-gem-ask').addEventListener('click', () => {
+      if (!app.geminiKey) {
+        document.getElementById('gem-key').focus();
+        setGeminiStatus('Paste Key First', 'hot');
+        return;
+      }
+      queryGeminiDecisions();
+    });
+
+    window.addEventListener('beforeunload', () => {
+      app.geminiKey = '';
+      stopHoldSwell();
+    });
+
+    // =========================================================================
+    // 12. Bootstrap
+    // =========================================================================
+    window.addEventListener('resize', resizeCanvas);
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(resizeCanvas).observe(document.body);
+    }
+
+    resizeCanvas();
+    initWells();
+    renderBasinDistUI();
+    refreshPanLangDisplay();
+    updateAnchorUI();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
