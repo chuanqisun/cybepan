@@ -1,0 +1,3 @@
+- Design a multi-tiered attention mechanism to live synthesize each note
+- Allow manual control of attention
+- Steer future sample based on bias vectors
