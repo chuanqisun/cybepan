@@ -1,6 +1,7 @@
 - Design a multi-tiered attention mechanism to live synthesize each note
-- Allow manual control of attention
-- Steer future sample based on bias vectors
+  - Allow manual control of attention
+  - Steer future sample based on bias vectors
+  - Explore with Gemini Decisions API for realtime attention steering. Model will pay attentio to short/mid/long context and determine what to play next
 - Rhythm driven synthesis engine. User just need to tab one key with left hand, and tap another key with right hand. The system will use the rhythm to inform the notes
-- To provide more info, user can use home row. each finger represent a power level. System still dictates the notes
-- To provide even more info, user can move up and down rows to steer pitch rise and fall.
+  - To provide more info, user can use home row. each finger represent a power level. System still dictates the notes
+  - To provide even more info, user can move up and down rows to steer pitch rise and fall.
