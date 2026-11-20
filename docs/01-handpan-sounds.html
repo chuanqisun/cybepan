@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>01 - Handpan Sound Profiles Prototype</title>
+</head>
+<body>
+  <h1>Handpan Sound Profiles Prototype</h1>
+  <p>Bare-minimum unstyled soundboard for testing synthesized handpan sound profiles (inspired by Yishama Virtual Pantam Playground).</p>
+
+  <fieldset>
+    <legend>1. Sound Profile</legend>
+    <div id="profile-list"></div>
+    <p><small id="profile-desc"></small></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Scale &amp; Playing Controls</legend>
+    <label for="scale-select">Scale:</label>
+    <select id="scale-select"></select>
+
+    <label for="articulation-select">Articulation:</label>
+    <select id="articulation-select">
+      <option value="normal" selected>Normal Strike</option>
+      <option value="soft">Soft / Warm</option>
+      <option value="harmonic">Harmonic (Octave + 5th)</option>
+      <option value="muted">Muted / Percussive</option>
+    </select>
+
+    <br><br>
+
+    <label for="velocity-range">Strike Velocity:</label>
+    <input id="velocity-range" type="range" min="0.2" max="1" step="0.05" value="0.8">
+    <output id="velocity-out">0.80</output>
+
+    <label for="reverb-range">Reverb:</label>
+    <input id="reverb-range" type="range" min="0" max="1" step="0.05" value="0.3">
+    <output id="reverb-out">0.30</output>
+
+    <br><br>
+
+    <button id="btn-arp" type="button">Play Scale Arpeggio [Space]</button>
+    <button id="btn-chord" type="button">Play Chord</button>
+    <button id="btn-stop" type="button">Mute All</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Soundboard (Click, Tap, or Use Keys 1-0, T, G)</legend>
+    <div id="note-board"></div>
+    <hr>
+    <div id="percussion-board">
+      <button type="button" id="btn-tak">[T] Tak (Rim Slap)</button>
+      <button type="button" id="btn-gu">[G] Gu (Shell Bass)</button>
+    </div>
+    <p><small id="last-played">Last triggered: none</small></p>
+  </fieldset>
+
+  <details>
+    <summary>Inspect / Tweak Active Profile Parameters</summary>
+    <p><small>Adjusting these sliders modifies the active profile live. Switching profiles reloads that profile's defaults.</small></p>
+    <div>
+      <label for="param-sustain">Sustain (s):</label>
+      <input id="param-sustain" type="range" min="0.8" max="7.5" step="0.1">
+      <output id="out-sustain"></output>
+    </div>
+    <div>
+      <label for="param-octave">Octave (2x) Level:</label>
+      <input id="param-octave" type="range" min="0" max="1" step="0.02">
+      <output id="out-octave"></output>
+    </div>
+    <div>
+      <label for="param-fifth">Compound 5th (3x) Level:</label>
+      <input id="param-fifth" type="range" min="0" max="0.8" step="0.02">
+      <output id="out-fifth"></output>
+    </div>
+    <div>
+      <label for="param-shimmer">Metallic Shimmer:</label>
+      <input id="param-shimmer" type="range" min="0" max="0.4" step="0.01">
+      <output id="out-shimmer"></output>
+    </div>
+    <div>
+      <label for="param-slap">Attack Slap:</label>
+      <input id="param-slap" type="range" min="0" max="0.6" step="0.02">
+      <output id="out-slap"></output>
+    </div>
+    <div>
+      <label for="param-body">Shell Body (Gu) Thump:</label>
+      <input id="param-body" type="range" min="0" max="0.6" step="0.02">
+      <output id="out-body"></output>
+    </div>
+    <div>
+      <label for="param-detune">Beating / Bloom (Hz):</label>
+      <input id="param-detune" type="range" min="0" max="2.5" step="0.05">
+      <output id="out-detune"></output>
+    </div>
+    <div>
+      <label for="param-brightness">Lowpass Cutoff (Hz):</label>
+      <input id="param-brightness" type="range" min="800" max="9000" step="100">
+      <output id="out-brightness"></output>
+    </div>
+  </details>
+
+  <script>
+    // =========================================================================
+    // 1. Musical Note Frequencies & Yishama-Inspired Handpan Scales
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+
+    function noteToFreq(note) {
+      const match = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!match) return 440;
+      const semitone = NOTE_OFFSETS[match[1]] + (parseInt(match[2], 10) - 4) * 12;
+      return 440 * Math.pow(2, semitone / 12);
+    }
+
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (9 notes) — Classic',
+        notes: ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4']
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (9 notes) — Meditative',
+        notes: ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5']
+      },
+      'd-harmonic-minor': {
+        name: 'D3 Harmonic Minor / Lora (10 notes)',
+        notes: ['D3', 'A3', 'Bb3', 'C#4', 'D4', 'E4', 'F4', 'G4', 'A4', 'Bb4']
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (9 notes) — Middle Eastern',
+        notes: ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4']
+      },
+      'e-major': {
+        name: 'E3 Major (9 notes) — Uplifting',
+        notes: ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4']
+      }
+    };
+
+    // =========================================================================
+    // 2. Handpan Sound Profiles (Acoustic & Hybrid Synthesis Presets)
+    // =========================================================================
+    const SOUND_PROFILES = {
+      nitrided: {
+        name: 'Nitrided Steel (Classic / Dry)',
+        description: 'Classic Hang/Pantam character: punchy attack, woody warmth, controlled sustain, crisp separation for fast rhythmic playing.',
+        sustain: 2.5,
+        attack: 0.004,
+        octaveLevel: 0.34,
+        octaveDecayRatio: 0.55,
+        fifthLevel: 0.16,
+        fifthDecayRatio: 0.35,
+        shimmerLevel: 0.06,
+        shimmerRatios: [4.04, 5.42],
+        slapLevel: 0.24,
+        slapFreq: 1850,
+        bodyLevel: 0.26,
+        bodyFreq: 96,
+        detuneHz: 0.25,
+        pitchBendCents: 12,
+        brightness: 3200,
+        inharmonicity: 0.001,
+        fmIndex: 0
+      },
+      stainless: {
+        name: 'Stainless Steel (Warm / Lush)',
+        description: 'Modern Yishama stainless character: long blooming sustain, gentle rounded attack, rich octave/fifth resonance and subtle beating.',
+        sustain: 5.4,
+        attack: 0.011,
+        octaveLevel: 0.44,
+        octaveDecayRatio: 0.72,
+        fifthLevel: 0.24,
+        fifthDecayRatio: 0.52,
+        shimmerLevel: 0.08,
+        shimmerRatios: [4.01, 5.02],
+        slapLevel: 0.12,
+        slapFreq: 1450,
+        bodyLevel: 0.20,
+        bodyFreq: 88,
+        detuneHz: 0.55,
+        pitchBendCents: 6,
+        brightness: 4200,
+        inharmonicity: 0.0005,
+        fmIndex: 0
+      },
+      ember: {
+        name: 'Ember Steel (Bright / Crystalline)',
+        description: 'High-clarity modern alloy: glassy articulation, pronounced compound-fifth sparkle, clean medium-long sustain without low-mid mud.',
+        sustain: 4.2,
+        attack: 0.005,
+        octaveLevel: 0.48,
+        octaveDecayRatio: 0.65,
+        fifthLevel: 0.32,
+        fifthDecayRatio: 0.48,
+        shimmerLevel: 0.14,
+        shimmerRatios: [4.02, 5.18, 6.45],
+        slapLevel: 0.18,
+        slapFreq: 2600,
+        bodyLevel: 0.15,
+        bodyFreq: 102,
+        detuneHz: 0.35,
+        pitchBendCents: 8,
+        brightness: 6200,
+        inharmonicity: 0.0015,
+        fmIndex: 0
+      },
+      ceramic: {
+        name: 'Raw / Ceramic (Earthy / Muted)',
+        description: 'Dark, dry, meditative tone with strong Helmholtz shell thump, softer harmonics, and minimal metallic edge.',
+        sustain: 1.9,
+        attack: 0.007,
+        octaveLevel: 0.20,
+        octaveDecayRatio: 0.42,
+        fifthLevel: 0.08,
+        fifthDecayRatio: 0.28,
+        shimmerLevel: 0.02,
+        shimmerRatios: [3.95, 5.10],
+        slapLevel: 0.28,
+        slapFreq: 1100,
+        bodyLevel: 0.42,
+        bodyFreq: 84,
+        detuneHz: 0.15,
+        pitchBendCents: 16,
+        brightness: 1900,
+        inharmonicity: 0.002,
+        fmIndex: 0
+      },
+      bronze: {
+        name: 'Bronze / Singing Bowl (Rich / Metallic)',
+        description: 'Dense bell-like resonance with slight inharmonic overtones, slow bloom, and long shimmering metallic tail.',
+        sustain: 6.2,
+        attack: 0.016,
+        octaveLevel: 0.50,
+        octaveDecayRatio: 0.80,
+        fifthLevel: 0.34,
+        fifthDecayRatio: 0.65,
+        shimmerLevel: 0.18,
+        shimmerRatios: [4.16, 5.62, 7.11],
+        slapLevel: 0.10,
+        slapFreq: 2200,
+        bodyLevel: 0.14,
+        bodyFreq: 92,
+        detuneHz: 1.15,
+        pitchBendCents: 4,
+        brightness: 5400,
+        inharmonicity: 0.006,
+        fmIndex: 0
+      },
+      cyber: {
+        name: 'Cyber Hybrid (FM Glass + Sub)',
+        description: 'Digital handpan exploration: acoustic modal envelope paired with clean FM glass transient and subtle sub-octave weight.',
+        sustain: 4.0,
+        attack: 0.003,
+        octaveLevel: 0.42,
+        octaveDecayRatio: 0.62,
+        fifthLevel: 0.28,
+        fifthDecayRatio: 0.50,
+        shimmerLevel: 0.12,
+        shimmerRatios: [4.0, 6.0],
+        slapLevel: 0.14,
+        slapFreq: 3200,
+        bodyLevel: 0.22,
+        bodyFreq: 72,
+        detuneHz: 0.70,
+        pitchBendCents: 5,
+        brightness: 7200,
+        inharmonicity: 0.0,
+        fmIndex: 1.35,
+        subLevel: 0.18
+      }
+    };
+
+    // =========================================================================
+    // 3. Web Audio Engine
+    // =========================================================================
+    let audioCtx = null;
+    let masterGain = null;
+    let dryGain = null;
+    let reverbSend = null;
+    let reverbNode = null;
+    let noiseBuffer = null;
+    let activeVoices = new Set();
+    let arpTimers = [];
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -10;
+        compressor.knee.value = 18;
+        compressor.ratio.value = 4;
+        compressor.attack.value = 0.003;
+        compressor.release.value = 0.2;
+        compressor.connect(audioCtx.destination);
+
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.75;
+        masterGain.connect(compressor);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(masterGain);
+
+        reverbNode = audioCtx.createConvolver();
+        reverbNode.buffer = createImpulseResponse(audioCtx, 2.4, 2.8);
+
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = parseFloat(document.getElementById('reverb-range').value);
+        reverbSend.connect(reverbNode);
+        reverbNode.connect(masterGain);
+
+        noiseBuffer = createNoiseBuffer(audioCtx, 0.5);
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function createNoiseBuffer(ctx, durationSec) {
+      const length = Math.floor(ctx.sampleRate * durationSec);
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      return buffer;
+    }
+
+    function createImpulseResponse(ctx, durationSec, decay) {
+      const length = Math.floor(ctx.sampleRate * durationSec);
+      const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const channelData = impulse.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < length; i++) {
+          const env = Math.pow(1 - i / length, decay);
+          const white = (Math.random() * 2 - 1) * env;
+          // Gentle one-pole lowpass so the reverb tail sounds warm, not hissy
+          lp = lp * 0.72 + white * 0.28;
+          channelData[i] = lp;
+        }
+      }
+      return impulse;
+    }
+
+    function registerVoice(voiceGain, stopTime) {
+      activeVoices.add(voiceGain);
+      const ms = Math.max(50, (stopTime - audioCtx.currentTime) * 1000 + 100);
+      setTimeout(() => activeVoices.delete(voiceGain), ms);
+    }
+
+    function muteAll() {
+      arpTimers.forEach(clearTimeout);
+      arpTimers = [];
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      activeVoices.forEach((g) => {
+        try {
+          g.gain.cancelScheduledValues(now);
+          g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), now);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+        } catch (_) {}
+      });
+      activeVoices.clear();
+    }
+
+    function playHandpanNote(noteName, isDing) {
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const p = currentParams;
+      const articulation = document.getElementById('articulation-select').value;
+      const baseVelocity = parseFloat(document.getElementById('velocity-range').value);
+
+      const freq = noteToFreq(noteName);
+      // Higher notes naturally decay slightly faster than lower notes (and Ding rings longest)
+      const pitchScale = Math.pow(220 / freq, 0.35);
+      let sustain = p.sustain * pitchScale * (isDing ? 1.25 : 1.0);
+      let vel = baseVelocity;
+      let fundGainMul = 1.0;
+      let octGainMul = 1.0;
+      let fifthGainMul = 1.0;
+      let attack = p.attack;
+
+      if (articulation === 'soft') {
+        vel *= 0.65;
+        octGainMul = 0.55;
+        fifthGainMul = 0.4;
+        attack = Math.max(attack, 0.015);
+      } else if (articulation === 'harmonic') {
+        fundGainMul = 0.28;
+        octGainMul = 1.65;
+        fifthGainMul = 1.45;
+        sustain *= 0.85;
+      } else if (articulation === 'muted') {
+        sustain *= 0.22;
+        octGainMul = 0.5;
+        fifthGainMul = 0.35;
+      }
+
+      const voiceGain = audioCtx.createGain();
+      voiceGain.gain.setValueAtTime(vel * 0.55, now);
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      const cutoff = Math.min(12000, p.brightness * (0.6 + 0.65 * vel));
+      filter.frequency.setValueAtTime(cutoff, now);
+      filter.frequency.exponentialRampToValueAtTime(Math.max(600, cutoff * 0.45), now + sustain);
+
+      voiceGain.connect(filter);
+      filter.connect(dryGain);
+      filter.connect(reverbSend);
+
+      const stopTime = now + sustain + 0.15;
+      registerVoice(voiceGain, stopTime);
+
+      // Helper to spawn a modal sine partial with pitch-attack bend and exponential decay
+      function addPartial(partialFreq, amp, decaySec, extraAttack = 0) {
+        if (amp <= 0.001 || partialFreq > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+
+        const bendRatio = Math.pow(2, (p.pitchBendCents * vel) / 1200);
+        osc.frequency.setValueAtTime(partialFreq * bendRatio, now);
+        osc.frequency.exponentialRampToValueAtTime(partialFreq, now + 0.045);
+
+        const att = attack + extraAttack;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(amp, now + att);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + att + Math.max(0.06, decaySec));
+
+        osc.connect(g);
+        g.connect(voiceGain);
+        osc.start(now);
+        osc.stop(now + att + Math.max(0.06, decaySec) + 0.05);
+      }
+
+      // 1. Fundamental (f0) + subtle coupled-mode beating pair
+      const fundAmp = 0.65 * fundGainMul;
+      if (p.detuneHz > 0.02) {
+        addPartial(freq, fundAmp * 0.68, sustain);
+        addPartial(freq + p.detuneHz, fundAmp * 0.36, sustain * 0.92, 0.006);
+      } else {
+        addPartial(freq, fundAmp, sustain);
+      }
+
+      // 2. Tuned Octave (2 * f0)
+      const octFreq = freq * (2 + p.inharmonicity);
+      addPartial(octFreq, p.octaveLevel * octGainMul * (0.65 + 0.5 * vel), sustain * p.octaveDecayRatio, 0.002);
+
+      // 3. Tuned Compound Fifth (3 * f0)
+      const fifthFreq = freq * (3 - p.inharmonicity * 1.2);
+      addPartial(fifthFreq, p.fifthLevel * fifthGainMul * (0.55 + 0.6 * vel), sustain * p.fifthDecayRatio, 0.003);
+
+      // 4. High metallic shimmer modes (short decay)
+      if (p.shimmerLevel > 0.001 && p.shimmerRatios) {
+        p.shimmerRatios.forEach((ratio, idx) => {
+          const amp = (p.shimmerLevel / (idx + 1)) * vel;
+          const dec = Math.min(0.45, sustain * (0.14 / (idx + 1)));
+          addPartial(freq * ratio, amp, dec);
+        });
+      }
+
+      // 5. Optional Sub-harmonic & FM Glass (for Cyber Hybrid profile)
+      if (p.subLevel && p.subLevel > 0) {
+        addPartial(freq * 0.5, p.subLevel * fundGainMul, sustain * 0.75, 0.008);
+      }
+      if (p.fmIndex && p.fmIndex > 0) {
+        const mod = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const car = audioCtx.createOscillator();
+        const carGain = audioCtx.createGain();
+
+        mod.frequency.setValueAtTime(freq * 3.0, now);
+        modGain.gain.setValueAtTime(freq * p.fmIndex * vel, now);
+        modGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+        car.frequency.setValueAtTime(freq * 2.0, now);
+        carGain.gain.setValueAtTime(0.0001, now);
+        carGain.gain.linearRampToValueAtTime(0.18 * vel, now + 0.004);
+        carGain.gain.exponentialRampToValueAtTime(0.0001, now + Math.min(1.4, sustain * 0.4));
+
+        mod.connect(modGain);
+        modGain.connect(car.frequency);
+        car.connect(carGain);
+        carGain.connect(voiceGain);
+
+        mod.start(now);
+        car.start(now);
+        mod.stop(now + 1.5);
+        car.stop(now + 1.5);
+      }
+
+      // 6. Finger-on-steel strike slap transient (bandpass filtered noise)
+      if (p.slapLevel > 0.001) {
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(p.slapFreq * (isDing ? 0.75 : 1.0), now);
+        bp.Q.value = 1.6;
+
+        const ng = audioCtx.createGain();
+        ng.gain.setValueAtTime(p.slapLevel * vel * 0.9, now);
+        ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.022);
+
+        noise.connect(bp);
+        bp.connect(ng);
+        ng.connect(voiceGain);
+        noise.start(now);
+        noise.stop(now + 0.03);
+      }
+
+      // 7. Helmholtz cavity body thump (stronger on Ding)
+      if (p.bodyLevel > 0.001) {
+        const bodyOsc = audioCtx.createOscillator();
+        const bodyGain = audioCtx.createGain();
+        bodyOsc.type = 'sine';
+        const startHz = p.bodyFreq * (isDing ? 1.45 : 1.65);
+        bodyOsc.frequency.setValueAtTime(startHz, now);
+        bodyOsc.frequency.exponentialRampToValueAtTime(p.bodyFreq, now + 0.065);
+
+        const bAmp = p.bodyLevel * (isDing ? 1.1 : 0.45) * vel;
+        bodyGain.gain.setValueAtTime(0.0001, now);
+        bodyGain.gain.linearRampToValueAtTime(bAmp, now + 0.004);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + (isDing ? 0.19 : 0.09));
+
+        bodyOsc.connect(bodyGain);
+        bodyGain.connect(voiceGain);
+        bodyOsc.start(now);
+        bodyOsc.stop(now + 0.22);
+      }
+
+      updateLastPlayed(`${noteName}${isDing ? ' (Ding)' : ''} — ${freq.toFixed(1)} Hz [${SOUND_PROFILES[activeProfileKey].name}]`);
+    }
+
+    function playTak() {
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const vel = parseFloat(document.getElementById('velocity-range').value);
+
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.65, now);
+      out.connect(dryGain);
+      out.connect(reverbSend);
+
+      // Crisp rim slap noise
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const hp = audioCtx.createBiquadFilter();
+      hp.type = 'bandpass';
+      hp.frequency.setValueAtTime(2900, now);
+      hp.Q.value = 1.2;
+
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.9, now);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+
+      noise.connect(hp);
+      hp.connect(ng);
+      ng.connect(out);
+      noise.start(now);
+      noise.stop(now + 0.045);
+
+      // Short metallic rim knock partials
+      [920, 1740].forEach((hz, i) => {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(hz, now);
+        osc.frequency.exponentialRampToValueAtTime(hz * 0.88, now + 0.04);
+        g.gain.setValueAtTime(0.35 / (i + 1), now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+        osc.connect(g);
+        g.connect(out);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      });
+
+      updateLastPlayed('Tak (Rim Slap)');
+    }
+
+    function playGu() {
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const vel = parseFloat(document.getElementById('velocity-range').value);
+      const bodyHz = currentParams.bodyFreq || 90;
+
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.75, now);
+      out.connect(dryGain);
+      out.connect(reverbSend);
+
+      // Resonant cavity bass drop
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(bodyHz * 1.45, now);
+      osc.frequency.exponentialRampToValueAtTime(bodyHz * 0.92, now + 0.14);
+
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.95, now + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+
+      osc.connect(g);
+      g.connect(out);
+      osc.start(now);
+      osc.stop(now + 0.32);
+
+      // Soft palm thud
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 500;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.45, now);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+
+      noise.connect(lp);
+      lp.connect(ng);
+      ng.connect(out);
+      noise.start(now);
+      noise.stop(now + 0.05);
+
+      updateLastPlayed(`Gu (Shell Bass ~${bodyHz} Hz)`);
+    }
+
+    // =========================================================================
+    // 4. UI State & Bindings (Unstyled Bare-Minimum HTML)
+    // =========================================================================
+    let activeProfileKey = 'stainless';
+    let currentParams = { ...SOUND_PROFILES[activeProfileKey] };
+    let activeScaleKey = 'd-kurd';
+    const KEY_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+
+    const profileListEl = document.getElementById('profile-list');
+    const profileDescEl = document.getElementById('profile-desc');
+    const scaleSelectEl = document.getElementById('scale-select');
+    const noteBoardEl = document.getElementById('note-board');
+    const lastPlayedEl = document.getElementById('last-played');
+
+    function updateLastPlayed(text) {
+      lastPlayedEl.textContent = `Last triggered: ${text}`;
+    }
+
+    function renderProfiles() {
+      profileListEl.innerHTML = '';
+      Object.entries(SOUND_PROFILES).forEach(([key, prof]) => {
+        const label = document.createElement('label');
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'sound-profile';
+        radio.value = key;
+        radio.checked = key === activeProfileKey;
+        radio.addEventListener('change', () => selectProfile(key));
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(' ' + prof.name + ' '));
+        profileListEl.appendChild(label);
+        profileListEl.appendChild(document.createElement('br'));
+      });
+      profileDescEl.textContent = SOUND_PROFILES[activeProfileKey].description;
+    }
+
+    function selectProfile(key) {
+      activeProfileKey = key;
+      currentParams = {
+        ...SOUND_PROFILES[key],
+        shimmerRatios: [...SOUND_PROFILES[key].shimmerRatios]
+      };
+      profileDescEl.textContent = SOUND_PROFILES[key].description;
+      syncParamSliders();
+    }
+
+    function renderScales() {
+      scaleSelectEl.innerHTML = '';
+      Object.entries(SCALES).forEach(([key, scale]) => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = scale.name;
+        if (key === activeScaleKey) opt.selected = true;
+        scaleSelectEl.appendChild(opt);
+      });
+    }
+
+    function renderNoteBoard() {
+      noteBoardEl.innerHTML = '';
+      const notes = SCALES[activeScaleKey].notes;
+      notes.forEach((note, idx) => {
+        const isDing = idx === 0;
+        const keyHint = KEY_LABELS[idx] || '';
+        const freq = noteToFreq(note).toFixed(0);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = `${keyHint ? '[' + keyHint + '] ' : ''}${note}${isDing ? ' (Ding)' : ''} (${freq}Hz)`;
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          playHandpanNote(note, isDing);
+        });
+        noteBoardEl.appendChild(btn);
+        noteBoardEl.appendChild(document.createTextNode(' '));
+        if (isDing) {
+          noteBoardEl.appendChild(document.createElement('br'));
+          noteBoardEl.appendChild(document.createElement('br'));
+        }
+      });
+    }
+
+    // Parameter Inspector Sliders
+    const PARAM_BINDINGS = [
+      { id: 'param-sustain', out: 'out-sustain', key: 'sustain', fmt: (v) => v.toFixed(1) + 's' },
+      { id: 'param-octave', out: 'out-octave', key: 'octaveLevel', fmt: (v) => v.toFixed(2) },
+      { id: 'param-fifth', out: 'out-fifth', key: 'fifthLevel', fmt: (v) => v.toFixed(2) },
+      { id: 'param-shimmer', out: 'out-shimmer', key: 'shimmerLevel', fmt: (v) => v.toFixed(2) },
+      { id: 'param-slap', out: 'out-slap', key: 'slapLevel', fmt: (v) => v.toFixed(2) },
+      { id: 'param-body', out: 'out-body', key: 'bodyLevel', fmt: (v) => v.toFixed(2) },
+      { id: 'param-detune', out: 'out-detune', key: 'detuneHz', fmt: (v) => v.toFixed(2) + ' Hz' },
+      { id: 'param-brightness', out: 'out-brightness', key: 'brightness', fmt: (v) => Math.round(v) + ' Hz' }
+    ];
+
+    function syncParamSliders() {
+      PARAM_BINDINGS.forEach(({ id, out, key, fmt }) => {
+        const el = document.getElementById(id);
+        const val = currentParams[key];
+        el.value = val;
+        document.getElementById(out).textContent = fmt(val);
+      });
+    }
+
+    PARAM_BINDINGS.forEach(({ id, out, key, fmt }) => {
+      document.getElementById(id).addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        currentParams[key] = val;
+        document.getElementById(out).textContent = fmt(val);
+      });
+    });
+
+    // Controls
+    scaleSelectEl.addEventListener('change', (e) => {
+      activeScaleKey = e.target.value;
+      renderNoteBoard();
+    });
+
+    document.getElementById('velocity-range').addEventListener('input', (e) => {
+      document.getElementById('velocity-out').textContent = parseFloat(e.target.value).toFixed(2);
+    });
+
+    document.getElementById('reverb-range').addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      document.getElementById('reverb-out').textContent = val.toFixed(2);
+      if (reverbSend && audioCtx) {
+        reverbSend.gain.setTargetAtTime(val, audioCtx.currentTime, 0.02);
+      }
+    });
+
+    function playArpeggio() {
+      arpTimers.forEach(clearTimeout);
+      arpTimers = [];
+      const notes = SCALES[activeScaleKey].notes;
+      notes.forEach((note, idx) => {
+        const t = setTimeout(() => playHandpanNote(note, idx === 0), idx * 240);
+        arpTimers.push(t);
+      });
+    }
+
+    function playChord() {
+      const notes = SCALES[activeScaleKey].notes;
+      // Play Ding + 2nd + 4th + 6th notes as a lush handpan chord
+      [0, 1, 3, 5].forEach((idx, order) => {
+        if (notes[idx]) {
+          setTimeout(() => playHandpanNote(notes[idx], idx === 0), order * 25);
+        }
+      });
+    }
+
+    document.getElementById('btn-arp').addEventListener('click', playArpeggio);
+    document.getElementById('btn-chord').addEventListener('click', playChord);
+    document.getElementById('btn-stop').addEventListener('click', muteAll);
+
+    document.getElementById('btn-tak').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      playTak();
+    });
+    document.getElementById('btn-gu').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      playGu();
+    });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      const key = e.key.toLowerCase();
+      const idx = KEY_LABELS.indexOf(key);
+      if (idx !== -1) {
+        const notes = SCALES[activeScaleKey].notes;
+        if (notes[idx]) {
+          playHandpanNote(notes[idx], idx === 0);
+        }
+        return;
+      }
+      if (key === 't') {
+        playTak();
+      } else if (key === 'g') {
+        playGu();
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        playArpeggio();
+      }
+    });
+
+    // Init
+    renderProfiles();
+    renderScales();
+    renderNoteBoard();
+    syncParamSliders();
+  </script>
+</body>
+</html>

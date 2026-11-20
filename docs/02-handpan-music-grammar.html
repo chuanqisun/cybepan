@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>02 — The Music Grammar of the Handpan</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: #111;
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      min-height: 100vh;
+    }
+
+    aside.instrument-dock {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid #ddd;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    main.doc {
+      padding: 32px 44px 72px;
+      max-width: 880px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      aside.instrument-dock {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+      main.doc { padding: 24px 18px 56px; }
+    }
+
+    h1, h2, h3 { margin-top: 0; line-height: 1.25; }
+    h1 { margin-bottom: 6px; }
+    h2 {
+      margin-top: 40px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+    }
+    h3 { margin-top: 22px; margin-bottom: 6px; }
+    p { margin: 0 0 12px; }
+    ul, ol { margin: 0 0 14px; padding-left: 20px; }
+    li { margin-bottom: 5px; }
+
+    .subtitle { color: #555; margin-bottom: 20px; }
+
+    code, pre, .dock-status, .tag, .clause-header, .step-cell {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    code { font-size: 0.9em; }
+
+    pre.grammar {
+      font-size: 0.84rem;
+      line-height: 1.5;
+      border-left: 2px solid #ccc;
+      padding: 4px 0 4px 14px;
+      overflow-x: auto;
+      margin: 12px 0 18px;
+    }
+    pre.grammar .nt { font-weight: 700; }
+    pre.grammar .cmt { color: #666; font-style: italic; }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      margin: 0 0 24px;
+      font-size: 0.9rem;
+    }
+    nav.toc a { color: #111; }
+
+    /* Instrument Dock Controls */
+    .dock-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .dock-title { font-weight: 700; margin: 0; }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 0.82rem;
+    }
+    select, input[type="range"] { width: 100%; }
+
+    button { cursor: pointer; }
+    button.playing { font-weight: 700; outline: 2px solid #111; }
+
+    /* Minimal Line-Art SVG Handpan */
+    .pan-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    svg#handpan-svg {
+      width: 100%;
+      max-width: 300px;
+      height: auto;
+      user-select: none;
+    }
+    .tone-field { cursor: pointer; }
+    .tone-field:hover ellipse, .tone-field:hover circle { stroke-width: 2.2; }
+    .tone-field.active-R ellipse, .tone-field.active-R circle { fill: #222 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-R text { fill: #fff !important; }
+    .tone-field.active-L ellipse, .tone-field.active-L circle { fill: #d8d8d8 !important; stroke: #111 !important; stroke-width: 2.5 !important; }
+    .tone-field.active-H ellipse, .tone-field.active-H circle { fill: #eee !important; stroke: #111 !important; stroke-width: 2.5 !important; stroke-dasharray: 4 2; }
+    .rim-ring.active-perc { stroke: #111 !important; stroke-width: 5 !important; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      justify-content: center;
+      font-size: 0.76rem;
+      color: #555;
+    }
+    .perc-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .dock-status {
+      font-size: 0.78rem;
+      color: #444;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+      min-height: 36px;
+    }
+
+    /* Unboxed Content Layouts */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 18px 24px;
+      margin: 14px 0 22px;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .card-title { font-weight: 700; font-size: 0.94rem; }
+    .tag { font-size: 0.8rem; color: #555; }
+    .card p { font-size: 0.88rem; color: #444; margin: 0; }
+    .card button { align-self: flex-start; }
+
+    .demo-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 0;
+      margin: 10px 0 18px;
+      border-top: 1px solid #e5e5e5;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .demo-bar .label {
+      font-size: 0.86rem;
+      color: #444;
+      margin-right: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 12px 0 18px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px 8px 0;
+      border-bottom: 1px solid #e0e0e0;
+      vertical-align: top;
+    }
+    th { border-bottom: 2px solid #bbb; }
+
+    .callout {
+      border-left: 2px solid #999;
+      padding-left: 14px;
+      margin: 14px 0 18px;
+      font-size: 0.92rem;
+    }
+
+    /* Live Grammar Workbench */
+    .workbench { margin-top: 14px; }
+    .wb-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .wb-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.86rem;
+      margin-bottom: 12px;
+    }
+    .wb-checks label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+    .wb-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+    .clause-block {
+      padding: 10px 0;
+      border-top: 1px solid #e0e0e0;
+    }
+    .clause-header {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 0.8rem;
+      margin-bottom: 8px;
+    }
+    .clause-name { font-weight: 700; }
+    .clause-meta { color: #555; }
+
+    .step-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(52px, 1fr));
+      gap: 4px;
+    }
+    .step-cell {
+      border-top: 1px solid #ddd;
+      padding: 5px 2px;
+      text-align: center;
+      font-size: 0.74rem;
+      line-height: 1.35;
+    }
+    .step-cell.accented { border-top: 2px solid #111; }
+    .step-cell.now-playing { background: #111; color: #fff; }
+    .step-cell.now-playing .step-note,
+    .step-cell.now-playing .step-hand-R,
+    .step-cell.now-playing .step-hand-L,
+    .step-cell.now-playing span { color: #fff !important; }
+    .step-note { font-weight: 700; }
+    .step-note.ghost { color: #777; font-weight: 400; }
+    .step-vel { height: 2px; background: #e5e5e5; margin-top: 4px; }
+    .step-vel-fill { height: 100%; background: #444; }
+    .step-cell.now-playing .step-vel-fill { background: #fff; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <!-- ==================== STICKY PLAYABLE INSTRUMENT DOCK ==================== -->
+    <aside class="instrument-dock">
+      <div class="dock-header">
+        <p class="dock-title">Interactive Handpan</p>
+        <button id="btn-stop-all" class="danger" type="button">Stop All</button>
+      </div>
+
+      <div class="control-grid">
+        <div class="field">
+          <label for="scale-select">Scale / Mode</label>
+          <select id="scale-select"></select>
+        </div>
+        <div class="field">
+          <label for="profile-select">Timbre Profile</label>
+          <select id="profile-select">
+            <option value="stainless" selected>Stainless (Lush)</option>
+            <option value="nitrided">Nitrided (Dry)</option>
+            <option value="ember">Ember (Bright)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="bpm-range">Tempo: <strong id="bpm-out">86 BPM</strong></label>
+        <input id="bpm-range" type="range" min="56" max="132" step="2" value="86">
+      </div>
+
+      <div class="pan-wrap">
+        <svg id="handpan-svg" viewBox="0 0 340 340" aria-label="Interactive Handpan Tone Field Diagram"></svg>
+        <div class="legend-row">
+          <span>Solid = Right (R) / Ding</span>
+          <span>Shaded = Left (L)</span>
+          <span>Dashed = Harmonic (2f₀)</span>
+          <span>Rim = Tak / Gu</span>
+        </div>
+      </div>
+
+      <div class="perc-row">
+        <button type="button" id="dock-tak">Tak [T]</button>
+        <button type="button" id="dock-gu">Gu [G]</button>
+        <button type="button" id="dock-harm">Harmonic</button>
+      </div>
+
+      <div class="dock-status" id="dock-status">Click any tone field (or keys 1–9, T, G), or trigger any playable example in the handbook.</div>
+    </aside>
+
+    <!-- ==================== MUSICOLOGY & GRAMMAR DOCUMENTATION ==================== -->
+    <main class="doc">
+      <h1>The Music Grammar of the Handpan</h1>
+      <p class="subtitle">Acoustic construction, idiomatic playing techniques, modal harmony, rhythmic syntax, and a formal generative grammar for handpan melody.</p>
+
+      <nav class="toc">
+        <a href="#sec-construction">I. Construction &amp; Topology</a>
+        <a href="#sec-techniques">II. Articulation Lexicon</a>
+        <a href="#sec-harmony">III. Modal Harmony &amp; Cadences</a>
+        <a href="#sec-rhythm">IV. Rhythmic Syntax &amp; Sticking</a>
+        <a href="#sec-grammar">V. Formal Music Grammar (BNF)</a>
+        <a href="#sec-workbench">VI. Live Grammar Composer</a>
+      </nav>
+
+      <!-- SECTION I -->
+      <section id="sec-construction">
+        <h2>I. Acoustic Construction &amp; Ergonomic Topology</h2>
+        <p>Unlike chromatic keyboard or fretted instruments, the handpan's <strong>physical metallurgy and spatial geometry directly dictate its musical syntax</strong>. Every melodic habit on the instrument emerges from three coupled acoustic constraints:</p>
+
+        <h3>1. Shell Architecture &amp; Helmholtz Cavity (<em>Gu</em>)</h3>
+        <ul>
+          <li><strong>Bipartite Steel Resonator:</strong> Two deep-drawn sheet-metal hemispheres—commonly <em>nitrided steel</em> (drier, ceramic, faster decay suited to percussive grooves) or <em>stainless steel</em> (warmer, longer sustain suited to lyricism)—are bonded at the rim to enclose a resonant air volume.</li>
+          <li><strong>The <em>Gu</em> (Inferior Sound Port):</strong> A circular aperture on the underside transforms the sealed shell into a <strong>Helmholtz resonator</strong> tuned roughly near the instrument's bass floor (~80–105 Hz). Striking the top shell drives air through the Gu, adding subterranean bass weight; partially occluding the Gu against the player's knees modulates pitch and damping.</li>
+          <li><strong>The <em>Ding</em> (Central Tonic Dome):</strong> Positioned at the apex of the top shell, the Ding is the largest tone field and serves as the instrument's <strong>tonal center of gravity</strong> (tonic pedal / ground bass) and visual reference point.</li>
+        </ul>
+
+        <h3>2. Modal Plate Tuning (The <code>1 : 2 : 3</code> Harmonic Triad)</h3>
+        <p>Each oval tone field is hand-hammered as a coupled anisotropic plate supporting <strong>three independently tuned vibrational modes</strong>:</p>
+        <ul>
+          <li><strong>Fundamental (<code>f₀</code>):</strong> The primary perceived pitch of the dimple.</li>
+          <li><strong>Octave Partial (<code>2f₀</code>):</strong> Tuned along the <em>longitudinal (radial) axis</em> of the oval.</li>
+          <li><strong>Compound Fifth Partial (<code>3f₀</code>, octave + P5):</strong> Tuned along the <em>transverse axis</em>.</li>
+        </ul>
+        <div class="demo-bar">
+          <span class="label"><strong>Acoustic Demo:</strong> Isolate the <code>1 : 2 : 3</code> vibrational modes of the active Ding.</span>
+          <button type="button" data-demo="mode-f0">1× Fundamental (f₀)</button>
+          <button type="button" data-demo="mode-2f0">2× Octave (2f₀)</button>
+          <button type="button" data-demo="mode-3f0">3× Compound 5th (3f₀)</button>
+          <button type="button" class="primary" data-demo="mode-all">Composite Tone Field</button>
+        </div>
+
+        <h3>3. Alternating Zigzag Topology (Antiphonal Layout)</h3>
+        <p>Tone fields ascend in pitch from the player's torso outward toward the top rim in a <strong>strict Left–Right alternating zigzag</strong> (e.g., on a D Kurd 9: Ding <code>D3</code> center; <code>A3</code> right-bottom, <code>Bb3</code> left-bottom, <code>C4</code> right-mid, <code>D4</code> left-mid, <code>E4</code> right-upper, <code>F4</code> left-upper, <code>G4</code> right-top, <code>A4</code> left-top).</p>
+        <div class="callout">
+          <strong>Why Topology = Syntax:</strong> Spacing consecutive scale degrees on opposite hemispheres minimizes <em>sympathetic crosstalk</em> between adjacent modes. Ergonomically, it creates a profound compositional duality:
+          <ul>
+            <li><strong>Cross-shell alternation (<code>R–L–R–L</code>)</strong> naturally produces <em>conjunct (stepwise) scalar cascades</em>.</li>
+            <li><strong>Same-hemisphere motion (<code>R–R</code> or <code>L–L</code>)</strong> naturally skips a scale degree, outlining <em>disjunct thirds and diatonic triads</em>!</li>
+          </ul>
+        </div>
+        <div class="demo-bar">
+          <span class="label"><strong>Topology Demo:</strong> Compare cross-shell stepwise motion vs. same-hemisphere triadic skips.</span>
+          <button type="button" data-demo="topo-zigzag">Stepwise Zigzag (R-L-R-L)</button>
+          <button type="button" data-demo="topo-triads">Same-Side Thirds (R-R / L-L)</button>
+        </div>
+      </section>
+
+      <!-- SECTION II -->
+      <section id="sec-techniques">
+        <h2>II. Lexicon of Articulations &amp; Idiomatic Techniques</h2>
+        <p>In formal grammar terms, idiomatic handpan techniques constitute the <strong>terminal alphabet (<code>Σ</code>)</strong>. Combining pitched modal strikes with unpitched percussive strokes allows a single performer to project bass, harmony, melody, and drum-kit groove simultaneously.</p>
+
+        <div class="card-grid">
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Open Rebound Stroke</span><span class="tag">N</span></div>
+              <p>Quick, relaxed finger-pad contact with immediate rebound so the steel membrane vibrates freely across all <code>1:2:3</code> partials.</p>
+            </div>
+            <button type="button" data-demo="tech-open">Play Open Cascade</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Ding Pedal / Anchor</span><span class="tag">D</span></div>
+              <p>Thumb or index strike on the central dome. Acts as harmonic root, metric downbeat, and phrase punctuation (<em>caesura</em>).</p>
+            </div>
+            <button type="button" data-demo="tech-ding">Play Ding Pedal</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Ghost Notes</span><span class="tag">g / ^</span></div>
+              <p>Ultra-soft, low-velocity taps on the shoulder or dimple edge. Maintains continuous 16th-note motoric pulse and heightens dynamic contrast.</p>
+            </div>
+            <button type="button" data-demo="tech-ghost">Play Ghost-Note Groove</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Tak (Rim / Shoulder Slap)</span><span class="tag">T</span></div>
+              <p>Crisp, snare-like percussive crack on the interstitial steel or rim. Establishes backbeats (beats 2 &amp; 4) and cuts through sustain.</p>
+            </div>
+            <button type="button" data-demo="tech-tak">Play Tak Backbeat</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Gu (Helmholtz Bass)</span><span class="tag">G</span></div>
+              <p>Open-palm or muted resonant thump exciting the cavity port. Functions like a kick drum or udu bass beneath melodic figures.</p>
+            </div>
+            <button type="button" data-demo="tech-gu">Play Gu + Tak Pattern</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Harmonic Isolator</span><span class="tag">H</span></div>
+              <p>Lightly damping the tone navel (node) with one finger while striking the edge suppresses <code>f₀</code>, projecting a crystalline <code>2f₀</code> octave bell.</p>
+            </div>
+            <button type="button" data-demo="tech-harm">Play Harmonics</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Muted / Dampened Stroke</span><span class="tag">M</span></div>
+              <p>Pressing the tone field during or immediately after impact truncates sustain, creating staccato rhythmic punctuation.</p>
+            </div>
+            <button type="button" data-demo="tech-muted">Play Muted Syncopation</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Rolled Dyad (Flam)</span><span class="tag">~</span></div>
+              <p>Rapidly offsetting two harmonic pitches by ~25–40 ms produces a harp-like bloom without exciting harsh simultaneous attack transients.</p>
+            </div>
+            <button type="button" data-demo="tech-roll">Play Rolled Dyads</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">Split-Hand / Autopilot</span><span class="tag">L || R</span></div>
+              <p>Non-dominant hand locks into a repeating low ostinato while the dominant hand floats an independent lyrical melody over the top.</p>
+            </div>
+            <button type="button" data-demo="tech-split">Play Hand Independence</button>
+          </div>
+
+          <div class="card">
+            <div>
+              <div class="card-head"><span class="card-title">3:2 Polyrhythm (Hemiola)</span><span class="tag">3:2</span></div>
+              <p>Cross-accenting a 3-pulse upper contour against a 2-pulse Ding/bass cycle creates hypnotic polymetric tension.</p>
+            </div>
+            <button type="button" data-demo="tech-poly">Play 3:2 Polyrhythm</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION III -->
+      <section id="sec-harmony">
+        <h2>III. Modal Harmony, Scale Taxonomy &amp; Cadential Grammar</h2>
+        <p>Because a handpan's pitch-class set is physically immutable (typically 8–10 notes), its harmonic language is <strong>modal, pandiatonic, and pedal-centric</strong> rather than functional common-practice tonality. Harmony is usually <em>implied horizontally</em> through arpeggiated prolongation and overlapping sustain rather than dense vertical block chords.</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Scale Family</th>
+              <th>Modal Identity</th>
+              <th>Scale Degrees (from Ding)</th>
+              <th>Harmonic &amp; Cadential Character</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Kurd</strong> (Annaziska)</td>
+              <td>Aeolian (Natural Minor)</td>
+              <td><code>1 | 5 b6 b7 1 2 b3 4 5</code></td>
+              <td>Fully diatonic; supports <code>i, III, iv, v, bVI, bVII</code>. Lacks leading tone <code>7</code>, so resolutions rely on <code>bVII→i</code> or <code>iv→i</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Amara / Celtic</strong></td>
+              <td>Hexatonic Minor (no b6)</td>
+              <td><code>1 | 5 b7 1 2 b3 4 5 b7</code></td>
+              <td>Omits the tense <code>5–b6</code> semitone; open, luminous, folk-modal; effortless consonant sustain.</td>
+            </tr>
+            <tr>
+              <td><strong>Pygmy</strong></td>
+              <td>Dorian Pentatonic</td>
+              <td><code>1 | 2 b3 5 b7 1 2 b3 5</code></td>
+              <td>Zero semitones; completely avoids harsh dissonance. Cadences are rhythmic/spatial rather than functional.</td>
+            </tr>
+            <tr>
+              <td><strong>Hijaz</strong></td>
+              <td>Phrygian Dominant (<em>Maqam</em>)</td>
+              <td><code>1 | 5 b6 7 1 b2 3 4 5</code></td>
+              <td>Defined by the augmented 2nd (<code>b2–3</code>) and semitone gravity <code>b2→1</code> (Phrygian cadence).</td>
+            </tr>
+            <tr>
+              <td><strong>Sabye</strong></td>
+              <td>Ionian / Major Pent-Hex</td>
+              <td><code>1 | 5 6 7 1 2 3 4 5</code></td>
+              <td>Bright, uplifting major tonality; supports <code>I–V–vi–IV</code> and true leading-tone <code>7→1</code> resolution.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Playable Modal Progressions &amp; Cadential Formulas</h3>
+        <p>Handpan progressions are articulated by cycling <strong>arpeggiated triads or dyads</strong> while allowing resonant tails to blend. Because most minor handpans lack a raised leading tone (<code>#7</code>), closure is achieved through four idiomatic cadential archetypes:</p>
+        <ul>
+          <li><strong>Aeolian Subtonic Cadence (<code>bVII → i</code>):</strong> Whole-step ascent from <code>b7</code> to <code>1</code> (or downward leap to Ding).</li>
+          <li><strong>Plagal / Subdominant Cadence (<code>iv → i</code>):</strong> Soft, introspective resolution via <code>4 → b3 → 1</code>.</li>
+          <li><strong>Spatial / Textural Cadence:</strong> Register collapse from high outer rim inward to central Ding followed by a <em>caesura</em> (sustained rest).</li>
+          <li><strong>Phrygian / Hijaz Cadence (<code>bII → I</code>):</strong> Semitone descent <code>b2 → 1</code> creating intense Middle Eastern resolution.</li>
+        </ul>
+
+        <div class="demo-bar">
+          <span class="label"><strong>Harmonic Demos</strong> (uses active scale; best heard on <code>D Kurd</code> or <code>C# Hijaz</code>):</span>
+          <button type="button" data-demo="harm-aeolian">Aeolian (i – bVI – bVII – i)</button>
+          <button type="button" data-demo="harm-cinematic">Cinematic (i – bVI – iv – v)</button>
+          <button type="button" data-demo="harm-relative">Relative Lift (III – bVII – i – v)</button>
+          <button type="button" data-demo="harm-cadence">Spatial Collapse Cadence</button>
+        </div>
+      </section>
+
+      <!-- SECTION IV -->
+      <section id="sec-rhythm">
+        <h2>IV. Rhythmic Syntax, Additive Meter &amp; Sticking Rudiments</h2>
+        <p>Handpan rhythm bridges acoustic percussion and melodic arpeggiation. Rather than symmetrical quarter-note marching, idiomatic handpan grooves rely on <strong>additive pulse groupings</strong> (<em>tresillo</em> and <em>aksak</em> meters) and <strong>percussion rudiments</strong> mapped across the circular shell:</p>
+        <ul>
+          <li><strong>The <code>3 + 3 + 2</code> Tresillo:</strong> Divides an 8-pulse bar into two dotted-value accents plus a closing duplet (<code>[1 2 3] [4 5 6] [7 8]</code>). Accented beats trigger Ding or chord roots; unaccented subdivisions carry ghost notes or upper arpeggio fills.</li>
+          <li><strong>Paradiddle Sticking (<code>R L R R | L R L L</code>):</strong> Breaking strict <code>R–L</code> alternation with same-hand diddles (<code>R R</code> / <code>L L</code>) forces geometric leaps across adjacent tone fields, turning a drum rudiment into a flowing melodic sequence.</li>
+          <li><strong>Compound Melody (Implied Polyphony):</strong> Alternating a low-register Ding/bass pulse with an upper-register melodic contour creates the auditory illusion of two independent voices (<em>bassus</em> + <em>cantus</em>) from a single monophonic stream of strikes.</li>
+        </ul>
+
+        <div class="demo-bar">
+          <span class="label"><strong>Rhythmic Syntax Demos:</strong> Watch the hand flashes (Solid = R, Shaded = L) on the SVG pan.</span>
+          <button type="button" data-demo="rhy-tresillo">3+3+2 Tresillo Groove</button>
+          <button type="button" data-demo="rhy-paradiddle">Paradiddle (RLRR LRLL)</button>
+          <button type="button" data-demo="rhy-aksak">7/8 Aksak (3+2+2)</button>
+          <button type="button" data-demo="rhy-compound">Compound Melody (2-Voice)</button>
+        </div>
+      </section>
+
+      <!-- SECTION V -->
+      <section id="sec-grammar">
+        <h2>V. Formal Generative Grammar of Handpan Melody</h2>
+        <p>Combining acoustic constraints, modal harmony, sticking ergonomics, and classical phrase theory yields a <strong>Context-Free &amp; Constraint-Based Music Grammar (EBNF)</strong> for constructing idiomatic handpan compositions.</p>
+
+        <pre class="grammar"><span class="cmt">(* 1. MACRO-FORM: Cyclical Ostinato + Contrasting Periods *)</span>
+<span class="nt">&lt;Piece&gt;</span>              ::= <span class="nt">&lt;Intro_Ostinato&gt;</span> <span class="nt">&lt;Period&gt;</span>+ [ <span class="nt">&lt;OpenFlow_Bridge&gt;</span> ] <span class="nt">&lt;Period&gt;</span> <span class="nt">&lt;Coda_Caesura&gt;</span>
+
+<span class="cmt">(* 2. PHRASE ARCHITECTURE: Parallel Period (4+4 bars) or Modal Sentence *)</span>
+<span class="nt">&lt;Period&gt;</span>             ::= <span class="nt">&lt;Antecedent_Clause&gt;</span> <span class="nt">&lt;Consequent_Clause&gt;</span>
+<span class="nt">&lt;Sentence&gt;</span>           ::= <span class="nt">&lt;Basic_Idea&gt;</span> <span class="nt">&lt;Basic_Idea_Var&gt;</span> <span class="nt">&lt;Continuation_Frag&gt;</span> <span class="nt">&lt;Cadential_Clause&gt;</span>
+
+<span class="cmt">(* 3. CLAUSE STRUCTURE: Tension-Opening Question vs. Center-Collapsing Answer *)</span>
+<span class="nt">&lt;Antecedent_Clause&gt;</span>  ::= <span class="nt">&lt;Anchor_Bar&gt;</span> <span class="nt">&lt;Expansion_Bar&gt;</span> <span class="nt">&lt;Open_Cadence&gt;</span>
+                         <span class="cmt">(* Terminates on non-tonic outer rim degree: ^5, b^7, or ^2 *)</span>
+
+<span class="nt">&lt;Consequent_Clause&gt;</span>  ::= <span class="nt">&lt;Anchor_Bar&gt;</span> <span class="nt">&lt;Apex_Or_Descent_Bar&gt;</span> <span class="nt">&lt;Closed_Cadence&gt;</span>
+                         <span class="cmt">(* Resolves inward to Ding (^1) via bVII-&gt;i, iv-&gt;i, or bII-&gt;I *)</span>
+
+<span class="cmt">(* 4. MEASURE &amp; COMPOUND-MELODY LAYER *)</span>
+<span class="nt">&lt;Measure&gt;</span>            ::= <span class="nt">&lt;Metric_Skeleton&gt;</span> ⊗ <span class="nt">&lt;Harmonic_Field&gt;</span> ⊗ <span class="nt">&lt;Sticking_Stream&gt;</span>
+<span class="nt">&lt;Metric_Skeleton&gt;</span>    ::= <span class="term">"3+3+2"</span> | <span class="term">"3+3+3+3+2+2"</span> | <span class="term">"3+2+2"</span> | <span class="term">"4+4"</span>
+<span class="nt">&lt;Harmonic_Field&gt;</span>     ::= <span class="term">"i"</span> | <span class="term">"III"</span> | <span class="term">"iv"</span> | <span class="term">"v"</span> | <span class="term">"bVI"</span> | <span class="term">"bVII"</span> | <span class="term">"bII"</span>
+<span class="nt">&lt;Sticking_Stream&gt;</span>    ::= (<span class="term">"R"</span> <span class="term">"L"</span>)+ | (<span class="term">"R"</span> <span class="term">"L"</span> <span class="term">"R"</span> <span class="term">"R"</span> <span class="term">"L"</span> <span class="term">"R"</span> <span class="term">"L"</span> <span class="term">"L"</span>)
+
+<span class="cmt">(* 5. TERMINAL EVENT ALPHABET (Σ) *)</span>
+<span class="nt">&lt;Event&gt;</span>              ::= <span class="term">D</span>(<span class="nt">&lt;Vel&gt;</span>)                     <span class="cmt">(* Ding tonic anchor / pedal *)</span>
+                       | <span class="term">N</span>(<span class="nt">&lt;Deg&gt;</span>, <span class="nt">&lt;Hand&gt;</span>, <span class="nt">&lt;Vel&gt;</span>)      <span class="cmt">(* Open pitched tone field *)</span>
+                       | <span class="term">~</span>(<span class="nt">&lt;Deg1&gt;</span>, <span class="nt">&lt;Deg2&gt;</span>, <span class="nt">&lt;Vel&gt;</span>)     <span class="cmt">(* Rolled harmonic dyad *)</span>
+                       | <span class="term">H</span>(<span class="nt">&lt;Deg&gt;</span>, <span class="nt">&lt;Vel&gt;</span>)              <span class="cmt">(* Isolated 2f0 octave harmonic *)</span>
+                       | <span class="term">g</span>(<span class="nt">&lt;Deg&gt;</span>, <span class="nt">&lt;Hand&gt;</span>)             <span class="cmt">(* Ghost note: Vel ∈ [0.18, 0.32] *)</span>
+                       | <span class="term">T</span>(<span class="nt">&lt;Vel&gt;</span>) | <span class="term">G</span>(<span class="nt">&lt;Vel&gt;</span>)          <span class="cmt">(* Tak rim slap / Gu cavity bass *)</span>
+                       | <span class="term">M</span>(<span class="nt">&lt;Deg&gt;</span>, <span class="nt">&lt;Vel&gt;</span>) | <span class="term">·</span>          <span class="cmt">(* Muted stroke / Resonant rest *)</span></pre>
+
+        <h3>Well-Formedness Constraints (Voice-Leading &amp; Acoustic Rules)</h3>
+        <ol>
+          <li><strong>Acoustic Sustain-Density Rule:</strong> Because stainless/nitrided partials ring 2.5–6 seconds, avoid rapid consecutive semitone clusters on accented beats; prolong chords via <em>arpeggiated triads</em> and <em>gap-fill contours</em> (a leap of a 4th/5th followed by stepwise motion in the opposite direction).</li>
+          <li><strong>Ergonomic Sticking Rule:</strong> Stepwise scale transitions (<code>|Δidx| = 1</code>) MUST alternate hands (<code>R ↔ L</code>) to match the physical zigzag layout. Same-hand consecutive strokes (<code>R→R</code> or <code>L→L</code>) are permitted on repeated pitches, same-hemisphere skips (<code>|Δidx| = 2</code>), or paradiddle diddles.</li>
+          <li><strong>Figure-Ground Dynamic Rule:</strong> Primary metric accents (<code>vel ≥ 0.78</code>) carry the structural chord tones and melody; intervening subdivisions drop to ghost-note velocity (<code>vel ≤ 0.30</code>) so the ear separates <em>cantus</em> from <em>motoric pulse</em>.</li>
+          <li><strong>Antecedent–Consequent Closure Rule:</strong> An antecedent clause leaves harmonic energy open by ending on an outer-rim scale degree (<code>^5</code>, <code>b^7</code>, or <code>^3</code>); the consequent clause mirrors the rhythmic motive while guiding the contour back inward to Ding (<code>^1</code>) followed by a breathing <em>caesura</em>.</li>
+        </ol>
+      </section>
+
+      <!-- SECTION VI -->
+      <section id="sec-workbench">
+        <h2>VI. Live Handpan Grammar Composer</h2>
+        <p>Execute the formal grammar above in real time. Choose a phrase form, metric skeleton, harmonic progression, and articulation rules, then generate and play structured handpan periods while inspecting the parsed clauses, sticking (<code>R/L</code>), and live tone-field geometry.</p>
+
+        <div class="workbench">
+          <div class="wb-controls">
+            <div class="field">
+              <label for="wb-form">Phrase Form</label>
+              <select id="wb-form">
+                <option value="period">Parallel Period (Antecedent + Consequent)</option>
+                <option value="sentence">Musical Sentence (Idea + Var + Cont + Cad)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="wb-meter">Metric Skeleton</label>
+              <select id="wb-meter">
+                <option value="tresillo">3+3+2 Tresillo (8 steps/bar)</option>
+                <option value="paradiddle">Paradiddle RLRR LRLL (8 steps/bar)</option>
+                <option value="aksak">7/8 Aksak 3+2+2 (7 steps/bar)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="wb-prog">Harmonic Progression</label>
+              <select id="wb-prog">
+                <option value="aeolian">Aeolian Lament (i → bVI → bVII → i)</option>
+                <option value="cinematic">Cinematic Minor (i → bVI → iv → v)</option>
+                <option value="relative">Relative Lift (III → bVII → i → i)</option>
+                <option value="drone">Pedal Drone (i → i → bVII → i)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="wb-checks">
+            <label><input type="checkbox" id="chk-ghost" checked> Ghost Notes (<code>g</code>)</label>
+            <label><input type="checkbox" id="chk-tak" checked> Tak Backbeat (<code>T</code>)</label>
+            <label><input type="checkbox" id="chk-harm" checked> Harmonic Overtones (<code>H</code>)</label>
+            <label><input type="checkbox" id="chk-roll" checked> Rolled Dyads (<code>~</code>)</label>
+            <label><input type="checkbox" id="chk-loop"> Loop Playback</label>
+          </div>
+
+          <div class="wb-actions">
+            <button type="button" id="wb-generate" class="primary">Generate New Phrase</button>
+            <button type="button" id="wb-play">Play Phrase</button>
+            <button type="button" id="wb-stop" class="danger">Stop</button>
+          </div>
+
+          <div id="wb-output"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. Scales, Pitch Theory & Physical Zigzag Topology
+    // =========================================================================
+    const NOTE_OFFSETS = {
+      'C': -9, 'C#': -8, 'Db': -8, 'D': -7, 'D#': -6, 'Eb': -6,
+      'E': -5, 'F': -4, 'F#': -3, 'Gb': -3, 'G': -2, 'G#': -1,
+      'Ab': -1, 'A': 0, 'A#': 1, 'Bb': 1, 'B': 2
+    };
+
+    function noteToFreq(note) {
+      const m = /^([A-G][#b]?)(\d)$/.exec(note);
+      if (!m) return 440;
+      return 440 * Math.pow(2, (NOTE_OFFSETS[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+    }
+
+    // Index 0 = Ding (center). Indices 1..8 alternate Right (odd) and Left (even) from bottom to top.
+    const SCALES = {
+      'd-kurd': {
+        name: 'D Kurd (Aeolian)',
+        notes:   ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'],
+        degrees: ['1',  '5',  'b6',  'b7', '1',  '2',  'b3', '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8], // D, A, D, F, A
+          III:  [1, 3, 6, 8],    // A, C, F, A
+          iv:   [0, 2, 4, 7],    // D, Bb, D, G
+          v:    [1, 3, 5, 8],    // A, C, E, A
+          bVI:  [2, 4, 6],       // Bb, D, F
+          bVII: [3, 5, 7]        // C, E, G
+        }
+      },
+      'd-amara': {
+        name: 'D Amara (Celtic Minor)',
+        notes:   ['D3', 'A3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'C5'],
+        degrees: ['1',  '5',  'b7', '1',  '2',  'b3', '4',  '5',  'b7'],
+        chords: {
+          i:    [0, 1, 3, 5, 7],
+          III:  [1, 2, 5, 7, 8],
+          iv:   [0, 3, 6, 8],
+          v:    [1, 2, 4, 7],
+          bVI:  [2, 5, 7],
+          bVII: [2, 4, 6, 8]
+        }
+      },
+      'fs-pygmy': {
+        name: 'F# Pygmy (Dorian Pent.)',
+        notes:   ['F#3', 'G#3', 'A3', 'C#4', 'E4', 'F#4', 'G#4', 'A4', 'C#5'],
+        degrees: ['1',   '2',   'b3', '5',   'b7', '1',   '2',   'b3', '5'],
+        chords: {
+          i:    [0, 2, 3, 5, 7],
+          III:  [2, 3, 4, 7, 8],
+          iv:   [0, 1, 5, 6],
+          v:    [1, 3, 4, 6, 8],
+          bVI:  [2, 4, 5, 7],
+          bVII: [1, 4, 6, 8]
+        }
+      },
+      'cs-hijaz': {
+        name: 'C# Hijaz (Phrygian Dom.)',
+        notes:   ['C#3', 'G#3', 'A3', 'C4', 'C#4', 'D#4', 'E4', 'G#4', 'A4'],
+        degrees: ['1',   '5',   'b6', '7',  '1',   '2',   'b3', '5',   'b6'],
+        chords: {
+          i:    [0, 1, 4, 6, 7],
+          III:  [1, 3, 6, 7],
+          iv:   [0, 2, 4, 8],
+          v:    [1, 3, 5, 7],
+          bVI:  [2, 4, 6, 8],
+          bVII: [3, 5, 7]
+        }
+      },
+      'e-sabye': {
+        name: 'E Sabye (Major / Ionian)',
+        notes:   ['E3', 'B3', 'C#4', 'D#4', 'E4', 'F#4', 'G#4', 'A4', 'B4'],
+        degrees: ['1',  '5',  '6',   '7',   '1',  '2',   '3',   '4',  '5'],
+        chords: {
+          i:    [0, 1, 4, 6, 8],
+          III:  [1, 3, 6, 8],
+          iv:   [0, 2, 4, 7],
+          v:    [1, 3, 5, 8],
+          bVI:  [2, 4, 6],
+          bVII: [3, 5, 7]
+        }
+      }
+    };
+
+    // Physical coordinates of tone fields on a 340x340 SVG (Center Ding + 8 zigzag perimeter notes)
+    // Odd indices (1,3,5,7) on Right hemisphere; Even indices (2,4,6,8) on Left hemisphere.
+    const PAN_GEOMETRY = [
+      { cx: 170, cy: 170, rx: 38, ry: 38, rot: 0,   hand: 'R' }, // 0: Ding
+      { cx: 218, cy: 266, rx: 28, ry: 22, rot: -25, hand: 'R' }, // 1: bottom-right
+      { cx: 122, cy: 266, rx: 28, ry: 22, rot: 25,  hand: 'L' }, // 2: bottom-left
+      { cx: 274, cy: 208, rx: 25, ry: 20, rot: -68, hand: 'R' }, // 3: mid-lower-right
+      { cx: 66,  cy: 208, rx: 25, ry: 20, rot: 68,  hand: 'L' }, // 4: mid-lower-left
+      { cx: 274, cy: 132, rx: 23, ry: 18, rot: 68,  hand: 'R' }, // 5: mid-upper-right
+      { cx: 66,  cy: 132, rx: 23, ry: 18, rot: -68, hand: 'L' }, // 6: mid-upper-left
+      { cx: 218, cy: 74,  rx: 21, ry: 17, rot: 25,  hand: 'R' }, // 7: top-right
+      { cx: 122, cy: 74,  rx: 21, ry: 17, rot: -25, hand: 'L' }  // 8: top-left
+    ];
+
+    // =========================================================================
+    // 2. Modal Web Audio Synthesis Engine
+    // =========================================================================
+    const PROFILES = {
+      stainless: { sustain: 4.8, attack: 0.010, oct: 0.42, fifth: 0.22, shimmer: 0.07, slap: 0.12, body: 0.20, detune: 0.50, brightness: 4200 },
+      nitrided:  { sustain: 2.3, attack: 0.004, oct: 0.34, fifth: 0.15, shimmer: 0.05, slap: 0.24, body: 0.28, detune: 0.22, brightness: 3100 },
+      ember:     { sustain: 3.9, attack: 0.005, oct: 0.46, fifth: 0.30, shimmer: 0.13, slap: 0.17, body: 0.15, detune: 0.35, brightness: 6000 }
+    };
+
+    let audioCtx = null;
+    let masterGain = null;
+    let dryGain = null;
+    let reverbSend = null;
+    let noiseBuffer = null;
+    let activeTimers = [];
+    let activeVoiceGains = new Set();
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -10;
+        comp.ratio.value = 4;
+        comp.connect(audioCtx.destination);
+
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.78;
+        masterGain.connect(comp);
+
+        dryGain = audioCtx.createGain();
+        dryGain.gain.value = 1.0;
+        dryGain.connect(masterGain);
+
+        const conv = audioCtx.createConvolver();
+        conv.buffer = createIR(audioCtx, 2.2, 2.7);
+        reverbSend = audioCtx.createGain();
+        reverbSend.gain.value = 0.28;
+        reverbSend.connect(conv);
+        conv.connect(masterGain);
+
+        noiseBuffer = createNoise(audioCtx, 0.4);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function createNoise(ctx, sec) {
+      const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * sec), ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      return buf;
+    }
+
+    function createIR(ctx, sec, decay) {
+      const len = Math.floor(ctx.sampleRate * sec);
+      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+          const w = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+          lp = lp * 0.72 + w * 0.28;
+          d[i] = lp;
+        }
+      }
+      return buf;
+    }
+
+    function stopAllAudio() {
+      activeTimers.forEach(clearTimeout);
+      activeTimers = [];
+      document.querySelectorAll('button.playing').forEach(b => b.classList.remove('playing'));
+      document.querySelectorAll('.step-cell.now-playing').forEach(c => c.classList.remove('now-playing'));
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      activeVoiceGains.forEach(g => {
+        try {
+          g.gain.cancelScheduledValues(now);
+          g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), now);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+        } catch (_) {}
+      });
+      activeVoiceGains.clear();
+    }
+
+    function flashField(idx, modeClass = 'active-R', dur = 240) {
+      const el = document.querySelector(`.tone-field[data-idx="${idx}"]`);
+      if (!el) return;
+      el.classList.remove('active-R', 'active-L', 'active-H');
+      void el.offsetWidth;
+      el.classList.add(modeClass);
+      setTimeout(() => el.classList.remove(modeClass), dur);
+    }
+
+    function flashRim(dur = 180) {
+      const rim = document.querySelector('.rim-ring');
+      if (!rim) return;
+      rim.classList.add('active-perc');
+      setTimeout(() => rim.classList.remove('active-perc'), dur);
+    }
+
+    function setStatus(msg) {
+      document.getElementById('dock-status').textContent = msg;
+    }
+
+    function triggerTone(idx, opts = {}) {
+      ensureAudio();
+      const scale = SCALES[activeScaleKey];
+      const note = scale.notes[idx];
+      if (!note) return;
+      const freq = noteToFreq(note);
+      const p = PROFILES[activeProfileKey];
+      const now = audioCtx.currentTime;
+
+      const vel = opts.vel ?? 0.82;
+      const type = opts.type ?? 'N'; // 'N' | 'D' | 'g' | 'H' | 'M'
+      const hand = opts.hand ?? PAN_GEOMETRY[idx].hand;
+      const isDing = idx === 0;
+      const pitchScale = Math.pow(220 / freq, 0.34);
+
+      let sustain = p.sustain * pitchScale * (isDing ? 1.2 : 1.0);
+      let f0Mul = 1.0, octMul = 1.0, fifthMul = 1.0;
+
+      if (type === 'g') {
+        sustain *= 0.45;
+        octMul = 0.5;
+        fifthMul = 0.35;
+      } else if (type === 'H') {
+        f0Mul = 0.08;
+        octMul = 1.75;
+        fifthMul = 0.9;
+        sustain *= 0.85;
+      } else if (type === 'M') {
+        sustain *= 0.18;
+        octMul = 0.45;
+        fifthMul = 0.25;
+      }
+
+      const vg = audioCtx.createGain();
+      vg.gain.setValueAtTime(vel * 0.56, now);
+
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = 'lowpass';
+      const cut = Math.min(11000, p.brightness * (0.65 + 0.55 * vel));
+      lp.frequency.setValueAtTime(cut, now);
+      lp.frequency.exponentialRampToValueAtTime(Math.max(700, cut * 0.48), now + sustain);
+
+      vg.connect(lp);
+      lp.connect(dryGain);
+      lp.connect(reverbSend);
+
+      activeVoiceGains.add(vg);
+      setTimeout(() => activeVoiceGains.delete(vg), (sustain + 0.2) * 1000);
+
+      function addMode(hz, amp, dec, attExtra = 0) {
+        if (amp < 0.002 || hz > audioCtx.sampleRate * 0.45) return;
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz * (1 + 0.006 * vel), now);
+        osc.frequency.exponentialRampToValueAtTime(hz, now + 0.04);
+        const att = p.attack + attExtra;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.linearRampToValueAtTime(amp, now + att);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + att + Math.max(0.05, dec));
+        osc.connect(g);
+        g.connect(vg);
+        osc.start(now);
+        osc.stop(now + att + Math.max(0.05, dec) + 0.04);
+      }
+
+      // 1:2:3 Modal Partials
+      addMode(freq, 0.62 * f0Mul, sustain);
+      if (p.detune > 0 && f0Mul > 0.2) {
+        addMode(freq + p.detune, 0.28 * f0Mul, sustain * 0.9, 0.006);
+      }
+      addMode(freq * 2.0, p.oct * octMul * (0.65 + 0.45 * vel), sustain * 0.68, 0.002);
+      addMode(freq * 3.0, p.fifth * fifthMul * (0.55 + 0.55 * vel), sustain * 0.46, 0.003);
+      addMode(freq * 4.03, p.shimmer * vel, Math.min(0.32, sustain * 0.14));
+
+      // Attack slap
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = isDing ? 1400 : 2100;
+      bp.Q.value = 1.5;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(p.slap * vel * (type === 'g' ? 1.4 : 0.85), now);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.02);
+      noise.connect(bp); bp.connect(ng); ng.connect(vg);
+      noise.start(now); noise.stop(now + 0.03);
+
+      // Helmholtz body
+      if (isDing || type === 'D') {
+        const bo = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bo.type = 'sine';
+        bo.frequency.setValueAtTime(132, now);
+        bo.frequency.exponentialRampToValueAtTime(88, now + 0.07);
+        bg.gain.setValueAtTime(0.0001, now);
+        bg.gain.linearRampToValueAtTime(p.body * vel * 1.15, now + 0.005);
+        bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+        bo.connect(bg); bg.connect(vg);
+        bo.start(now); bo.stop(now + 0.22);
+      }
+
+      const cls = type === 'H' ? 'active-H' : (hand === 'L' ? 'active-L' : 'active-R');
+      flashField(idx, cls, type === 'g' ? 140 : 240);
+      if (!opts.silentStatus) {
+        setStatus(`${note} (deg ^${scale.degrees[idx]}) | ${type} | Hand: ${hand} | vel: ${vel.toFixed(2)}`);
+      }
+    }
+
+    function triggerIsolatedPartial(mult) {
+      ensureAudio();
+      const freq = noteToFreq(SCALES[activeScaleKey].notes[0]) * mult;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.32, now + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 2.2);
+      osc.connect(g); g.connect(dryGain); g.connect(reverbSend);
+      osc.start(now); osc.stop(now + 2.3);
+      flashField(0, mult === 1 ? 'active-R' : 'active-H', 500);
+      setStatus(`Isolated Ding partial: ${mult}× f₀ = ${freq.toFixed(1)} Hz`);
+    }
+
+    function triggerTak(vel = 0.85, silentStatus = false) {
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.65, now);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const n = audioCtx.createBufferSource();
+      n.buffer = noiseBuffer;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 3000; bp.Q.value = 1.2;
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.95, now);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.032);
+      n.connect(bp); bp.connect(ng); ng.connect(out);
+      n.start(now); n.stop(now + 0.04);
+
+      [940, 1780].forEach((hz, i) => {
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(hz, now);
+        o.frequency.exponentialRampToValueAtTime(hz * 0.86, now + 0.035);
+        g.gain.setValueAtTime(0.32 / (i + 1), now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+        o.connect(g); g.connect(out);
+        o.start(now); o.stop(now + 0.045);
+      });
+      flashRim();
+      if (!silentStatus) setStatus(`Tak (Rim Slap) | vel: ${vel.toFixed(2)}`);
+    }
+
+    function triggerGu(vel = 0.85, silentStatus = false) {
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const out = audioCtx.createGain();
+      out.gain.setValueAtTime(vel * 0.78, now);
+      out.connect(dryGain); out.connect(reverbSend);
+
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(132, now);
+      o.frequency.exponentialRampToValueAtTime(84, now + 0.14);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.95, now + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      o.connect(g); g.connect(out);
+      o.start(now); o.stop(now + 0.32);
+
+      flashRim(220);
+      if (!silentStatus) setStatus(`Gu (Helmholtz Cavity Bass ~88 Hz) | vel: ${vel.toFixed(2)}`);
+    }
+
+    // =========================================================================
+    // 3. Interactive SVG Handpan Renderer
+    // =========================================================================
+    let activeScaleKey = 'd-kurd';
+    let activeProfileKey = 'stainless';
+    let harmonicClickMode = false;
+
+    function renderHandpanSVG() {
+      const svg = document.getElementById('handpan-svg');
+      const scale = SCALES[activeScaleKey];
+      svg.innerHTML = '';
+
+      const ns = 'http://www.w3.org/2000/svg';
+      function el(tag, attrs, parent) {
+        const node = document.createElementNS(ns, tag);
+        Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+        if (parent) parent.appendChild(node);
+        return node;
+      }
+
+      // Outer shell & rim
+      el('circle', { cx: 170, cy: 170, r: 158, fill: '#fff', stroke: '#333', 'stroke-width': 2.5, class: 'rim-ring' }, svg);
+      el('circle', { cx: 170, cy: 170, r: 148, fill: 'none', stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
+      // Subtle center meridian showing L / R hemispheres
+      el('line', { x1: 170, y1: 18, x2: 170, y2: 322, stroke: '#ddd', 'stroke-width': 1, 'stroke-dasharray': '3 5' }, svg);
+
+      // Tone fields
+      PAN_GEOMETRY.forEach((geo, idx) => {
+        const g = el('g', {
+          class: 'tone-field',
+          'data-idx': idx,
+          transform: `translate(${geo.cx}, ${geo.cy})`
+        }, svg);
+
+        const strokeCol = idx === 0 ? '#111' : '#555';
+        const fillCol = '#fff';
+
+        if (idx === 0) {
+          el('circle', { cx: 0, cy: 0, r: geo.rx, fill: fillCol, stroke: strokeCol, 'stroke-width': 1.8 }, g);
+          el('circle', { cx: 0, cy: 0, r: 12, fill: 'none', stroke: '#ccc', 'stroke-width': 1 }, g);
+        } else {
+          el('ellipse', {
+            cx: 0, cy: 0, rx: geo.rx, ry: geo.ry,
+            transform: `rotate(${geo.rot})`,
+            fill: fillCol, stroke: strokeCol, 'stroke-width': 1.3
+          }, g);
+        }
+
+        const noteTxt = el('text', {
+          x: 0, y: -1, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          fill: '#111', 'font-size': idx === 0 ? 15 : 12, 'font-weight': 700,
+          'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+        }, g);
+        noteTxt.textContent = scale.notes[idx];
+
+        const degTxt = el('text', {
+          x: 0, y: 12, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+          fill: '#555',
+          'font-size': 9.5, 'font-family': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+        }, g);
+        degTxt.textContent = idx === 0 ? 'DING ^1' : `^${scale.degrees[idx]} (${geo.hand})`;
+
+        g.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          triggerTone(idx, {
+            type: harmonicClickMode ? 'H' : (idx === 0 ? 'D' : 'N'),
+            vel: 0.85,
+            hand: geo.hand
+          });
+        });
+      });
+    }
+
+    // =========================================================================
+    // 4. Sequencer Helper & Playable Musicology Demos
+    // =========================================================================
+    function getStepMs() {
+      const bpm = parseInt(document.getElementById('bpm-range').value, 10);
+      // 1 step = 1 eighth-note (2 steps per beat)
+      return (60000 / bpm) / 2;
+    }
+
+    function playSequence(events, btnEl, onStep, onDone) {
+      stopAllAudio();
+      if (btnEl) btnEl.classList.add('playing');
+      const stepMs = getStepMs();
+
+      events.forEach((ev, i) => {
+        const delay = (ev.at !== undefined ? ev.at : i) * stepMs;
+        const t = setTimeout(() => {
+          if (onStep) onStep(i, ev);
+          if (ev.type === 'T') {
+            triggerTak(ev.vel ?? 0.8, true);
+          } else if (ev.type === 'G') {
+            triggerGu(ev.vel ?? 0.85, true);
+          } else if (ev.type === '~' && Array.isArray(ev.notes)) {
+            triggerTone(ev.notes[0], { vel: (ev.vel ?? 0.8) * 0.88, hand: 'L', type: 'N', silentStatus: true });
+            const rt = setTimeout(() => {
+              triggerTone(ev.notes[1], { vel: ev.vel ?? 0.85, hand: 'R', type: 'N', silentStatus: true });
+            }, 34);
+            activeTimers.push(rt);
+          } else if (ev.idx !== undefined && ev.idx !== null) {
+            triggerTone(ev.idx, { vel: ev.vel ?? 0.82, type: ev.type ?? 'N', hand: ev.hand, silentStatus: true });
+          }
+          if (ev.label) setStatus(ev.label);
+        }, delay);
+        activeTimers.push(t);
+      });
+
+      const lastAt = events.reduce((m, e, i) => Math.max(m, e.at !== undefined ? e.at : i), 0);
+      const endT = setTimeout(() => {
+        if (btnEl) btnEl.classList.remove('playing');
+        if (onDone) onDone();
+      }, (lastAt + 1.5) * stepMs);
+      activeTimers.push(endT);
+    }
+
+    function runDemo(demoId, btnEl) {
+      const sc = SCALES[activeScaleKey];
+      const C = sc.chords;
+
+      switch (demoId) {
+        case 'mode-f0': return triggerIsolatedPartial(1);
+        case 'mode-2f0': return triggerIsolatedPartial(2);
+        case 'mode-3f0': return triggerIsolatedPartial(3);
+        case 'mode-all': return triggerTone(0, { type: 'D', vel: 0.9 });
+
+        case 'topo-zigzag': {
+          const seq = [0,1,2,3,4,5,6,7,8,7,6,5,4,3,2,1,0].map((idx, i) => ({
+            at: i * 0.65, idx, hand: PAN_GEOMETRY[idx].hand, vel: idx === 0 ? 0.9 : 0.78,
+            label: `Zigzag stepwise: ${sc.notes[idx]} (${PAN_GEOMETRY[idx].hand})`
+          }));
+          return playSequence(seq, btnEl);
+        }
+        case 'topo-triads': {
+          const seq = [
+            { at: 0, idx: 1, hand: 'R', vel: 0.85, label: 'Right hemisphere skip: 1 → 3 → 5 → 7' },
+            { at: 0.8, idx: 3, hand: 'R', vel: 0.8 },
+            { at: 1.6, idx: 5, hand: 'R', vel: 0.82 },
+            { at: 2.4, idx: 7, hand: 'R', vel: 0.85 },
+            { at: 3.6, idx: 2, hand: 'L', vel: 0.85, label: 'Left hemisphere skip: 2 → 4 → 6 → 8' },
+            { at: 4.4, idx: 4, hand: 'L', vel: 0.8 },
+            { at: 5.2, idx: 6, hand: 'L', vel: 0.82 },
+            { at: 6.0, idx: 8, hand: 'L', vel: 0.85 },
+            { at: 7.2, idx: 0, hand: 'R', vel: 0.92, type: 'D', label: 'Resolve to Ding' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+
+        case 'tech-open': {
+          const seq = [0, 1, 4, 6, 8, 6, 4, 1, 0].map((idx, i) => ({
+            at: i * 0.8, idx, type: idx === 0 ? 'D' : 'N', vel: 0.82, label: `Open rebound: ${sc.notes[idx]}`
+          }));
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-ding': {
+          const seq = [
+            { at: 0, idx: 0, type: 'D', vel: 0.92, label: 'Ding pedal anchor' },
+            { at: 2, idx: 4, type: 'N', vel: 0.75 },
+            { at: 3, idx: 6, type: 'N', vel: 0.78 },
+            { at: 4, idx: 0, type: 'D', vel: 0.92, label: 'Ding returns on downbeat' },
+            { at: 6, idx: 5, type: 'N', vel: 0.74 },
+            { at: 7, idx: 1, type: 'N', vel: 0.72 },
+            { at: 8, idx: 0, type: 'D', vel: 0.95, label: 'Ding cadence' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-ghost': {
+          const seq = [
+            { at: 0, idx: 0, type: 'D', vel: 0.9, label: 'Accent (0.90) vs Ghost notes (0.24)' },
+            { at: 0.5, idx: 1, type: 'g', vel: 0.22, hand: 'R' },
+            { at: 1.0, idx: 2, type: 'g', vel: 0.24, hand: 'L' },
+            { at: 1.5, idx: 4, type: 'N', vel: 0.86, hand: 'L' },
+            { at: 2.0, idx: 1, type: 'g', vel: 0.22, hand: 'R' },
+            { at: 2.5, idx: 2, type: 'g', vel: 0.24, hand: 'L' },
+            { at: 3.0, idx: 6, type: 'N', vel: 0.88, hand: 'L' },
+            { at: 3.5, idx: 3, type: 'g', vel: 0.24, hand: 'R' },
+            { at: 4.0, idx: 0, type: 'D', vel: 0.92 }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-tak': {
+          const seq = [
+            { at: 0, idx: 0, type: 'D', vel: 0.9, label: 'Ding on 1 & 3, Tak backbeat on 2 & 4' },
+            { at: 1, idx: 3, type: 'g', vel: 0.28 },
+            { at: 2, type: 'T', vel: 0.88, label: 'Tak (Rim Slap) backbeat' },
+            { at: 3, idx: 5, type: 'N', vel: 0.76 },
+            { at: 4, idx: 0, type: 'D', vel: 0.9 },
+            { at: 5, idx: 4, type: 'g', vel: 0.28 },
+            { at: 6, type: 'T', vel: 0.9, label: 'Tak backbeat' },
+            { at: 7, idx: 6, type: 'N', vel: 0.78 }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-gu': {
+          const seq = [
+            { at: 0, type: 'G', vel: 0.92, label: 'Gu (Helmholtz bass)' },
+            { at: 1, idx: 1, type: 'g', vel: 0.28 },
+            { at: 2, type: 'T', vel: 0.86, label: 'Tak (Rim)' },
+            { at: 3, type: 'G', vel: 0.86, label: 'Gu syncopated bass' },
+            { at: 4, idx: 4, type: 'N', vel: 0.82 },
+            { at: 5, idx: 6, type: 'N', vel: 0.78 },
+            { at: 6, type: 'T', vel: 0.88 },
+            { at: 7, idx: 0, type: 'D', vel: 0.9 }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-harm': {
+          const seq = [
+            { at: 0, idx: 0, type: 'D', vel: 0.85, label: 'Open Ding vs Isolated 2f₀ Harmonics' },
+            { at: 1.5, idx: 1, type: 'H', vel: 0.85, label: 'Harmonic 2f₀ on field 1' },
+            { at: 3.0, idx: 4, type: 'H', vel: 0.85, label: 'Harmonic 2f₀ on field 4' },
+            { at: 4.5, idx: 6, type: 'H', vel: 0.85, label: 'Harmonic 2f₀ on field 6' },
+            { at: 6.0, idx: 0, type: 'H', vel: 0.90, label: 'Ding octave harmonic' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-muted': {
+          const seq = [
+            { at: 0, idx: 4, type: 'M', vel: 0.88, label: 'Muted staccato vs Open ring' },
+            { at: 0.75, idx: 4, type: 'M', vel: 0.82 },
+            { at: 1.5, idx: 6, type: 'N', vel: 0.86, label: 'Open release' },
+            { at: 3.0, idx: 5, type: 'M', vel: 0.88 },
+            { at: 3.75, idx: 3, type: 'M', vel: 0.82 },
+            { at: 4.5, idx: 0, type: 'D', vel: 0.92, label: 'Open Ding ring' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-roll': {
+          const seq = [
+            { at: 0, type: '~', notes: [0, 6], vel: 0.88, label: 'Rolled dyad: Ding + ^b3' },
+            { at: 2, type: '~', notes: [2, 6], vel: 0.85, label: 'Rolled dyad: ^b6 + ^b3' },
+            { at: 4, type: '~', notes: [3, 7], vel: 0.85, label: 'Rolled dyad: ^b7 + ^4' },
+            { at: 6, type: '~', notes: [0, 8], vel: 0.90, label: 'Rolled dyad: Ding + ^5' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-split': {
+          // Left hand steady ostinato on 2 & 4; Right hand lyrical melody on 1, 3, 5, 7
+          const seq = [
+            { at: 0, idx: 2, hand: 'L', vel: 0.55, label: 'L-hand autopilot ostinato + R-hand melody' },
+            { at: 0, idx: 7, hand: 'R', vel: 0.88 },
+            { at: 1, idx: 4, hand: 'L', vel: 0.52 },
+            { at: 2, idx: 2, hand: 'L', vel: 0.55 },
+            { at: 2.5, idx: 5, hand: 'R', vel: 0.86 },
+            { at: 3, idx: 4, hand: 'L', vel: 0.52 },
+            { at: 4, idx: 2, hand: 'L', vel: 0.55 },
+            { at: 4, idx: 3, hand: 'R', vel: 0.86 },
+            { at: 5, idx: 4, hand: 'L', vel: 0.52 },
+            { at: 6, idx: 2, hand: 'L', vel: 0.55 },
+            { at: 6, idx: 7, hand: 'R', vel: 0.90 },
+            { at: 7, idx: 4, hand: 'L', vel: 0.52 },
+            { at: 8, idx: 0, hand: 'R', vel: 0.92, type: 'D' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+        case 'tech-poly': {
+          // 6-pulse cycle: L-hand plays 2s (0, 3), R-hand plays 3s (0, 2, 4) x2
+          const seq = [];
+          for (let bar = 0; bar < 2; bar++) {
+            const off = bar * 6;
+            seq.push({ at: off + 0, idx: 0, hand: 'L', type: 'D', vel: 0.88, label: '3:2 Hemiola — L(2) against R(3)' });
+            seq.push({ at: off + 0, idx: 7, hand: 'R', vel: 0.82 });
+            seq.push({ at: off + 2, idx: 5, hand: 'R', vel: 0.82 });
+            seq.push({ at: off + 3, idx: 2, hand: 'L', vel: 0.78 });
+            seq.push({ at: off + 4, idx: 3, hand: 'R', vel: 0.82 });
+          }
+          seq.push({ at: 12, idx: 0, hand: 'R', type: 'D', vel: 0.92 });
+          return playSequence(seq, btnEl);
+        }
+
+        case 'harm-aeolian': return playProgression(['i', 'bVI', 'bVII', 'i'], btnEl);
+        case 'harm-cinematic': return playProgression(['i', 'bVI', 'iv', 'v'], btnEl);
+        case 'harm-relative': return playProgression(['III', 'bVII', 'i', 'v'], btnEl);
+        case 'harm-cadence': {
+          const seq = [
+            { at: 0, idx: 8, hand: 'L', vel: 0.86, label: 'Spatial Collapse: Outer rim → Center Ding' },
+            { at: 0.8, idx: 7, hand: 'R', vel: 0.82 },
+            { at: 1.6, idx: 6, hand: 'L', vel: 0.80 },
+            { at: 2.4, idx: 5, hand: 'R', vel: 0.78 },
+            { at: 3.2, idx: 4, hand: 'L', vel: 0.80 },
+            { at: 4.0, idx: 3, hand: 'R', vel: 0.78 },
+            { at: 5.0, idx: 0, hand: 'R', type: 'D', vel: 0.94, label: 'Resolved on Ding + Caesura (rest)' }
+          ];
+          return playSequence(seq, btnEl);
+        }
+
+        case 'rhy-tresillo': {
+          // 3 + 3 + 2 over 2 bars
+          const seq = [];
+          const roots = [0, 2];
+          roots.forEach((r, b) => {
+            const o = b * 8;
+            seq.push({ at: o + 0, idx: r, type: r === 0 ? 'D' : 'N', hand: 'R', vel: 0.92, label: `3+3+2 Tresillo (Bar ${b+1})` });
+            seq.push({ at: o + 1, idx: 4, type: 'g', hand: 'L', vel: 0.25 });
+            seq.push({ at: o + 2, idx: 5, type: 'g', hand: 'R', vel: 0.28 });
+            seq.push({ at: o + 3, idx: 6, type: 'N', hand: 'L', vel: 0.88 });
+            seq.push({ at: o + 4, idx: 3, type: 'g', hand: 'R', vel: 0.25 });
+            seq.push({ at: o + 5, idx: 4, type: 'g', hand: 'L', vel: 0.28 });
+            seq.push({ at: o + 6, idx: 7, type: 'N', hand: 'R', vel: 0.86 });
+            seq.push({ at: o + 7, type: 'T', vel: 0.72 });
+          });
+          seq.push({ at: 16, idx: 0, type: 'D', hand: 'R', vel: 0.94 });
+          return playSequence(seq, btnEl);
+        }
+        case 'rhy-paradiddle': {
+          // R L R R | L R L L
+          const pat = [
+            { idx: 0, h: 'R', v: 0.92 }, { idx: 2, h: 'L', v: 0.55 }, { idx: 3, h: 'R', v: 0.65 }, { idx: 5, h: 'R', v: 0.72 },
+            { idx: 6, h: 'L', v: 0.88 }, { idx: 7, h: 'R', v: 0.58 }, { idx: 4, h: 'L', v: 0.65 }, { idx: 2, h: 'L', v: 0.68 }
+          ];
+          const seq = [];
+          for (let rep = 0; rep < 2; rep++) {
+            pat.forEach((p, i) => seq.push({
+              at: rep * 8 + i, idx: p.idx, hand: p.h, vel: p.v,
+              label: `Paradiddle: ${p.h} on ${sc.notes[p.idx]}`
+            }));
+          }
+          seq.push({ at: 16, idx: 0, hand: 'R', type: 'D', vel: 0.94 });
+          return playSequence(seq, btnEl);
+        }
+        case 'rhy-aksak': {
+          // 7/8 = 3 + 2 + 2
+          const seq = [];
+          for (let b = 0; b < 2; b++) {
+            const o = b * 7;
+            seq.push({ at: o + 0, idx: 0, type: 'D', hand: 'R', vel: 0.92, label: '7/8 Aksak: [1 2 3] [4 5] [6 7]' });
+            seq.push({ at: o + 1, idx: 2, type: 'g', hand: 'L', vel: 0.26 });
+            seq.push({ at: o + 2, idx: 3, type: 'g', hand: 'R', vel: 0.30 });
+            seq.push({ at: o + 3, idx: 6, type: 'N', hand: 'L', vel: 0.86 });
+            seq.push({ at: o + 4, idx: 5, type: 'g', hand: 'R', vel: 0.32 });
+            seq.push({ at: o + 5, idx: 7, type: 'N', hand: 'R', vel: 0.86 });
+            seq.push({ at: o + 6, idx: 4, type: 'N', hand: 'L', vel: 0.62 });
+          }
+          seq.push({ at: 14, idx: 0, type: 'D', hand: 'R', vel: 0.94 });
+          return playSequence(seq, btnEl);
+        }
+        case 'rhy-compound': {
+          // Low bass voice (0, 2, 3, 0) interleaved with descending upper cantus (8, 7, 6, 5, 4)
+          const seq = [
+            { at: 0, idx: 0, type: 'D', hand: 'R', vel: 0.90, label: 'Compound Melody: Bass (0,2,3) + Soprano (8→4)' },
+            { at: 1, idx: 8, type: 'N', hand: 'L', vel: 0.82 },
+            { at: 2, idx: 1, type: 'g', hand: 'R', vel: 0.32 },
+            { at: 3, idx: 7, type: 'N', hand: 'R', vel: 0.84 },
+            { at: 4, idx: 2, type: 'N', hand: 'L', vel: 0.84 },
+            { at: 5, idx: 6, type: 'N', hand: 'L', vel: 0.82 },
+            { at: 6, idx: 3, type: 'N', hand: 'R', vel: 0.84 },
+            { at: 7, idx: 5, type: 'N', hand: 'R', vel: 0.82 },
+            { at: 8, idx: 0, type: 'D', hand: 'R', vel: 0.94 },
+            { at: 9, idx: 4, type: 'N', hand: 'L', vel: 0.80 }
+          ];
+          return playSequence(seq, btnEl);
+        }
+      }
+    }
+
+    function playProgression(chordNames, btnEl) {
+      const sc = SCALES[activeScaleKey];
+      const seq = [];
+      chordNames.forEach((chName, bar) => {
+        const tones = sc.chords[chName] || [0, 4, 6];
+        const o = bar * 6;
+        // Arpeggiated modal prolongation: root, mid, high, mid, high, passing
+        const pattern = [
+          tones[0],
+          tones[1 % tones.length],
+          tones[tones.length - 1],
+          tones[1 % tones.length],
+          tones[Math.min(2, tones.length - 1)],
+          tones[0]
+        ];
+        pattern.forEach((idx, i) => {
+          seq.push({
+            at: o + i * 0.85,
+            idx,
+            type: idx === 0 && i === 0 ? 'D' : 'N',
+            vel: i === 0 ? 0.90 : (i === 2 ? 0.82 : 0.65),
+            label: `Chord ${chName}: ${tones.map(t => sc.notes[t]).join(' – ')}`
+          });
+        });
+      });
+      seq.push({ at: chordNames.length * 6 * 0.85 + 0.2, idx: 0, type: 'D', vel: 0.92, label: 'Progression resolved' });
+      playSequence(seq, btnEl);
+    }
+
+    // =========================================================================
+    // 5. Section VI: Formal Generative Handpan Grammar Engine
+    // =========================================================================
+    const PROGRESSIONS = {
+      aeolian:   ['i', 'bVI', 'bVII', 'i'],
+      cinematic: ['i', 'bVI', 'iv', 'v'],
+      relative:  ['III', 'bVII', 'i', 'i'],
+      drone:     ['i', 'i', 'bVII', 'i']
+    };
+
+    const METERS = {
+      tresillo:   { steps: 8, accents: [0, 3, 6], sticking: ['R','L','R','L','R','L','R','L'] },
+      paradiddle: { steps: 8, accents: [0, 4],    sticking: ['R','L','R','R','L','R','L','L'] },
+      aksak:      { steps: 7, accents: [0, 3, 5], sticking: ['R','L','R','L','R','R','L'] }
+    };
+
+    let currentGenerated = null;
+
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function generateGrammarPhrase() {
+      const sc = SCALES[activeScaleKey];
+      const form = document.getElementById('wb-form').value;
+      const meterKey = document.getElementById('wb-meter').value;
+      const progKey = document.getElementById('wb-prog').value;
+      const useGhost = document.getElementById('chk-ghost').checked;
+      const useTak = document.getElementById('chk-tak').checked;
+      const useHarm = document.getElementById('chk-harm').checked;
+      const useRoll = document.getElementById('chk-roll').checked;
+
+      const meter = METERS[meterKey];
+      const chords = PROGRESSIONS[progKey];
+
+      // Clause labels based on classical phrase form
+      const clauseMeta = form === 'period'
+        ? [
+            { name: 'Clause 1a — Antecedent (Anchor)', role: 'open', bar: 0 },
+            { name: 'Clause 1b — Antecedent (Open Cadence)', role: 'half-cadence', bar: 1 },
+            { name: 'Clause 2a — Consequent (Parallel Return)', role: 'return', bar: 2 },
+            { name: 'Clause 2b — Consequent (Closed Cadence)', role: 'closed-cadence', bar: 3 }
+          ]
+        : [
+            { name: 'Clause 1 — Basic Idea (Presentation)', role: 'open', bar: 0 },
+            { name: 'Clause 2 — Varied Repetition', role: 'var', bar: 1 },
+            { name: 'Clause 3 — Continuation / Fragmentation', role: 'cont', bar: 2 },
+            { name: 'Clause 4 — Cadential Closure', role: 'closed-cadence', bar: 3 }
+          ];
+
+      // Build a reusable rhythmic/contour motif for bar 0 so bar 2 (Parallel Consequent) echoes it
+      const motifOffsets = [];
+      for (let s = 0; s < meter.steps; s++) {
+        motifOffsets.push(Math.floor(Math.random() * 4));
+      }
+
+      const clauses = clauseMeta.map((cm, barIdx) => {
+        const chordSym = chords[barIdx];
+        const pool = sc.chords[chordSym] || [0, 4, 6];
+        const steps = [];
+
+        for (let s = 0; s < meter.steps; s++) {
+          const isAccent = meter.accents.includes(s);
+          const hand = meter.sticking[s];
+          const isLastStep = s === meter.steps - 1;
+          const isPenultimate = s === meter.steps - 2;
+
+          // Cadential grammar rules
+          if (cm.role === 'closed-cadence' && isLastStep) {
+            // Breathing caesura (rest) after Ding resolution
+            steps.push({ step: s, type: '·', label: '·', hand: '-', vel: 0, accented: false });
+            continue;
+          }
+          if (cm.role === 'closed-cadence' && isPenultimate) {
+            steps.push({ step: s, type: 'D', idx: 0, label: sc.notes[0], deg: '^1', hand: 'R', vel: 0.95, accented: true });
+            continue;
+          }
+          if (cm.role === 'half-cadence' && isLastStep) {
+            // End open on upper rim non-tonic degree (index 5, 7, or 8)
+            const openIdx = pick([5, 7, 8]);
+            const evType = (useHarm && Math.random() < 0.45) ? 'H' : 'N';
+            steps.push({
+              step: s, type: evType, idx: openIdx, label: sc.notes[openIdx],
+              deg: '^' + sc.degrees[openIdx], hand: PAN_GEOMETRY[openIdx].hand,
+              vel: 0.86, accented: true
+            });
+            continue;
+          }
+
+          // Downbeat Ding or Rolled Dyad
+          if (s === 0) {
+            if (chordSym === 'i') {
+              if (useRoll && barIdx === 2 && Math.random() < 0.65) {
+                const top = pool[pool.length - 1];
+                steps.push({
+                  step: s, type: '~', notes: [0, top], label: `${sc.notes[0]}~${sc.notes[top]}`,
+                  deg: `^1+^${sc.degrees[top]}`, hand: 'L+R', vel: 0.90, accented: true
+                });
+              } else {
+                steps.push({ step: s, type: 'D', idx: 0, label: sc.notes[0], deg: '^1', hand: 'R', vel: 0.92, accented: true });
+              }
+            } else {
+              const rootIdx = pool[0];
+              if (useRoll && Math.random() < 0.45 && pool.length >= 2) {
+                const top = pool[pool.length - 1];
+                steps.push({
+                  step: s, type: '~', notes: [rootIdx, top], label: `${sc.notes[rootIdx]}~${sc.notes[top]}`,
+                  deg: `^${sc.degrees[rootIdx]}+^${sc.degrees[top]}`, hand: 'L+R', vel: 0.88, accented: true
+                });
+              } else {
+                steps.push({
+                  step: s, type: 'N', idx: rootIdx, label: sc.notes[rootIdx],
+                  deg: '^' + sc.degrees[rootIdx], hand: PAN_GEOMETRY[rootIdx].hand, vel: 0.90, accented: true
+                });
+              }
+            }
+            continue;
+          }
+
+          // Backbeat Tak injection (commonly step 4 in 8-step or step 4 in 7-step)
+          if (useTak && !isAccent && (s === 4 || (s === 2 && Math.random() < 0.25)) && Math.random() < 0.55) {
+            steps.push({ step: s, type: 'T', label: 'Tak', deg: 'rim', hand, vel: 0.76, accented: false });
+            continue;
+          }
+
+          // Choose pitch respecting ergonomic hand hemisphere when possible
+          const targetIdx = pool[(motifOffsets[s] + (cm.role === 'cont' ? s : 0)) % pool.length];
+          const hemiMatches = pool.filter(i => i > 0 && PAN_GEOMETRY[i].hand === hand);
+          const chosenIdx = (isAccent && hemiMatches.length)
+            ? hemiMatches[(motifOffsets[s] + barIdx) % hemiMatches.length]
+            : targetIdx;
+
+          if (isAccent) {
+            const evType = (useHarm && chosenIdx >= 5 && Math.random() < 0.22) ? 'H' : 'N';
+            steps.push({
+              step: s, type: evType, idx: chosenIdx, label: sc.notes[chosenIdx],
+              deg: '^' + sc.degrees[chosenIdx], hand: PAN_GEOMETRY[chosenIdx].hand,
+              vel: 0.84, accented: true
+            });
+          } else if (useGhost) {
+            // Motoric ghost note on low/mid field
+            const gIdx = pool[s % Math.min(2, pool.length)];
+            steps.push({
+              step: s, type: 'g', idx: gIdx, label: sc.notes[gIdx],
+              deg: 'g', hand, vel: 0.25, accented: false
+            });
+          } else {
+            steps.push({ step: s, type: '·', label: '·', hand: '-', vel: 0, accented: false });
+          }
+        }
+
+        return { ...cm, chord: chordSym, steps };
+      });
+
+      currentGenerated = { meterKey, clauses };
+      renderGeneratedPhrase();
+    }
+
+    function renderGeneratedPhrase() {
+      const out = document.getElementById('wb-output');
+      if (!currentGenerated) return;
+      out.innerHTML = '';
+
+      let globalStep = 0;
+      currentGenerated.clauses.forEach((cl) => {
+        const block = document.createElement('div');
+        block.className = 'clause-block';
+
+        const hdr = document.createElement('div');
+        hdr.className = 'clause-header';
+        hdr.innerHTML = `<span class="clause-name">${cl.name}</span><span class="clause-meta">Harmony: ${cl.chord} | Role: ${cl.role}</span>`;
+        block.appendChild(hdr);
+
+        const strip = document.createElement('div');
+        strip.className = 'step-strip';
+
+        cl.steps.forEach((st) => {
+          const cell = document.createElement('div');
+          cell.className = 'step-cell' + (st.accented ? ' accented' : '');
+          cell.dataset.gstep = globalStep++;
+
+          let noteCls = 'step-note';
+          if (st.type === 'g' || st.type === '·') noteCls += ' ghost';
+          if (st.type === 'T' || st.type === 'G') noteCls += ' perc';
+          if (st.type === 'H') noteCls += ' harm';
+
+          const handCls = st.hand === 'L' ? 'step-hand-L' : 'step-hand-R';
+          const velPct = Math.round((st.vel || 0) * 100);
+
+          cell.innerHTML = `
+            <div class="${noteCls}">${st.type === 'H' ? 'H:' : ''}${st.label}</div>
+            <div class="${handCls}">${st.hand} <span style="color:#666">${st.deg || ''}</span></div>
+            <div class="step-vel"><div class="step-vel-fill" style="width:${velPct}%"></div></div>
+          `;
+          strip.appendChild(cell);
+        });
+
+        block.appendChild(strip);
+        out.appendChild(block);
+      });
+    }
+
+    function playGeneratedPhrase() {
+      if (!currentGenerated) generateGrammarPhrase();
+      const flatEvents = [];
+      let idxCounter = 0;
+      currentGenerated.clauses.forEach((cl) => {
+        cl.steps.forEach((st) => {
+          flatEvents.push({
+            at: idxCounter,
+            gstep: idxCounter,
+            type: st.type,
+            idx: st.idx,
+            notes: st.notes,
+            hand: st.hand === 'L' ? 'L' : 'R',
+            vel: st.vel,
+            label: `${cl.name} (${cl.chord}) → ${st.label}`
+          });
+          idxCounter++;
+        });
+      });
+
+      const playBtn = document.getElementById('wb-play');
+      playSequence(
+        flatEvents,
+        playBtn,
+        (_i, ev) => {
+          document.querySelectorAll('.step-cell.now-playing').forEach(c => c.classList.remove('now-playing'));
+          const cell = document.querySelector(`.step-cell[data-gstep="${ev.gstep}"]`);
+          if (cell) cell.classList.add('now-playing');
+        },
+        () => {
+          document.querySelectorAll('.step-cell.now-playing').forEach(c => c.classList.remove('now-playing'));
+          if (document.getElementById('chk-loop').checked) {
+            playGeneratedPhrase();
+          }
+        }
+      );
+    }
+
+    // =========================================================================
+    // 6. Initialization & Event Wiring
+    // =========================================================================
+    const scaleSelect = document.getElementById('scale-select');
+    Object.entries(SCALES).forEach(([k, v]) => {
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = v.name;
+      scaleSelect.appendChild(opt);
+    });
+
+    scaleSelect.addEventListener('change', (e) => {
+      activeScaleKey = e.target.value;
+      renderHandpanSVG();
+      generateGrammarPhrase();
+    });
+
+    document.getElementById('profile-select').addEventListener('change', (e) => {
+      activeProfileKey = e.target.value;
+    });
+
+    document.getElementById('bpm-range').addEventListener('input', (e) => {
+      document.getElementById('bpm-out').textContent = `${e.target.value} BPM`;
+    });
+
+    document.getElementById('btn-stop-all').addEventListener('click', stopAllAudio);
+    document.getElementById('dock-tak').addEventListener('pointerdown', (e) => { e.preventDefault(); triggerTak(); });
+    document.getElementById('dock-gu').addEventListener('pointerdown', (e) => { e.preventDefault(); triggerGu(); });
+    document.getElementById('dock-harm').addEventListener('click', (e) => {
+      harmonicClickMode = !harmonicClickMode;
+      e.target.classList.toggle('playing', harmonicClickMode);
+      e.target.textContent = harmonicClickMode ? 'Harmonic: ON' : 'Harmonic';
+    });
+
+    document.querySelectorAll('[data-demo]').forEach((btn) => {
+      btn.addEventListener('click', () => runDemo(btn.dataset.demo, btn));
+    });
+
+    document.getElementById('wb-generate').addEventListener('click', generateGrammarPhrase);
+    document.getElementById('wb-play').addEventListener('click', playGeneratedPhrase);
+    document.getElementById('wb-stop').addEventListener('click', stopAllAudio);
+    ['wb-form', 'wb-meter', 'wb-prog', 'chk-ghost', 'chk-tak', 'chk-harm', 'chk-roll'].forEach((id) => {
+      document.getElementById(id).addEventListener('change', generateGrammarPhrase);
+    });
+
+    // Keyboard shortcuts for direct handpan play (1–9, T, G)
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      const k = e.key.toLowerCase();
+      if (k >= '1' && k <= '9') {
+        const idx = parseInt(k, 10) - 1;
+        triggerTone(idx, { type: harmonicClickMode ? 'H' : (idx === 0 ? 'D' : 'N'), vel: 0.85 });
+      } else if (k === 't') {
+        triggerTak();
+      } else if (k === 'g') {
+        triggerGu();
+      }
+    });
+
+    // Boot
+    renderHandpanSVG();
+    generateGrammarPhrase();
+  </script>
+</body>
+</html>
