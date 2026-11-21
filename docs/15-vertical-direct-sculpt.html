@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>15 — Direct Future Sculpting (Cymatic Wave Tank)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #000; color: #fff;
+    font: 11px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased; user-select: none; touch-action: none;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #bar {
+    position: fixed; inset: 0 0 auto 0; height: 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 14px; background: rgba(0,0,0,0.82);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    pointer-events: none; z-index: 10;
+  }
+  #bar .left, #bar .hint { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  #playBtn {
+    pointer-events: auto; cursor: pointer; appearance: none;
+    background: transparent; color: #fff; font: inherit; letter-spacing: 0.08em;
+    border: 1px solid rgba(255,255,255,0.34); border-radius: 2px;
+    height: 20px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  #playBtn:hover { border-color: #fff; }
+  #playBtn .dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.34); }
+  #playBtn.on .dot { background: #ff5a1f; box-shadow: 0 0 6px #ff5a1f; }
+  #meta, .hint { color: rgba(255,255,255,0.34); letter-spacing: 0.05em; }
+  .hint { overflow: hidden; text-overflow: ellipsis; }
+  .hint b { color: rgba(255,255,255,0.62); font-weight: 500; }
+  @media (max-width: 680px) { .hint { display: none; } }
+</style>
+</head>
+<body>
+<header id="bar">
+  <div class="left">
+    <button id="playBtn" aria-label="Play or Pause"><span class="dot"></span><span id="playLbl">PLAY</span></button>
+    <span id="meta">15 · D KURD · 84 BPM</span>
+  </div>
+  <div class="hint"><b>SCULPT</b> future · <b>STRIKE</b> now · <b>PIN</b> past · <b>SPACE</b> play</div>
+</header>
+<canvas id="stage"></canvas>
+
+<script type="module">
+// ============================================================================
+// 15 — DIRECT FUTURE SCULPTING (DISCRETE CYMATIC RIPPLE WAVE TANK)
+// TOP = PAST constellations · MIDDLE = NOW ripple horizon · BOTTOM = FUTURE seeds
+// ============================================================================
+const NOTES = ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'];
+const FREQS = [146.83, 220.00, 233.08, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00];
+const DURS = [1, 2, 3, 4, 6, 8], BPM = 84, STEP_S = 60 / BPM / 4, FUTURE_STEPS = 32;
+const TOP_PAD = 40, BOT_PAD = 24, FLASH_S = 0.42;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const pick  = (arr) => arr[(Math.random() * arr.length) | 0];
+const snapDur = (s) => DURS.reduce((b, d) => Math.abs(d - s) < Math.abs(b - s) ? d : b, DURS[0]);
+const mixInk = (sig, a) => `rgba(255,${Math.round(lerp(255, 90, clamp(sig, 0, 1)))},${Math.round(lerp(255, 31, clamp(sig, 0, 1)))},${clamp(a, 0, 1).toFixed(3)})`;
+
+// --- SINGLE CLEAN SYNTHETIC HANDPAN VOICE + STEREO MICRO-CLICK ---
+let actx = null, masterBus = null, reverbSend = null, noiseBuf = null, lastClickMs = 0;
+
+function ensureAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return actx; }
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = actx.createDynamicsCompressor();
+  comp.threshold.value = -10; comp.knee.value = 14; comp.ratio.value = 4;
+  comp.attack.value = 0.003; comp.release.value = 0.16; comp.connect(actx.destination);
+
+  masterBus = actx.createGain(); masterBus.gain.value = 0.86; masterBus.connect(comp);
+
+  // Warm 1.9s stereo room impulse response
+  const len = Math.floor(actx.sampleRate * 1.9), ir = actx.createBuffer(2, len, actx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch); let lp = 0;
+    for (let i = 0; i < len; i++) {
+      lp = lp * 0.72 + (Math.random() * 2 - 1) * 0.28;
+      d[i] = lp * Math.pow(1 - i / len, 2.7) * (i < 900 ? i / 900 : 1);
+    }
+  }
+  const conv = actx.createConvolver(); conv.buffer = ir;
+  reverbSend = actx.createGain(); reverbSend.gain.value = 0.34;
+  reverbSend.connect(conv); conv.connect(comp);
+
+  const nLen = Math.floor(actx.sampleRate * 0.04);
+  noiseBuf = actx.createBuffer(1, nLen, actx.sampleRate);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (nLen * 0.18));
+  return actx;
+}
+
+function playVoice(locus, vel = 0.75, durSteps = 4, when = null, openHold = false) {
+  const ctx = ensureAudio(), t0 = when != null ? Math.max(when, ctx.currentTime) : ctx.currentTime;
+  const f0 = FREQS[locus], isDing = locus === 0, panVal = (locus / 8 - 0.5) * 0.74;
+  const durFactor = openHold ? 1.85 : (0.30 + Math.pow(durSteps / 8, 0.78) * 1.45);
+  const tau1 = (isDing ? 1.48 : 1.12) * Math.pow(220 / f0, 0.22) * durFactor;
+
+  const vGain = ctx.createGain(), panner = ctx.createStereoPanner();
+  vGain.gain.setValueAtTime(vel * (isDing ? 0.56 : 0.44), t0);
+  panner.pan.setValueAtTime(panVal, t0);
+  vGain.connect(panner); panner.connect(masterBus); panner.connect(reverbSend);
+
+  const addPartial = (hz, amp, rise, tau) => {
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(hz * (1 + 0.0025 * vel), t0);
+    osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.045);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(amp, t0 + rise);
+    g.gain.setTargetAtTime(0.0001, t0 + rise, tau);
+    osc.connect(g); g.connect(vGain);
+    osc.start(t0); osc.stop(t0 + Math.min(5.6, rise + tau * 5.2));
+  };
+  // Fundamental + 0.7 Hz dual-axis steel beating + delayed 2f0 & 3f0 modal bloom
+  addPartial(f0, 0.72, 0.005, tau1);
+  addPartial(f0 + 0.7, 0.28, 0.008, tau1 * 0.94);
+  addPartial(f0 * 2, 0.26 * (0.65 + 0.45 * vel), 0.024, tau1 * 0.48);
+  addPartial(f0 * 3, 0.10 * vel, 0.038, tau1 * 0.24);
+
+  // Soft skin/knuckle impact transient
+  const src = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();
+  src.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.setValueAtTime(520 + locus * 110, t0); bp.Q.value = 1.6;
+  ng.gain.setValueAtTime(vel * 0.22, t0); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.022);
+  src.connect(bp); bp.connect(ng); ng.connect(panner); src.start(t0);
+
+  return {
+    shapeTo(d) {
+      if (!actx) return;
+      const now = actx.currentTime;
+      vGain.gain.cancelScheduledValues(now);
+      vGain.gain.setValueAtTime(Math.max(0.0001, vGain.gain.value), now);
+      vGain.gain.setTargetAtTime(0.0001, now, 0.14 + (d / 8) * 0.95);
+    }
+  };
+}
+
+function playClick(pan = 0, hz = 1480, gain = 0.042) {
+  const nowMs = performance.now();
+  if (nowMs - lastClickMs < 24) return;
+  lastClickMs = nowMs;
+  const ctx = ensureAudio(), t0 = ctx.currentTime;
+  const osc = ctx.createOscillator(), g = ctx.createGain(), p = ctx.createStereoPanner();
+  osc.type = 'triangle'; osc.frequency.setValueAtTime(hz, t0);
+  osc.frequency.exponentialRampToValueAtTime(hz * 0.42, t0 + 0.012);
+  g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.015);
+  p.pan.setValueAtTime(clamp(pan, -0.8, 0.8), t0);
+  osc.connect(g); g.connect(p); p.connect(masterBus);
+  osc.start(t0); osc.stop(t0 + 0.018);
+}
+
+// --- GTTM / LHL VARIABLE-DURATION GENERATOR & HEURISTIC ATTENTION ---
+const CELLS_SPARSE  = [[8,8],[6,2,8],[4,4,8],[6,4,6],[8,-4,4],[2,2,4,8],[6,-2,8]];
+const CELLS_GROOVE  = [[3,3,2,4,4],[3,3,2,6,2],[2,2,4,3,3,2],[4,2,2,6,-2],[1,1,2,4,2,6],[6,2,2,2,4],[3,3,2,2,-2,4]];
+const CELLS_KINETIC = [[1,1,2,3,3,2,2,2],[2,1,1,2,2,3,3,2],[3,3,2,1,1,2,4],[1,1,1,1,2,2,3,3,2],[2,2,1,1,2,2,2,4]];
+const CHORDS = [[0,1,4,6,8],[2,4,6,8,1],[3,5,7,1,8],[0,1,4,6,5]]; // i -> bVI -> bVII -> i
+const state = {
+  playing: false, playhead: 16, anchorTime: 0, anchorStep: 16, generatedUpTo: 16, nextId: 1,
+  past: [], future: [], ripples: [], brush: [],
+  locusGlow: new Float32Array(9), locusOrange: new Float32Array(9),
+  gravity: 0.42, kinetic: 0.48, motifLock: null, activeHolds: new Map()
+};
+const metricWeight = (s) => s === 0 ? 1.0 : s === 8 ? 0.78 : s % 4 === 0 ? 0.60 : s % 2 === 0 ? 0.36 : 0.18;
+const findAtStep = (arr, s) => arr.find(n => n.step === s) || null;
+
+function choosePitch(step, dur, prev1, prev2, barIdx) {
+  const barInPhrase = ((barIdx % 4) + 4) % 4, barStep = ((step % 16) + 16) % 16;
+  const pool = CHORDS[barInPhrase], gravCenter = lerp(1.6, 6.8, state.gravity);
+  const e16 = findAtStep(state.past, step - 16), e32 = findAtStep(state.past, step - 32);
+  const echoSrc = (e16 && Math.random() < 0.46) ? e16 : (e32 && Math.random() < 0.54) ? e32 : null;
+
+  if (barStep === 0 && (barInPhrase === 0 || barInPhrase === 3)) {
+    return {
+      locus: state.gravity < 0.58 ? 0 : 4,
+      attn: echoSrc ? { srcStep: echoSrc.step, srcLocus: echoSrc.locus, kind: 'phase' }
+          : prev1 ? { srcStep: prev1.step, srcLocus: prev1.locus, kind: 'narmour' } : null
+    };
+  }
+  if (echoSrc && Math.random() < 0.62) {
+    const drift = state.gravity > 0.68 && echoSrc.locus < 7 ? 1 : state.gravity < 0.28 && echoSrc.locus > 0 ? -1 : 0;
+    return { locus: clamp(echoSrc.locus + (Math.random() < 0.45 ? drift : 0), 0, 8),
+             attn: { srcStep: echoSrc.step, srcLocus: echoSrc.locus, kind: 'phase' } };
+  }
+
+  // Narmour implication-realization (gap-fill reversal after leaps >= 3, stepwise continuity)
+  let pref = Math.round(gravCenter);
+  if (prev1 && prev2) {
+    const leap = prev1.locus - prev2.locus;
+    pref = Math.abs(leap) >= 3
+      ? clamp(prev1.locus - Math.sign(leap) * (Math.abs(leap) >= 5 ? 2 : 1), 0, 8)
+      : clamp(prev1.locus + (leap ? Math.sign(leap) : (Math.random() < 0.5 ? 1 : -1)), 0, 8);
+  } else if (prev1) {
+    pref = clamp(prev1.locus + (Math.random() < 0.5 ? 1 : -1), 0, 8);
+  }
+
+  let bestL = pref, bestSc = -1e9;
+  for (let l = 0; l < 9; l++) {
+    let sc = (pool.includes(l) ? 2.2 : 0) - Math.abs(l - pref) * 0.78
+           - Math.abs(l - gravCenter) * (0.42 + (dur >= 4 ? 0.25 : 0))
+           - (prev1 && l === prev1.locus ? (dur <= 2 ? 1.8 : 0.9) : 0)
+           + (l === 2 && dur >= 4 && barInPhrase === 1 ? 1.6 : 0) // poignant b6 peak
+           + (l === 0 && barStep === 0 && state.gravity < 0.65 ? 1.5 : 0)
+           + (Math.random() - 0.5) * 1.45;
+    if (sc > bestSc) { bestSc = sc; bestL = l; }
+  }
+  return { locus: bestL, attn: prev1 ? { srcStep: prev1.step, srcLocus: prev1.locus, kind: 'narmour' } : null };
+}
+
+function generateBar(barStartStep) {
+  const barIdx = Math.floor(barStartStep / 16), barInPhrase = ((barIdx % 4) + 4) % 4;
+  if (state.motifLock?.notes.length) {
+    const lock = state.motifLock, len = Math.max(4, lock.len);
+    for (let off = 0; off < 16; off += len) {
+      for (const m of lock.notes) {
+        const s = barStartStep + off + m.rel;
+        if (s < barStartStep || s >= barStartStep + 16 || s <= Math.floor(state.playhead)) continue;
+        const shift = state.gravity > 0.80 ? 1 : state.gravity < 0.16 ? -1 : 0;
+        state.future.push({
+          id: state.nextId++, step: s, locus: clamp(m.locus + (m.locus === 0 ? 0 : shift), 0, 8),
+          dur: snapDur(Math.min(m.dur, barStartStep + 16 - s)),
+          vel: clamp(m.vel * (0.94 + Math.random() * 0.10), 0.35, 0.96),
+          flash: lock.flash > 0 ? 0.65 : 0, sculpted: false, scheduled: false,
+          attn: { srcStep: m.srcStep, srcLocus: m.srcLocus, kind: 'lock' }
+        });
+      }
+    }
+    return;
+  }
+
+  const bank = state.kinetic < 0.34 ? CELLS_SPARSE : state.kinetic > 0.68 ? CELLS_KINETIC : CELLS_GROOVE;
+  const cell = (barInPhrase === 3 && state.kinetic < 0.72)
+    ? pick([[2,2,4,6,-2],[3,3,2,8],[4,4,6,-2],[6,2,6,-2]]) : pick(bank);
+  const allPrev = [...state.past, ...state.future].filter(n => n.step < barStartStep).sort((a, b) => a.step - b.step);
+  let prev2 = allPrev[allPrev.length - 2] || null, prev1 = allPrev[allPrev.length - 1] || null, cursor = 0;
+
+  for (const raw of cell) {
+    if (cursor >= 16) break;
+    if (raw < 0) { cursor += -raw; continue; } // structural rest
+    const dur = snapDur(Math.min(raw, 16 - cursor)), step = barStartStep + cursor;
+    const { locus, attn } = choosePitch(step, dur, prev1, prev2, barIdx);
+    const agogic = dur >= 6 ? 0.10 : dur >= 4 ? 0.05 : -0.04;
+    const vel = clamp(0.50 + metricWeight(cursor) * 0.28 + agogic + (locus === 2 ? 0.07 : 0) + (Math.random() - 0.5) * 0.08, 0.34, 0.96);
+    const note = { id: state.nextId++, step, locus, dur, vel, flash: 0, sculpted: false, scheduled: false, attn };
+    state.future.push(note); prev2 = prev1; prev1 = note; cursor += raw;
+  }
+}
+
+function ensureFutureBuffer() {
+  const target = Math.ceil(state.playhead) + FUTURE_STEPS;
+  while (state.generatedUpTo < target) {
+    const barStart = Math.floor(state.generatedUpTo / 16) * 16;
+    const nextStart = barStart < state.generatedUpTo ? barStart + 16 : barStart;
+    if (nextStart > state.generatedUpTo) {
+      let s = state.generatedUpTo, prev1 = state.past.at(-1) || null, prev2 = state.past.at(-2) || null;
+      while (s < nextStart) {
+        const dur = snapDur(Math.min(state.kinetic > 0.68 ? 2 : state.kinetic < 0.35 ? 4 : 3, nextStart - s));
+        const { locus, attn } = choosePitch(s, dur, prev1, prev2, Math.floor(s / 16));
+        const n = { id: state.nextId++, step: s, locus, dur, vel: 0.64, flash: 0, sculpted: false, scheduled: false, attn };
+        state.future.push(n); prev2 = prev1; prev1 = n; s += dur;
+      }
+      state.generatedUpTo = nextStart;
+    } else {
+      generateBar(nextStart); state.generatedUpTo = nextStart + 16;
+    }
+  }
+  state.future.sort((a, b) => a.step - b.step);
+}
+
+function regenerateFuture(offset = 2) {
+  const cut = Math.ceil(state.playhead) + offset;
+  state.future = state.future.filter(n => n.step < cut);
+  state.generatedUpTo = cut;
+  ensureFutureBuffer();
+}
+
+function seedOpeningScore() {
+  const seed = [[0,0,4,0.86],[4,1,2,0.64],[6,2,2,0.72],[8,4,3,0.78],[11,6,3,0.74],[14,5,2,0.60]];
+  state.past = seed.map(([step, locus, dur, vel], i) => ({
+    id: state.nextId++, step, locus, dur, vel, flash: 0, user: false, holding: false,
+    attn: i > 0 ? { srcStep: seed[i - 1][0], srcLocus: seed[i - 1][1], kind: 'narmour' } : null
+  }));
+  state.playhead = state.anchorStep = state.generatedUpTo = 16;
+  state.future = [];
+  ensureFutureBuffer();
+}
+
+// --- CYMATIC RIPPLE DETONATION & LOOKAHEAD SCHEDULER ---
+function spawnRipple(locus, vel, durSteps, orange = 0, holding = false) {
+  const r = {
+    locus, dur: durSteps, vel, age: 0, phase: Math.random() * Math.PI * 2, orange, holding,
+    maxAge: 0.36 + Math.pow(durSteps / 8, 0.82) * 2.75,
+    maxR: 46 + Math.pow(durSteps / 8, 0.78) * 245 * (0.85 + vel * 0.25),
+    rings: durSteps >= 6 ? 3 : durSteps >= 3 ? 2 : 1
+  };
+  state.ripples.push(r);
+  if (state.ripples.length > 26) state.ripples.shift();
+  state.locusGlow[locus] = Math.min(1.2, Math.max(state.locusGlow[locus], 0.65 + vel * 0.55));
+  if (orange > 0) state.locusOrange[locus] = Math.max(state.locusOrange[locus], orange);
+  return r;
+}
+
+const updatePlayhead = () => {
+  if (state.playing && actx) state.playhead = state.anchorStep + (actx.currentTime - state.anchorTime) / STEP_S;
+};
+
+setInterval(() => {
+  if (!state.playing || !actx) return;
+  updatePlayhead(); ensureFutureBuffer();
+  const nowS = state.playhead, look = 0.12 / STEP_S;
+
+  for (const n of state.future) {
+    if (!n.scheduled && n.step <= nowS + look) {
+      n.scheduled = true;
+      playVoice(n.locus, n.vel, n.dur, actx.currentTime + Math.max(0.002, (n.step - nowS) * STEP_S), false);
+    }
+  }
+  while (state.future.length && state.future[0].step <= nowS) {
+    const n = state.future.shift();
+    if (!n.scheduled) playVoice(n.locus, n.vel, n.dur, actx.currentTime, false);
+    spawnRipple(n.locus, n.vel, n.dur, n.sculpted ? 0.85 : 0, false);
+    state.past.push({ id: n.id, step: n.step, locus: n.locus, dur: n.dur, vel: n.vel,
+                      flash: n.sculpted ? 0.65 : 0, user: false, holding: false, attn: n.attn });
+    state.kinetic = lerp(state.kinetic, 0.48, 0.008);
+  }
+  if (state.past.length > 180) state.past = state.past.filter(n => n.step >= nowS - 128);
+  if (state.motifLock && state.motifLock.endStep < nowS - 36) {
+    const shift = Math.ceil((nowS - 20 - state.motifLock.endStep) / state.motifLock.len) * state.motifLock.len;
+    if (shift > 0 && state.motifLock.startStep + shift < nowS - 2) {
+      state.motifLock.startStep += shift; state.motifLock.endStep += shift;
+      for (const m of state.motifLock.notes) m.srcStep += shift;
+    }
+  }
+}, 25);
+
+const playBtn = document.getElementById('playBtn'), playLbl = document.getElementById('playLbl'), metaEl = document.getElementById('meta');
+function togglePlay(force = null) {
+  const want = force != null ? force : !state.playing;
+  if (want === state.playing) return;
+  const ctx = ensureAudio();
+  if (want) {
+    state.playing = true; state.anchorTime = ctx.currentTime; state.anchorStep = state.playhead;
+    for (const n of state.future) n.scheduled = false;
+  } else { updatePlayhead(); state.playing = false; }
+  playBtn.classList.toggle('on', state.playing);
+  playLbl.textContent = state.playing ? 'PAUSE' : 'PLAY';
+}
+playBtn.addEventListener('click', () => togglePlay());
+
+// --- TANK GEOMETRY & ZERO-KNOB DIRECT GESTURE INTERACTION ---
+const canvas = document.getElementById('stage'), ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1, nowY = 0, stepPx = 12, x0 = 80, fieldW = 600, colW = 66;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2); W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  nowY = Math.round(H * 0.50); stepPx = Math.max(7, (H - nowY - BOT_PAD) / FUTURE_STEPS);
+  fieldW = clamp(W - (W < 560 ? 96 : 176), 240, 760); x0 = (W - fieldW) * 0.5; colW = fieldW / 9;
+}
+window.addEventListener('resize', resize); resize();
+
+const locusX = (i) => x0 + (i + 0.5) * colW;
+const yOfStep = (s) => nowY + (s - state.playhead) * stepPx;
+const stepOfY = (y) => state.playhead + (y - nowY) / stepPx;
+const locusOfX = (x) => clamp(Math.round((x - x0) / colW - 0.5), 0, 8);
+
+const g = {
+  mode: null, pid: null, sx: 0, sy: 0, lx: 0, ly: 0, lt: 0, moved: false, speed: 240,
+  hitFuture: null, lastSculptStep: -999, pastA: 0, pastB: 0, scrubStep: 0, lastRatchet: -999,
+  hoverZone: null, hoverNote: null, hoverLocus: -1
+};
+
+function findFutureSeedAt(x, y) {
+  const hw = Math.max(14, colW * 0.34);
+  return state.future.find(n => Math.abs(x - locusX(n.locus)) <= hw && y >= yOfStep(n.step) - 10 && y <= yOfStep(n.step + n.dur) + 5) || null;
+}
+
+function applySculptAt(x, y, speedPx) {
+  const rawStep = Math.round(stepOfY(y));
+  if (rawStep < Math.ceil(state.playhead) + 1 || rawStep > Math.floor(state.playhead) + FUTURE_STEPS) return;
+  const locus = locusOfX(x), kin = clamp((speedPx - 110) / 480, 0, 1);
+  state.gravity = lerp(state.gravity, locus / 8, 0.24);
+  state.kinetic = lerp(state.kinetic, kin, 0.28);
+  const targetDur = kin < 0.20 ? 8 : kin < 0.36 ? 6 : kin < 0.52 ? 4 : kin < 0.70 ? 3 : kin < 0.85 ? 2 : 1;
+  const stride = targetDur >= 6 ? 4 : targetDur >= 3 ? 3 : targetDur;
+
+  if (Math.abs(rawStep - g.lastSculptStep) < Math.max(1, Math.floor(stride * 0.75))) {
+    const cur = findAtStep(state.future, g.lastSculptStep);
+    if (cur && cur.locus !== locus) { cur.locus = locus; cur.flash = 1; playClick((locus / 8 - 0.5) * 0.7, 980 + locus * 140, 0.032); }
+    return;
+  }
+  g.lastSculptStep = rawStep;
+
+  const endStep = rawStep + targetDur;
+  state.future = state.future.filter(n => {
+    if (n.step >= rawStep && n.step < endStep) return false;
+    if (n.locus === locus && n.step < rawStep && n.step + n.dur > rawStep) n.dur = snapDur(Math.max(1, rawStep - n.step));
+    return true;
+  });
+  const prev = [...state.past, ...state.future].filter(n => n.step < rawStep).sort((a, b) => b.step - a.step)[0];
+  const vel = clamp(0.56 + metricWeight(((rawStep % 16) + 16) % 16) * 0.24 + (targetDur >= 4 ? 0.08 : 0), 0.42, 0.94);
+  state.future.push({
+    id: state.nextId++, step: rawStep, locus, dur: targetDur, vel, flash: 1, sculpted: true, scheduled: false,
+    attn: prev ? { srcStep: prev.step, srcLocus: prev.locus, kind: 'narmour' } : null
+  });
+  state.future.sort((a, b) => a.step - b.step);
+  playClick((locus / 8 - 0.5) * 0.75, 840 + locus * 145 - (1 - kin) * 120, 0.038);
+}
+
+function cycleFutureSeed(note) {
+  const idx = DURS.indexOf(note.dur);
+  if (idx === -1 || idx === DURS.length - 1) {
+    state.future = state.future.filter(n => n.id !== note.id);
+    playClick((note.locus / 8 - 0.5) * 0.7, 520, 0.035); return;
+  }
+  const nextDur = DURS[idx + 1];
+  note.dur = nextDur; note.flash = 1; note.sculpted = true;
+  state.future = state.future.filter(n => n.id === note.id || n.locus !== note.locus || n.step < note.step || n.step >= note.step + nextDur);
+  playClick((note.locus / 8 - 0.5) * 0.7, 920 + nextDur * 95, 0.042);
+}
+
+function beginManualStrike(id, locus) {
+  if (state.activeHolds.has(id)) return;
+  const ctx = ensureAudio(), voice = playVoice(locus, 0.88, 6, ctx.currentTime, true);
+  const ripple = spawnRipple(locus, 0.94, 2, 1.0, true), prev = state.past.at(-1) || null;
+  const note = {
+    id: state.nextId++, step: Math.floor(state.playhead), locus, dur: 1, vel: 0.88,
+    flash: 1, user: true, holding: true, attn: prev ? { srcStep: prev.step, srcLocus: prev.locus, kind: 'narmour' } : null
+  };
+  state.past.push(note);
+  state.activeHolds.set(id, { note, ripple, voice, startMs: performance.now(), locus });
+  state.gravity = lerp(state.gravity, locus / 8, 0.34);
+  if (!state.motifLock) {
+    const cut = Math.ceil(state.playhead) + 3;
+    for (const f of state.future) {
+      if (f.step >= cut && !f.sculpted && Math.random() < 0.42) {
+        f.locus = clamp(f.locus + Math.sign(locus - f.locus), 0, 8);
+        f.attn = { srcStep: note.step, srcLocus: locus, kind: 'phase' };
+      }
+    }
+  }
+}
+
+function endManualStrike(id) {
+  const h = state.activeHolds.get(id); if (!h) return;
+  const finalDur = snapDur(clamp(Math.max(1, Math.round((performance.now() - h.startMs) / 1000 / STEP_S)), 1, 8));
+  h.note.dur = finalDur; h.note.holding = false;
+  h.ripple.holding = false; h.ripple.dur = finalDur;
+  h.ripple.rings = finalDur >= 6 ? 3 : finalDur >= 3 ? 2 : 1;
+  h.ripple.maxAge = Math.max(h.ripple.age + 0.35, 0.36 + Math.pow(finalDur / 8, 0.82) * 2.75);
+  h.ripple.maxR = 46 + Math.pow(finalDur / 8, 0.78) * 245;
+  h.voice.shapeTo(finalDur); state.activeHolds.delete(id);
+}
+
+function lockPastSlice(sA, sB) {
+  const lo = Math.floor(Math.min(sA, sB) / 4) * 4;
+  const hi = clamp(Math.ceil(Math.max(sA, sB) / 4) * 4, lo + 4, lo + 32);
+  const slice = state.past.filter(n => n.step >= lo && n.step < hi);
+  if (!slice.length) { state.motifLock = null; playClick(-0.4, 620, 0.032); return; }
+  const d = hi - lo, len = d <= 4 ? 4 : d <= 8 ? 8 : d <= 12 ? 12 : d <= 16 ? 16 : 32;
+  state.motifLock = {
+    startStep: lo, endStep: lo + len, len, flash: 1,
+    notes: slice.map(n => ({ rel: n.step - lo, locus: n.locus, dur: n.dur, vel: n.vel, srcStep: n.step, srcLocus: n.locus }))
+  };
+  regenerateFuture(2); playClick(-0.5, 1320, 0.048);
+}
+
+function commitScrub(targetStep) {
+  const s = clamp(Math.round(targetStep), 0, Math.floor(state.playhead));
+  state.playhead = state.anchorStep = state.generatedUpTo = s;
+  if (actx) state.anchorTime = actx.currentTime;
+  state.past = state.past.filter(n => n.step < s);
+  if (state.motifLock && state.motifLock.startStep >= s) state.motifLock = null;
+  state.future = []; state.ripples = [];
+  ensureFutureBuffer(); playClick(-0.6, 1680, 0.05);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.clientY < 32) return;
+  canvas.setPointerCapture(e.pointerId); ensureAudio();
+  const x = e.clientX, y = e.clientY;
+  Object.assign(g, { pid: e.pointerId, sx: x, sy: y, lx: x, ly: y, lt: performance.now(), moved: false, speed: 240, lastSculptStep: -999 });
+  if (x <= x0 + 6 && Math.abs(y - nowY) <= 28) {
+    g.mode = 'scrub'; g.scrubStep = g.lastRatchet = Math.round(state.playhead); playClick(-0.65, 1180, 0.038);
+  } else if (Math.abs(y - nowY) <= 26 && x >= x0 - 10 && x <= x0 + fieldW + 10) {
+    g.mode = 'now'; beginManualStrike('ptr-' + e.pointerId, locusOfX(x));
+  } else if (y > nowY + 26) {
+    g.mode = 'sculpt'; g.hitFuture = findFutureSeedAt(x, y); state.brush.push({ x, y, t: performance.now(), w: 2.2 });
+  } else if (y < nowY - 26) {
+    g.mode = 'past'; g.pastA = g.pastB = stepOfY(y);
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  const x = e.clientX, y = e.clientY;
+  if (!g.mode) {
+    g.hoverNote = y > nowY + 26 ? findFutureSeedAt(x, y) : null;
+    g.hoverLocus = (Math.abs(y - nowY) <= 26 && x >= x0 - 10 && x <= x0 + fieldW + 10) ? locusOfX(x) : -1;
+    g.hoverZone = (x <= x0 + 6 && Math.abs(y - nowY) <= 28) ? 'scrub' : g.hoverLocus >= 0 ? 'now' : y > nowY + 26 ? 'future' : 'past';
+    canvas.style.cursor = g.hoverZone === 'scrub' ? 'ns-resize' : g.hoverZone === 'now' || g.hoverNote ? 'pointer' : g.hoverZone === 'future' ? 'crosshair' : 'row-resize';
+    return;
+  }
+  if (e.pointerId !== g.pid) return;
+  const now = performance.now(), dt = Math.max(0.008, (now - g.lt) / 1000);
+  if (Math.hypot(x - g.sx, y - g.sy) > 7) g.moved = true;
+
+  if (g.mode === 'scrub') {
+    g.scrubStep = clamp(Math.round(stepOfY(Math.min(nowY, y))), state.past[0]?.step ?? 0, Math.floor(state.playhead));
+    if (g.scrubStep !== g.lastRatchet) {
+      g.lastRatchet = g.scrubStep;
+      playClick(-0.65, 1050 + (state.playhead - g.scrubStep) * 18, 0.036);
+    }
+  } else if (g.mode === 'sculpt' && g.moved) {
+    g.speed = lerp(g.speed, Math.hypot(x - g.lx, y - g.ly) / dt, 0.30);
+    state.brush.push({ x, y, t: now, w: lerp(4.8, 1.1, clamp((g.speed - 110) / 480, 0, 1)) });
+    if (y > nowY + 12) applySculptAt(x, y, g.speed);
+  } else if (g.mode === 'past') {
+    g.pastB = Math.min(state.playhead - 1, stepOfY(y));
+  }
+  g.lx = x; g.ly = y; g.lt = now;
+});
+
+function finishPointer(e) {
+  if (g.pid !== e.pointerId) return;
+  const x = e.clientX, y = e.clientY;
+  if (g.mode === 'now') endManualStrike('ptr-' + e.pointerId);
+  else if (g.mode === 'sculpt' && !g.moved) {
+    if (g.hitFuture) cycleFutureSeed(g.hitFuture);
+    else if (x >= x0 - 10 && x <= x0 + fieldW + 10) {
+      const step = Math.round(stepOfY(y)), locus = locusOfX(x);
+      if (step >= Math.ceil(state.playhead) + 1 && step <= Math.floor(state.playhead) + FUTURE_STEPS) {
+        const prev = [...state.past, ...state.future].filter(n => n.step < step).pop() || null;
+        state.future.push({
+          id: state.nextId++, step, locus, dur: (((step % 4) + 4) % 4) === 0 ? 4 : 2, vel: 0.74,
+          flash: 1, sculpted: true, scheduled: false, attn: prev ? { srcStep: prev.step, srcLocus: prev.locus, kind: 'narmour' } : null
+        });
+        state.future.sort((a, b) => a.step - b.step);
+        state.gravity = lerp(state.gravity, locus / 8, 0.18);
+        playClick((locus / 8 - 0.5) * 0.7, 940 + locus * 130, 0.04);
+      }
+    }
+  } else if (g.mode === 'past') {
+    if (g.moved) lockPastSlice(g.pastA, g.pastB);
+    else {
+      const s = stepOfY(y);
+      if (state.past.some(n => Math.abs(n.step - s) <= 3 || (s >= n.step && s <= n.step + n.dur))) {
+        const b = Math.floor(s / 8) * 8; lockPastSlice(b, b + 8);
+      } else if (state.motifLock) { state.motifLock = null; regenerateFuture(2); playClick(-0.4, 580, 0.034); }
+    }
+  } else if (g.mode === 'scrub' && g.scrubStep < Math.floor(state.playhead)) commitScrub(g.scrubStep);
+  g.mode = g.pid = g.hitFuture = null;
+}
+canvas.addEventListener('pointerup', finishPointer);
+canvas.addEventListener('pointercancel', finishPointer);
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.code === 'Escape' && state.motifLock) { state.motifLock = null; regenerateFuture(2); playClick(-0.4, 580, 0.032); }
+  else if (!e.repeat && e.key >= '1' && e.key <= '9') beginManualStrike('key-' + e.key, Number(e.key) - 1);
+});
+window.addEventListener('keyup', (e) => { if (e.key >= '1' && e.key <= '9') endManualStrike('key-' + e.key); });
+
+// --- DISCRETE CYMATIC RIPPLE RENDERER (60fps HiDPI, WHITE-ON-BLACK) ---
+let lastFrameMs = performance.now();
+
+function strokeCymaticRing(cx, cy, radius, modeN, modAmp, phase) {
+  if (radius < 1.5) return;
+  ctx.beginPath();
+  if (modAmp < 0.15) ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  else {
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * Math.PI * 2, r = radius + Math.sin(modeN * a + phase) * modAmp;
+      i === 0 ? ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+  }
+  ctx.stroke();
+}
+
+function drawFrame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - lastFrameMs) / 1000); lastFrameMs = nowMs;
+  updatePlayhead();
+
+  // Live quantized hold stretch on NOW -> elongates wake & blooms harmonic rings
+  for (const h of state.activeHolds.values()) {
+    const d = snapDur(clamp(Math.max(1, Math.ceil((nowMs - h.startMs) / 1000 / STEP_S)), 1, 8));
+    h.note.dur = h.ripple.dur = d; h.note.flash = h.ripple.orange = state.locusGlow[h.locus] = state.locusOrange[h.locus] = 1;
+    h.ripple.rings = d >= 6 ? 3 : d >= 3 ? 2 : 1;
+    h.ripple.maxR = 46 + Math.pow(d / 8, 0.78) * 245;
+    h.ripple.maxAge = Math.max(h.ripple.age + 0.85, 0.36 + Math.pow(d / 8, 0.82) * 2.75);
+  }
+  for (let i = state.ripples.length - 1; i >= 0; i--) {
+    const r = state.ripples[i]; r.age += dt; r.phase += dt * (2.6 + r.locus * 0.35);
+    if (!r.holding && r.orange > 0) r.orange = Math.max(0, r.orange - dt / FLASH_S);
+    if (!r.holding && r.age >= r.maxAge) state.ripples.splice(i, 1);
+  }
+  for (let i = 0; i < 9; i++) {
+    state.locusGlow[i] *= Math.exp(-dt * 4.5);
+    if (state.locusOrange[i] > 0) state.locusOrange[i] = Math.max(0, state.locusOrange[i] - dt / FLASH_S);
+  }
+  for (const n of state.future) if (n.flash > 0) n.flash = Math.max(0, n.flash - dt / FLASH_S);
+  for (const n of state.past) if (n.flash > 0 && !n.holding) n.flash = Math.max(0, n.flash - dt / FLASH_S);
+  if (state.motifLock?.flash > 0) state.motifLock.flash = Math.max(0, state.motifLock.flash - dt / FLASH_S);
+  while (state.brush.length && nowMs - state.brush[0].t > 440) state.brush.shift();
+
+  metaEl.textContent = `15 · D KURD · ${BPM} BPM · ${Math.floor(state.playhead / 16) + 1}.${(Math.floor(state.playhead / 4) % 4) + 1}`;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+
+  // 1. WHISPER-QUIET HORIZONTAL METRIC BARLINES (zero vertical lines!)
+  ctx.font = '10px ui-monospace, "SF Mono", Menlo, monospace'; ctx.textBaseline = 'middle';
+  for (let s = Math.floor(stepOfY(TOP_PAD)) - 1; s <= Math.ceil(stepOfY(H - BOT_PAD)) + 1; s++) {
+    if (s % 4 !== 0) continue;
+    const y = Math.round(yOfStep(s)) + 0.5;
+    if (y < TOP_PAD || y > H - BOT_PAD) continue;
+    const isBar = ((s % 16) + 16) % 16 === 0;
+    ctx.strokeStyle = isBar ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.045)';
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0 - 12, y); ctx.lineTo(x0 + fieldW + 12, y); ctx.stroke();
+    if (isBar && s >= 0) {
+      ctx.fillStyle = s <= state.playhead ? 'rgba(255,255,255,0.34)' : 'rgba(255,255,255,0.16)';
+      ctx.textAlign = 'right'; ctx.fillText(String(Math.floor(s / 16) + 1), x0 - 18, y);
+    }
+  }
+
+  // 2. MOTIF ECHO LOCK BRACKET & PAST SELECTION
+  const drawBracket = (sA, sB, sig, lbl) => {
+    const y1 = clamp(yOfStep(Math.min(sA, sB)), TOP_PAD, nowY - 2), y2 = clamp(yOfStep(Math.max(sA, sB)), TOP_PAD, nowY - 2);
+    if (y2 - y1 < 3) return;
+    ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(x0 - 8, y1, fieldW + 16, y2 - y1);
+    const bx = x0 - 12; ctx.strokeStyle = mixInk(sig, 0.78); ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(bx + 5, y1); ctx.lineTo(bx, y1); ctx.lineTo(bx, y2); ctx.lineTo(bx + 5, y2); ctx.stroke();
+    ctx.fillStyle = '#ff5a1f'; ctx.beginPath(); ctx.arc(bx, (y1 + y2) * 0.5, 2.2, 0, Math.PI * 2); ctx.fill();
+    if (lbl) { ctx.fillStyle = 'rgba(255,255,255,0.42)'; ctx.textAlign = 'right'; ctx.fillText(lbl, bx - 6, (y1 + y2) * 0.5); }
+  };
+  if (state.motifLock) drawBracket(state.motifLock.startStep, state.motifLock.endStep, state.motifLock.flash, `${Math.round(state.motifLock.len / 4)}B`);
+  if (g.mode === 'past' && g.moved) drawBracket(g.pastA, g.pastB, 0.85, 'PIN');
+
+  // 3. VERTICAL BEZIER ATTENTION ARCS (Past Constellations -> Future Wave-Seeds)
+  const centerX = x0 + fieldW * 0.5;
+  for (const n of state.future) {
+    if (!n.attn) continue;
+    const yDst = yOfStep(n.step), ySrc = yOfStep(n.attn.srcStep);
+    if (yDst > H - BOT_PAD + 10 || ySrc < TOP_PAD - 60 || ySrc > yDst - 6) continue;
+    const xSrc = locusX(n.attn.srcLocus), xDst = locusX(n.locus), spanY = yDst - ySrc;
+    const isLock = n.attn.kind === 'lock', prox = clamp(1 - (n.step - state.playhead) / FUTURE_STEPS, 0, 1);
+    const alpha = isLock ? 0.18 + prox * 0.28 : n.attn.kind === 'phase' ? 0.08 + prox * 0.14 : 0.05 + prox * 0.09;
+    const bow = (((xSrc + xDst) * 0.5 < centerX) ? -1 : 1) * clamp(spanY * 0.16, 12, 68);
+    ctx.strokeStyle = mixInk(isLock && state.motifLock ? state.motifLock.flash : n.flash * 0.8, alpha);
+    ctx.lineWidth = isLock ? 1.1 : 0.8;
+    ctx.beginPath(); ctx.moveTo(xSrc, Math.max(TOP_PAD, ySrc));
+    ctx.bezierCurveTo(xSrc + bow, ySrc + spanY * 0.34, xDst + bow, yDst - spanY * 0.34, xDst, yDst); ctx.stroke();
+  }
+
+  // 4. DISCRETE CYMATIC RIPPLE DETONATIONS & STANDING WAVE INTERFERENCE AT NOW
+  const fronts = [];
+  for (const r of state.ripples) {
+    const cx = locusX(r.locus), u = clamp(r.age / r.maxAge, 0, 1);
+    const primaryR = 4 + (1 - Math.pow(1 - u, 2.15)) * r.maxR, fade = Math.pow(1 - u, 1.35);
+    for (let k = 0; k < r.rings; k++) {
+      const delay = k * 0.14; if (u < delay) continue;
+      const uk = clamp((u - delay) / (1 - delay), 0, 1);
+      const rad = 4 + (1 - Math.pow(1 - uk, 2.05)) * r.maxR * (1 - k * 0.24);
+      const a = Math.pow(1 - uk, 1.35) * (k === 0 ? 0.72 : k === 1 ? 0.38 : 0.22) * (0.65 + r.vel * 0.35);
+      ctx.strokeStyle = mixInk(r.orange, a); ctx.lineWidth = k === 0 ? (1.35 - uk * 0.55) : 0.85;
+      strokeCymaticRing(cx, nowY, rad, k === 0 ? 2 : k === 1 ? 4 : 6, r.dur >= 4 ? (1 - uk) * (1.2 + k * 0.7) : 0, r.phase * (k + 1) * (k % 2 ? -1 : 1));
+    }
+    if (fade > 0.08) fronts.push({ cx, r: primaryR, fade, orange: r.orange });
+  }
+  for (let i = 0; i < fronts.length; i++) {
+    for (let j = i + 1; j < fronts.length; j++) {
+      const a = fronts[i], b = fronts[j], dx = b.cx - a.cx, d = Math.abs(dx);
+      if (d < 2 || d >= a.r + b.r || d <= Math.abs(a.r - b.r)) continue;
+      const rx = (a.r * a.r - b.r * b.r + d * d) / (2 * d), h2 = a.r * a.r - rx * rx;
+      if (h2 <= 0) continue;
+      const h = Math.sqrt(h2), ix = a.cx + (dx >= 0 ? rx : -rx), alpha = Math.min(a.fade, b.fade) * 0.85, sig = Math.max(a.orange, b.orange);
+      ctx.fillStyle = mixInk(sig, alpha); ctx.strokeStyle = mixInk(sig, alpha * 0.65); ctx.lineWidth = 0.9;
+      for (const sgn of [-1, 1]) {
+        const iy = nowY + sgn * h; if (iy < TOP_PAD || iy > H - BOT_PAD) continue;
+        ctx.beginPath(); ctx.arc(ix, iy, 1.8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ix, iy, 5.2, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+  }
+
+  // 5. PAST: FOSSILIZED IMPACT CONSTELLATIONS & FADING VERTICAL RESONANCE WAKES
+  for (const n of state.past) {
+    const yStart = yOfStep(n.step), yEnd = yOfStep(n.step + n.dur);
+    if (yEnd < TOP_PAD - 8 || yStart > H - BOT_PAD) continue;
+    const sx = locusX(n.locus), inLock = state.motifLock && n.step >= state.motifLock.startStep && n.step < state.motifLock.endStep;
+    const a = inLock ? Math.max(0.88, clamp(1 - (state.playhead - n.step) / 42, 0.22, 0.96)) : clamp(1 - (state.playhead - n.step) / 42, 0.22, 0.96);
+    const wt = clamp(yStart, TOP_PAD, H - BOT_PAD), wb = clamp(yEnd, TOP_PAD, H - BOT_PAD);
+    if (wb > wt + 2) {
+      const grad = ctx.createLinearGradient(0, wt, 0, wb);
+      grad.addColorStop(0, mixInk(n.flash, a * 0.72)); grad.addColorStop(1, mixInk(n.flash, 0.04));
+      ctx.strokeStyle = grad; ctx.lineWidth = n.dur >= 6 ? 1.5 : 1.05;
+      ctx.beginPath(); ctx.moveTo(sx, wt); ctx.lineTo(sx, wb); ctx.stroke();
+      if (n.dur >= 3) {
+        const ticks = n.dur >= 6 ? 3 : 2;
+        for (let k = 1; k <= ticks; k++) {
+          const ty = lerp(wt, wb, k / (ticks + 1)), hw = (1 - k / (ticks + 1.2)) * (2.6 + n.dur * 0.45);
+          ctx.strokeStyle = mixInk(n.flash, a * (0.48 - k * 0.1)); ctx.lineWidth = 0.85;
+          ctx.beginPath(); ctx.moveTo(sx - hw, ty); ctx.lineTo(sx + hw, ty); ctx.stroke();
+        }
+      }
+    }
+    if (yStart >= TOP_PAD && yStart <= H - BOT_PAD) {
+      const r0 = 2.3 + Math.sqrt(n.dur) * 0.95;
+      ctx.fillStyle = mixInk(n.flash, a); ctx.beginPath(); ctx.arc(sx, yStart, r0, 0, Math.PI * 2); ctx.fill();
+      if (n.dur >= 4 || inLock) { ctx.strokeStyle = mixInk(n.flash, a * (inLock ? 0.72 : 0.44)); ctx.lineWidth = 0.9; ctx.beginPath(); ctx.arc(sx, yStart, r0 + 3.4, 0, Math.PI * 2); ctx.stroke(); }
+      if (n.dur >= 6) { ctx.strokeStyle = mixInk(n.flash, a * 0.24); ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(sx, yStart, r0 + 6.8, 0, Math.PI * 2); ctx.stroke(); }
+    }
+  }
+
+  // 6. FUTURE: CONVERGING HOLLOW WAVE-SEEDS + VERTICAL PHASE-STEMS
+  for (const n of state.future) {
+    const yStart = yOfStep(n.step), yEnd = yOfStep(n.step + n.dur);
+    if (yStart > H - BOT_PAD + 8 || yEnd < nowY) continue;
+    const sx = locusX(n.locus), prox = clamp(1 - (n.step - state.playhead) / FUTURE_STEPS, 0, 1);
+    const hov = g.hoverNote?.id === n.id, seedR = 3.2 + Math.sqrt(n.dur) * 1.95, sa = hov ? 0.96 : 0.38 + prox * 0.54;
+    const st = Math.max(nowY + 2, yStart + seedR), sb = Math.min(H - BOT_PAD, yEnd);
+    if (sb > st + 1) {
+      ctx.strokeStyle = mixInk(n.flash, sa * 0.52); ctx.lineWidth = hov ? 1.3 : 0.95;
+      ctx.beginPath(); ctx.moveTo(sx, st); ctx.lineTo(sx, sb); ctx.moveTo(sx - 3, sb); ctx.lineTo(sx + 3, sb); ctx.stroke();
+    }
+    if (yStart >= nowY + 1 && yStart <= H - BOT_PAD) {
+      if (prox > 0.72) {
+        const pre = (prox - 0.72) / 0.28;
+        ctx.strokeStyle = mixInk(n.flash, pre * 0.32); ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.arc(sx, yStart, seedR + (1 - pre) * 11, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.fillStyle = mixInk(n.flash, hov ? 0.22 : 0.04 + n.flash * 0.24);
+      ctx.strokeStyle = mixInk(n.flash, sa); ctx.lineWidth = hov || n.flash > 0.1 ? 1.45 : 1.1;
+      ctx.beginPath(); ctx.arc(sx, yStart, seedR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (n.dur >= 6) { ctx.strokeStyle = mixInk(n.flash, sa * 0.52); ctx.lineWidth = 0.85; ctx.beginPath(); ctx.arc(sx, yStart, seedR * 0.50, 0, Math.PI * 2); ctx.stroke(); }
+    }
+  }
+
+  // 7. CALLIGRAPHIC #ff5a1f SCULPT WAVE TRACE
+  if (state.brush.length > 1) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 1; i < state.brush.length; i++) {
+      const a = state.brush[i - 1], b = state.brush[i]; if (b.t - a.t > 120) continue;
+      const life = clamp(1 - (nowMs - b.t) / 420, 0, 1);
+      ctx.strokeStyle = `rgba(255,90,31,${(life * 0.88).toFixed(3)})`; ctx.lineWidth = b.w * (0.45 + 0.55 * life);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+  }
+
+  // 8. HORIZONTAL NOW LINE + 9 DISCRETE PITCH LOCI TICK NOTCHES (D3..A4)
+  ctx.strokeStyle = 'rgba(255,255,255,0.62)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x0 - 16, nowY + 0.5); ctx.lineTo(x0 + fieldW + 16, nowY + 0.5); ctx.stroke();
+
+  for (let i = 0; i < 9; i++) {
+    const sx = locusX(i), glow = state.locusGlow[i], sig = state.locusOrange[i], hov = g.hoverLocus === i;
+    const isRoot = i === 0 || i === 4, th = (isRoot ? 6.5 : 4.5) + glow * 3.5;
+    ctx.strokeStyle = mixInk(sig, hov ? 0.96 : 0.42 + glow * 0.58); ctx.lineWidth = glow > 0.15 || hov ? 1.5 : 1;
+    ctx.beginPath(); ctx.moveTo(sx, nowY - th); ctx.lineTo(sx, nowY + th); ctx.stroke();
+    if (glow > 0.08 || hov) { ctx.fillStyle = mixInk(sig, clamp(glow + (hov ? 0.45 : 0), 0, 1)); ctx.beginPath(); ctx.arc(sx, nowY, 2 + glow * 2.8, 0, Math.PI * 2); ctx.fill(); }
+    ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace';
+    ctx.fillStyle = mixInk(sig, hov || glow > 0.18 ? 0.92 : isRoot ? 0.42 : 0.26);
+    ctx.textAlign = 'center'; ctx.fillText(NOTES[i], sx, nowY - th - 7);
+  }
+
+  ctx.font = '10px ui-monospace, "SF Mono", Menlo, monospace'; ctx.textAlign = 'right';
+  ctx.fillStyle = (g.mode === 'scrub' || g.hoverZone === 'scrub') ? '#ff5a1f' : 'rgba(255,255,255,0.62)';
+  ctx.fillText('NOW ▸', x0 - 18, nowY);
+  if (g.mode === 'scrub') {
+    const sy = clamp(yOfStep(g.scrubStep), TOP_PAD, nowY);
+    ctx.strokeStyle = '#ff5a1f'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(x0 - 16, sy); ctx.lineTo(x0 + fieldW + 16, sy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#ff5a1f'; ctx.fillText(`-${Math.round(state.playhead - g.scrubStep)}`, x0 - 18, sy);
+  }
+  if (W >= 580) {
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillText('PAST ↑', x0 + fieldW + 22, TOP_PAD + 14);
+    ctx.fillText('↓ FUTURE', x0 + fieldW + 22, H - BOT_PAD - 14);
+  }
+  requestAnimationFrame(drawFrame);
+}
+
+seedOpeningScore();
+requestAnimationFrame(drawFrame);
+</script>
+</body>
+</html>
