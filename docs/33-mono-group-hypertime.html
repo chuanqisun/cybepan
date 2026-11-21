@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>33 — Monochrome Multi-Group Hypertime (Silent Past Editing)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff;
+    font: 11px/1 ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; user-select: none; touch-action: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  header { position: fixed; top: 10px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: none; z-index: 4; }
+  .row { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .hint { color: rgba(255,255,255,0.42); letter-spacing: 0.04em; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+  .hint b { color: rgba(255,255,255,0.72); font-weight: 500; }
+  #hudStat { color: rgba(255,255,255,0.42); font-size: 10px; letter-spacing: 0.08em; padding: 3px 6px; border-radius: 2px; border: 1px solid transparent; transition: all 140ms; }
+  #hudStat.hot { background: #fff; color: #000; border-color: #fff; font-weight: 600; }
+  button {
+    pointer-events: auto; appearance: none; background: #000; color: rgba(255,255,255,0.72);
+    border: 1px solid rgba(255,255,255,0.20); font: inherit; font-size: 10px; letter-spacing: 0.1em;
+    height: 22px; padding: 0 9px; border-radius: 2px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: background 140ms, border-color 140ms, color 140ms;
+  }
+  button:hover { border-color: rgba(255,255,255,0.72); color: #fff; }
+  button.on { background: #fff; border-color: #fff; color: #000; font-weight: 600; }
+  button .dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.42); }
+  button.on .dot { background: #000; }
+  @media (max-width: 820px) { .hint { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header>
+  <div class="row"><span class="hint"><b>33</b> · <b>SPACE</b> play · <b>1-9</b> strike · <b>WASD</b> steer · <b>DRAG</b> marquee · <b>SHIFT</b> +group · <b>DRAG GROUP</b> move · <b>R-CLICK</b> erase · <b>Z</b> undo · <b>ESC</b> clear</span></div>
+  <div class="row"><span id="hudStat">84 BPM</span><button id="playBtn" type="button"><span class="dot"></span><span id="playLbl">PLAY</span></button></div>
+</header>
+<script type="module">
+// 33 — Strict 100% Monochrome Multi-Group Hypertime + Silent Past Editing (D Kurd)
+const NOTES = [
+  ['D3','^1',146.83], ['A3','^5',220.00], ['Bb3','^b6',233.08],
+  ['C4','^b7',261.63], ['D4','^1',293.66], ['E4','^2',329.63],
+  ['F4','^b3',349.23], ['G4','^4',392.00], ['A4','^5',440.00],
+].map(([name, deg, freq]) => ({ name, deg, freq }));
+const BPM = 84, TATUM = 60 / BPM / 4, LOOKAHEAD = 0.095, FLASH_MS = 440, QUANT_DURS = [1, 2, 3, 4, 6, 8];
+const METRIC_W = [1.0, .14, .44, .18, .74, .14, .48, .22, .88, .14, .46, .18, .70, .16, .50, .24];
+const CELLS = {
+  low:  [[8], [6,-2], [4,-4], [-2,6], [4,4], [6,2], [-4,4]],
+  mid:  [[3,3,2], [4,2,2], [2,2,4], [3,2,3], [2,4,2], [4,-2,2], [6,1,1]],
+  high: [[3,3,1,1], [2,1,1,2,2], [1,1,2,3,1], [2,2,1,1,2], [3,2,1,2], [1,1,2,2,2]],
+};
+const FIELD_I = [1.00, .80, .18, .22, .94, .26, .78, .22, .44], FIELD_BVI = [.32, .36, 1.00, .42, .78, .40, .88, .38, .66], FIELD_BVII = [.16, .26, .50, 1.00, .44, .84, .46, .92, .86];
+const SYMP_PAIRS = [[0,4],[1,8],[0,1],[0,8],[4,1],[4,8],[2,6],[3,7],[5,1],[5,8]];
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const snapDur = (raw) => QUANT_DURS.reduce((b, d) => Math.abs(d - raw) < Math.abs(b - raw) ? d : b, 2);
+const ink = (a) => `rgba(255,255,255,${clamp(a, 0, 1).toFixed(3)})`;
+const lum = (heat, baseA) => ink(clamp(lerp(baseA, Math.max(baseA, 0.98), clamp(heat, 0, 1)), 0, 1));
+const hash01 = (a, b, c = 0) => { let x = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2147483647)) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
+const sympStrength = (a, b) => {
+  if (a === b) return 1.0;
+  if ((a === 0 && b === 4) || (a === 4 && b === 0) || (a === 1 && b === 8) || (a === 8 && b === 1)) return 0.85;
+  for (const [u, v] of SYMP_PAIRS) if ((a === u && b === v) || (a === v && b === u)) return 0.62;
+  return 0;
+};
+
+// --- Synthetic D Kurd Handpan Voice (Transport, NOW Strike & Future Preview ONLY; ZERO Past Sound!) ---
+let actx = null, dryBus = null, revSend = null, uiBus = null, noiseBuf = null, lastClickMs = 0;
+function ensureAudio() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = actx.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 3.2; comp.release.value = 0.16; comp.connect(actx.destination);
+    const master = actx.createGain(); master.gain.value = 0.86; master.connect(comp); dryBus = actx.createGain(); dryBus.connect(master);
+    const irLen = Math.floor(actx.sampleRate * 1.75), ir = actx.createBuffer(2, irLen, actx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0; for (let i = 0; i < irLen; i++) { lp = lp * 0.64 + (Math.random() * 2 - 1) * 0.36; d[i] = lp * Math.pow(1 - i / irLen, 3.0) * 0.52; } }
+    const conv = actx.createConvolver(); conv.buffer = ir; revSend = actx.createGain(); revSend.gain.value = 0.28; revSend.connect(conv); conv.connect(master);
+    uiBus = actx.createGain(); uiBus.gain.value = 0.22; uiBus.connect(comp);
+    noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.08), actx.sampleRate);
+    const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  }
+  if (actx.state === 'suspended') actx.resume();
+}
+
+function playVoice(noteIdx, when = null, vel = 0.8, durSteps = 4, preview = false) {
+  ensureAudio();
+  const t0 = Math.max(actx.currentTime + 0.001, when == null ? actx.currentTime : when);
+  const f0 = NOTES[noteIdx].freq, v = clamp(vel * (preview ? 0.38 : 1.0), 0.08, 1.0);
+  const tau = clamp(0.14 + durSteps * (preview ? 0.11 : 0.26), 0.18, preview ? 0.60 : 2.4) * (noteIdx === 0 ? 1.16 : 1.0);
+  const out = actx.createGain(), pan = actx.createStereoPanner();
+  out.gain.setValueAtTime(1, t0); pan.pan.setValueAtTime((noteIdx - 4) * 0.12, t0);
+  out.connect(pan); pan.connect(dryBus); if (!preview) pan.connect(revSend);
+  const fg = actx.createGain(); fg.gain.setValueAtTime(0.0001, t0); fg.gain.linearRampToValueAtTime(0.30 * v, t0 + 0.0045); fg.gain.exponentialRampToValueAtTime(0.0001, t0 + tau); fg.connect(out);
+  for (const [df, w] of [[0, 0.72], [0.7, 0.28]]) { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(f0 + df, t0); g.gain.value = w; o.connect(g); g.connect(fg); o.start(t0); o.stop(t0 + tau + 0.04); }
+  const bloom = 0.55 + 0.45 * clamp(durSteps / 5, 0, 1);
+  for (const [ratio, del, lvl, mul] of [[2.001, 0.026, 0.19, 0.66], [2.998, 0.042, 0.06, 0.40]]) {
+    const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(f0 * ratio, t0);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(lvl * v * bloom, t0 + del); g.gain.exponentialRampToValueAtTime(0.0001, t0 + tau * mul);
+    o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + tau * mul + 0.04);
+  }
+  const ns = actx.createBufferSource(), bp = actx.createBiquadFilter(), ng = actx.createGain();
+  ns.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.setValueAtTime(clamp(f0 * 3.1, 620, 1850), t0); bp.Q.value = 2.1;
+  ng.gain.setValueAtTime(0.0001, t0); ng.gain.linearRampToValueAtTime(0.14 * v, t0 + 0.002); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.024);
+  ns.connect(bp); bp.connect(ng); ng.connect(out); ns.start(t0); ns.stop(t0 + 0.032);
+  return { damp() { const now = actx.currentTime; out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(Math.max(0.001, out.gain.value), now); out.gain.exponentialRampToValueAtTime(0.0001, now + 0.22); } };
+}
+
+function playClick(kind, panVal = 0) {
+  const nowMs = performance.now(); if (kind === 'drag-snap' && nowMs - lastClickMs < 24) return;
+  lastClickMs = nowMs; ensureAudio();
+  const t0 = actx.currentTime + 0.001, p = actx.createStereoPanner(); p.pan.value = clamp(panVal, -0.8, 0.8); p.connect(uiBus);
+  const ping = (f1, f2, dur, amp, type = 'triangle', del = 0) => {
+    const o = actx.createOscillator(), g = actx.createGain(); o.type = type; o.frequency.setValueAtTime(f1, t0 + del); o.frequency.exponentialRampToValueAtTime(f2, t0 + del + dur);
+    g.gain.setValueAtTime(0.0001, t0 + del); g.gain.linearRampToValueAtTime(amp, t0 + del + 0.0015); g.gain.exponentialRampToValueAtTime(0.0001, t0 + del + dur);
+    o.connect(g); g.connect(p); o.start(t0 + del); o.stop(t0 + del + dur + 0.006);
+  };
+  if (kind === 'plant') { ping(1180, 1960, 0.016, 0.20, 'triangle'); ping(2800, 2050, 0.010, 0.09, 'sine', 0.004); }
+  else if (kind === 'drag-snap') ping(2420, 1340, 0.009, 0.14, 'triangle');
+  else if (kind === 'erase') ping(680, 210, 0.020, 0.20, 'sine');
+}
+
+// --- Hyper-Timescale Musical State, Multi-Group Selection & Causal Wavefronts ---
+const state = {
+  tension: 0, motion: 0, steerHotPerf: -9999, lastSteerDetent: '', lastWasdRecomp: 0,
+  playing: false, playheadStep: 16, anchorStep: 16, anchorAudioTime: 0, nextSchedStep: 16, nextId: 1, nextGroupId: 1, seed: 29,
+  pastNotes: [], futureNotes: [], mutedSteps: new Set(), groups: [], pinnedMotif: [],
+  strikeBias: { pitch: -1, perf: -9999 }, activeHolds: new Map(), undoStack: [],
+};
+const loci = NOTES.map(() => ({ glow: 0, heat: 0, damp: 1.8 })), blooms = [], wavefronts = [], fxPings = [], keysDown = new Set();
+const getCurrentStep = () => (!state.playing || !actx) ? state.playheadStep : state.anchorStep + Math.max(0, (actx.currentTime - state.anchorAudioTime) / TATUM);
+const isShiftHeld = () => keysDown.has('ShiftLeft') || keysDown.has('ShiftRight');
+const makePast = (step, noteIdx, dur, vel, extra = {}) => ({
+  id: state.nextId++, step, dur, noteIdx, vel, source: 'gen', selected: false, edited: false,
+  firedVisual: true, holding: false, sympBoost: 0, sympPerf: -9999, editPerf: -9999, flashPerf: -9999, attn: null, ...extra
+});
+const isNoteSelected = (id) => state.groups.some(g => g.noteIds.has(id));
+const selectedNoteCount = () => state.groups.reduce((s, g) => s + g.noteIds.size, 0);
+function allSelectedItems() {
+  const sel = new Set(); for (const g of state.groups) for (const id of g.noteIds) sel.add(id);
+  return [...state.pastNotes.filter(n => sel.has(n.id)).map(note => ({ note, isFuture: false })), ...state.futureNotes.filter(n => sel.has(n.id)).map(note => ({ note, isFuture: true }))];
+}
+function pruneGroups() {
+  const live = new Set([...state.pastNotes.map(n => n.id), ...state.futureNotes.map(n => n.id)]);
+  state.groups = state.groups.filter(g => { for (const id of [...g.noteIds]) if (!live.has(id)) g.noteIds.delete(id); return g.noteIds.size > 0; });
+  for (const n of state.pastNotes) n.selected = isNoteSelected(n.id);
+  for (const n of state.futureNotes) n.selected = isNoteSelected(n.id);
+}
+function refreshPinnedMotif() {
+  const byId = new Map(state.pastNotes.map(n => [n.id, n])); state.pinnedMotif = [];
+  for (const g of state.groups) for (const id of g.noteIds) { const n = byId.get(id); if (n) state.pinnedMotif.push({ id: n.id, rel: ((Math.round(n.step) % 16) + 16) % 16, noteIdx: n.noteIdx, dur: n.dur, step: n.step }); }
+}
+function clearAllGroups() { state.groups = []; for (const n of state.pastNotes) n.selected = false; for (const n of state.futureNotes) n.selected = false; refreshPinnedMotif(); }
+function pushUndo() {
+  state.undoStack.push({ past: state.pastNotes.map(n => ({ ...n, attn: n.attn ? { ...n.attn } : null })), future: state.futureNotes.map(n => ({ ...n, attn: n.attn ? { ...n.attn } : null })), muted: new Set(state.mutedSteps), groups: state.groups.map(g => ({ id: g.id, noteIds: [...g.noteIds] })), motif: state.pinnedMotif.map(m => ({ ...m })) });
+  if (state.undoStack.length > 32) state.undoStack.shift();
+}
+function undoLast() {
+  const snap = state.undoStack.pop(); if (!snap) return;
+  const cur = getCurrentStep();
+  state.pastNotes = snap.past.filter(n => n.step < cur + 1); state.futureNotes = snap.future.filter(n => n.step >= Math.max(state.nextSchedStep, Math.ceil(cur)));
+  state.mutedSteps = snap.muted; state.groups = snap.groups.map(g => ({ id: g.id, noteIds: new Set(g.noteIds) })); state.pinnedMotif = snap.motif;
+  pruneGroups(); refreshPinnedMotif(); spawnFxPing((geo.fieldL + geo.fieldR) * 0.5, geo.nowY - 38, 'UNDO ↺'); recomputeFuture(true, { kind: 'undo' }); updateHud();
+}
+function spawnWavefront(srcLocus, srcStep, dstLocus, dstStep, kind = 'causal') {
+  const bow = ((srcLocus + dstLocus) < 8 ? -1 : 1) * clamp(18 + Math.abs(dstStep - srcStep) * 1.15, 18, 66);
+  wavefronts.push({ srcLocus, srcStep, dstLocus, dstStep, bow, kind, bornPerf: performance.now(), lifeMs: kind === 'up' ? 360 : 420 });
+  if (wavefronts.length > 56) wavefronts.shift();
+}
+const spawnFxPing = (x, y, label) => { fxPings.push({ x, y, label, bornPerf: performance.now(), lifeMs: 440 }); if (fxPings.length > 14) fxPings.shift(); };
+function triggerResonator(idx, vel, durSteps, hot = false) {
+  const loc = loci[idx]; loc.glow = clamp(Math.max(loc.glow * 0.4, 0.48 + vel * 0.52), 0, 1); loc.damp = clamp(3.6 / (0.65 + durSteps * 0.48), 0.65, 3.6);
+  if (hot) loc.heat = 1.0;
+  blooms.push({ idx, vel, dur: durSteps, bornPerf: performance.now(), lifeMs: clamp(340 + durSteps * 280, 400, 2600) * (idx === 0 ? 1.15 : 1), hot });
+  if (blooms.length > 26) blooms.shift();
+}
+function seedOpeningScore() {
+  state.pastNotes = [[0,0,4,0.88],[4,1,2,0.66],[6,2,2,0.74],[8,4,3,0.80],[11,6,3,0.72],[14,5,2,0.62]].map(([s, l, d, v]) => makePast(s, l, d, v));
+  state.playheadStep = state.anchorStep = state.nextSchedStep = 16; state.futureNotes = []; state.groups = []; state.pinnedMotif = []; recomputeFuture(false);
+}
+
+// --- Music-Theory Variable-Duration & Closed-Loop Attention Solver ---
+function pickCell(len, barIdx, subIdx, isCadence) {
+  if (len === 8) {
+    const m = state.motion, t = state.tension, pool = [];
+    const wLow = clamp(0.66 - m * 0.96 + (isCadence && t < 0.25 ? 0.34 : 0), 0.04, 1.5), wMid = clamp(1.06 - Math.abs(m) * 0.74, 0.12, 1.2), wHigh = clamp(0.54 + m * 0.96 - (isCadence && t < -0.2 ? 0.24 : 0), 0.03, 1.5);
+    for (const c of CELLS.low) pool.push([c, wLow]); for (const c of CELLS.mid) pool.push([c, wMid]); for (const c of CELLS.high) pool.push([c, wHigh]);
+    let r = hash01(barIdx * 13 + subIdx, state.seed, 101) * pool.reduce((s, x) => s + x[1], 0);
+    for (const [cell, w] of pool) { r -= w; if (r <= 0) return cell; }
+    return CELLS.mid[0];
+  }
+  const out = [];
+  for (let rem = len, k = 0; rem > 0; k++) {
+    const avail = QUANT_DURS.filter(d => d <= rem), pref = state.motion < -0.25 ? avail[avail.length - 1] : state.motion > 0.35 ? avail[Math.min(1, avail.length - 1)] : avail[Math.floor(avail.length * 0.55)];
+    const u = hash01(barIdx * 31 + subIdx, rem * 7 + k, 202);
+    if (rem >= 2 && k > 0 && u < (0.26 - state.motion * 0.14)) { const rLen = rem >= 4 && state.motion < -0.2 ? 4 : 2; out.push(-rLen); rem -= rLen; }
+    else { const pick = avail[Math.min(avail.length - 1, Math.floor(u * avail.length * 0.38 + avail.indexOf(pref) * 0.66))]; out.push(pick); rem -= pick; }
+  }
+  return out;
+}
+
+function choosePitch(step, dur, barIdx, prevPitch, prevInt, echo, anchor, nowPerf) {
+  const pos = ((step % 16) + 16) % 16, T = state.tension;
+  if (anchor) {
+    const shift = Math.abs(T) > 0.82 ? Math.sign(T) : 0, p = anchor.kind === 'selected' ? clamp(anchor.noteIdx + (anchor.noteIdx === 0 ? 0 : shift), 0, 8) : anchor.noteIdx;
+    return { noteIdx: p, attn: { pastId: anchor.id, srcStep: anchor.step, srcLocus: anchor.noteIdx, weight: anchor.weight, kind: anchor.kind } };
+  }
+  const strikeW = state.strikeBias.pitch >= 0 ? clamp(1 - (nowPerf - state.strikeBias.perf) / 5500, 0, 1) : 0;
+  if (echo && hash01(step, barIdx, 404) < clamp(0.46 * echo.lagW + (echo.edited ? 0.38 : 0) + (echo.sympBoost || 0) * 0.36, 0, 0.92)) {
+    return { noteIdx: echo.noteIdx, attn: { pastId: echo.id, srcStep: echo.step, srcLocus: echo.noteIdx, weight: clamp(0.45 + (echo.sympBoost || 0) * 0.45, 0.3, 0.92), kind: echo.sympBoost > 0.2 ? 'symp' : 'echo' } };
+  }
+  const odd = (barIdx & 1) === 1, t01 = (T + 1) * 0.5, wI = clamp(1 - t01 * (odd ? 1.05 : 0.78), 0.06, 1), wBVI = clamp(Math.sin(t01 * Math.PI) * 0.85 + (odd ? 0.28 : 0.15) * t01, 0.08, 1), wBVII = clamp(Math.pow(t01, 1.35) * (odd ? 1.15 : 0.72), 0.04, 1.1), weights = new Float32Array(9);
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    let w = (FIELD_I[i] * wI + FIELD_BVI[i] * wBVI + FIELD_BVII[i] * wBVII) * (0.64 + 0.76 * (1 - Math.abs(i / 8 - clamp(0.24 + t01 * 0.54, 0.12, 0.84))));
+    if (pos === 0 && dur >= 4) { if (T <= 0.15 && (i === 0 || i === 4)) w *= 2.2 - T; if (T > 0.25 && (i === 2 || i === 3 || i === 5)) w *= 1.65; }
+    if (prevPitch >= 0) {
+      const d = i - prevPitch, ad = Math.abs(d);
+      w *= dur === 1 ? (ad === 1 ? 2.5 : ad === 2 ? 1.35 : 0.36) : (ad === 0 ? 0.38 : ad <= 2 ? 1.75 : ad <= 4 ? 0.92 : 0.42);
+      if (Math.abs(prevInt) >= 3 && Math.sign(d) === -Math.sign(prevInt) && ad > 0 && ad <= 2) w *= 2.1;
+      if (T < -0.15 && d < 0) w *= 1 + (-T) * 0.48; if (T > 0.15 && d > 0) w *= 1 + T * 0.48;
+    }
+    if (strikeW > 0.05) w *= 1 + strikeW * (sympStrength(i, state.strikeBias.pitch) * 1.45 + Math.max(0, 1 - Math.abs(i - state.strikeBias.pitch) * 0.25) * 0.55);
+    if (echo && echo.noteIdx === i) w *= 1.45;
+    weights[i] = Math.max(0.001, w); sum += weights[i];
+  }
+  let r = hash01(step * 17 + dur, barIdx * 11 + prevPitch + 2, 505) * sum;
+  for (let i = 0; i < 9; i++) { r -= weights[i]; if (r <= 0) return { noteIdx: i, attn: null }; }
+  return { noteIdx: 4, attn: null };
+}
+
+function findPastAt(history, targetStep) {
+  let best = null, bestDist = 1.6;
+  for (let i = history.length - 1; i >= 0; i--) { const d = Math.abs(history[i].step - targetStep); if (d < bestDist) { best = history[i]; bestDist = d; if (d < 0.3) break; } }
+  return best;
+}
+
+function buildPastAnchors(curStep) {
+  const byRel = new Map(), put = (rel, item) => { const p = byRel.get(rel); if (!p || item.priority > p.priority || (item.priority === p.priority && item.step > p.step)) byRel.set(rel, item); };
+  for (const m of state.pinnedMotif) put(m.rel, { ...m, weight: 0.98, kind: 'selected', priority: 3 });
+  for (const p of state.pastNotes) {
+    const age = curStep - p.step; if (age < 0 || age > 34) continue;
+    const rel = ((Math.round(p.step) % 16) + 16) % 16;
+    if (p.selected) put(rel, { id: p.id, rel, noteIdx: p.noteIdx, dur: p.dur, step: p.step, weight: 0.98, kind: 'selected', priority: 3 });
+    else if (p.edited) put(rel, { id: p.id, rel, noteIdx: p.noteIdx, dur: p.dur, step: p.step, weight: 0.90, kind: 'edited', priority: 2 });
+    else if (p.sympBoost > 0.25) put(rel, { id: p.id, rel, noteIdx: p.noteIdx, dur: p.dur, step: p.step, weight: 0.78, kind: 'symp', priority: 1 });
+  }
+  return [...byRel.values()].sort((a, b) => a.rel - b.rel);
+}
+
+function recomputeFuture(flashChanges = true, cause = null) {
+  const nowPerf = performance.now(), curStep = getCurrentStep(), minStep = Math.max(state.nextSchedStep, Math.ceil(curStep - 0.001)), curBar = Math.floor(minStep / 16);
+  for (const s of [...state.mutedSteps]) if (s < curStep - 2) state.mutedSteps.delete(s);
+  const prevByStep = new Map(state.futureNotes.map(n => [n.step, n])), keptFut = state.futureNotes.filter(n => (n.userLocked || isNoteSelected(n.id)) && n.step >= minStep), keptByStep = new Set(keptFut.map(n => n.step));
+  const anchors = buildPastAnchors(curStep), hist = state.pastNotes.slice().sort((a, b) => a.step - b.step);
+  let prevPitch = hist.length ? hist[hist.length - 1].noteIdx : 0, prevInt = hist.length >= 2 ? hist[hist.length - 1].noteIdx - hist[hist.length - 2].noteIdx : 0;
+  const nextFuture = [], changed = [];
+  for (let b = curBar; b <= curBar + 2; b++) {
+    const barStart = b * 16, slots = [];
+    const pushFill = (start, len, sub, cad) => { let p = start; for (const v of pickCell(len, b, sub, cad)) { if (v > 0) slots.push({ pos: p, dur: v, anchor: null }); p += Math.abs(v); } };
+    if (anchors.length) {
+      let cursor = 0;
+      for (let k = 0; k < anchors.length; k++) {
+        const a = anchors[k]; if (a.rel > cursor) pushFill(cursor, a.rel - cursor, k, false);
+        const dur = snapDur(Math.min(a.dur, Math.max(1, (k + 1 < anchors.length ? anchors[k + 1].rel : 16) - a.rel)));
+        slots.push({ pos: a.rel, dur, anchor: a }); cursor = a.rel + dur;
+      }
+      if (cursor < 16) pushFill(cursor, 16 - cursor, 9, (b & 1) === 1);
+    } else { pushFill(0, 8, 0, false); pushFill(8, 8, 1, (b & 1) === 1); }
+    const barKept = keptFut.filter(n => n.step >= barStart && n.step < barStart + 16).sort((a, z) => a.step - z.step), barEvents = [...barKept];
+    for (const sl of slots) {
+      const step = barStart + sl.pos;
+      if (step < minStep || state.mutedSteps.has(step) || keptByStep.has(step) || barKept.some(ln => Math.abs(ln.step - step) < 1)) continue;
+      const l16 = findPastAt(hist, step - 16), l32 = findPastAt(hist, step - 32), echo = l16 ? { ...l16, lagW: 1.0 } : (l32 ? { ...l32, lagW: 0.78 } : null);
+      const { noteIdx, attn } = choosePitch(step, sl.dur, b, prevPitch, prevInt, echo, sl.anchor, nowPerf);
+      const vel = clamp(0.48 + METRIC_W[sl.pos] * 0.34 + (sl.dur >= 4 ? 0.10 : sl.dur === 1 ? -0.12 : 0) + state.tension * 0.06, 0.30, 0.96);
+      const old = prevByStep.get(step), same = old && !old.userLocked && old.noteIdx === noteIdx && old.dur === sl.dur;
+      const ev = { id: old && !old.userLocked ? old.id : state.nextId++, step, dur: sl.dur, noteIdx, vel, source: 'gen', userLocked: false, selected: false, attn, flashPerf: same ? old.flashPerf : (flashChanges && prevByStep.size ? nowPerf : -9999) };
+      barEvents.push(ev); if (!same && flashChanges) changed.push(ev);
+    }
+    barEvents.sort((a, z) => a.step - z.step || a.noteIdx - z.noteIdx);
+    for (const ev of barEvents) { if (prevPitch >= 0) prevInt = ev.noteIdx - prevPitch; prevPitch = ev.noteIdx; nextFuture.push(ev); hist.push(ev); }
+  }
+  state.futureNotes = nextFuture.sort((a, b) => a.step - b.step || a.noteIdx - b.noteIdx); pruneGroups();
+  if (!cause) return;
+  if (cause.kind === 'strike') {
+    const list = changed.length ? changed.slice(0, 5) : state.futureNotes.filter(f => !f.userLocked && f.step - curStep <= 18).slice(0, 3);
+    for (const ev of list) { ev.flashPerf = nowPerf; spawnWavefront(cause.locus, curStep, ev.noteIdx, ev.step, 'down'); }
+  } else if (cause.kind === 'past-edit' && cause.note) {
+    const targets = state.futureNotes.filter(f => !f.userLocked && f.attn && f.attn.pastId === cause.note.id).slice(0, 4);
+    for (const ev of (targets.length ? targets : changed.slice(0, 3))) { ev.flashPerf = nowPerf; spawnWavefront(cause.note.noteIdx, cause.note.step, ev.noteIdx, ev.step, 'butterfly'); }
+  } else if (cause.kind === 'group-move' || cause.kind === 'marquee') {
+    const targets = state.futureNotes.filter(f => !f.userLocked && f.attn && f.attn.kind === 'selected').slice(0, 10);
+    for (const ev of targets) { ev.flashPerf = nowPerf; spawnWavefront(ev.attn.srcLocus, ev.attn.srcStep, ev.noteIdx, ev.step, cause.kind); }
+    if (!targets.length && cause.movedPast && cause.movedPast.length) for (const ev of changed.slice(0, 4)) { ev.flashPerf = nowPerf; spawnWavefront(cause.movedPast[0].noteIdx, cause.movedPast[0].step, ev.noteIdx, ev.step, 'group'); }
+  }
+}
+
+// --- Scheduler, Transport & Direct NOW Performance ---
+let schedTimer = null;
+function schedulerTick() {
+  if (!state.playing || !actx) return;
+  const horizon = state.anchorStep + (actx.currentTime + LOOKAHEAD - state.anchorAudioTime) / TATUM;
+  let maxFired = state.nextSchedStep - 1;
+  while (state.futureNotes.length && state.futureNotes[0].step <= horizon) {
+    const ev = state.futureNotes.shift(); if (ev.step < state.nextSchedStep) continue;
+    playVoice(ev.noteIdx, state.anchorAudioTime + (ev.step - state.anchorStep) * TATUM, ev.vel, ev.dur);
+    const id = ev.id || state.nextId++;
+    state.pastNotes.push(makePast(ev.step, ev.noteIdx, ev.dur, ev.vel, { id, source: ev.userLocked ? 'user' : 'gen', selected: isNoteSelected(id), edited: ev.userLocked, firedVisual: false, flashPerf: ev.flashPerf, attn: ev.attn }));
+    maxFired = Math.max(maxFired, ev.step);
+  }
+  if (maxFired >= state.nextSchedStep) state.nextSchedStep = maxFired + 1;
+  const cur = getCurrentStep(), maxFut = state.futureNotes.length ? state.futureNotes[state.futureNotes.length - 1].step : -1;
+  if (maxFut < (Math.floor(cur / 16) + 2) * 16 + 10) recomputeFuture(false);
+  if (state.pastNotes.length > 160) { state.pastNotes = state.pastNotes.filter(n => isNoteSelected(n.id) || cur - n.step < 52); pruneGroups(); refreshPinnedMotif(); }
+}
+
+const playBtn = document.getElementById('playBtn'), playLbl = document.getElementById('playLbl'), hudStat = document.getElementById('hudStat');
+function updateHud() {
+  const gN = state.groups.length, selN = selectedNoteCount(), lockN = state.futureNotes.filter(n => n.userLocked).length, parts = [`${BPM} BPM`];
+  if (selN) parts.push(`G${gN} · ${selN} SEL`); if (lockN) parts.push(`LOCK ${lockN}`); if (state.undoStack.length) parts.push(`UNDO ${state.undoStack.length}`);
+  hudStat.textContent = parts.join(' · '); hudStat.classList.toggle('hot', selN > 0 || lockN > 0);
+}
+function togglePlay() {
+  ensureAudio();
+  if (!state.playing) { state.anchorStep = state.playheadStep; state.anchorAudioTime = actx.currentTime + 0.025; state.nextSchedStep = Math.ceil(state.playheadStep - 0.001); state.playing = true; recomputeFuture(false); schedulerTick(); schedTimer = setInterval(schedulerTick, 20); }
+  else { state.playheadStep = getCurrentStep(); state.playing = false; clearInterval(schedTimer); schedTimer = null; }
+  playBtn.classList.toggle('on', state.playing); playLbl.textContent = state.playing ? 'PAUSE' : 'PLAY';
+}
+playBtn.addEventListener('click', togglePlay);
+
+function startUserStrike(noteIdx, holdKey) {
+  ensureAudio(); if (state.activeHolds.has(holdKey)) return;
+  const nowPerf = performance.now(), cur = getCurrentStep(), voice = playVoice(noteIdx, null, 0.92, 5);
+  triggerResonator(noteIdx, 0.98, 5, true);
+  let upCount = 0;
+  for (let i = state.pastNotes.length - 1; i >= 0 && upCount < 5; i--) {
+    const p = state.pastNotes[i], age = cur - p.step, sym = sympStrength(noteIdx, p.noteIdx); if (age < 0.4 || age > 28 || !sym) continue;
+    p.sympBoost = clamp(Math.max(p.sympBoost || 0, sym), 0, 1); p.sympPerf = nowPerf; spawnWavefront(noteIdx, cur, p.noteIdx, p.step, 'up'); upCount++;
+  }
+  state.strikeBias = { pitch: noteIdx, perf: nowPerf };
+  const noteObj = state.playing ? makePast(Math.round(cur), noteIdx, 1, 0.92, { source: 'user', edited: true, holding: true, editPerf: nowPerf, flashPerf: nowPerf }) : null;
+  if (noteObj) { state.pastNotes = state.pastNotes.filter(p => !(p.step === noteObj.step && p.noteIdx === noteIdx)); state.pastNotes.push(noteObj); }
+  state.activeHolds.set(holdKey, { noteIdx, startPerf: nowPerf, voice, noteObj }); recomputeFuture(true, { kind: 'strike', locus: noteIdx });
+}
+function endUserStrike(holdKey) {
+  const h = state.activeHolds.get(holdKey); if (!h) return; state.activeHolds.delete(holdKey);
+  const holdMs = performance.now() - h.startPerf;
+  if (holdMs < 150) { h.voice.damp(); loci[h.noteIdx].damp = 3.2; }
+  if (h.noteObj) { h.noteObj.dur = snapDur((holdMs / 1000) / TATUM); h.noteObj.holding = false; recomputeFuture(true, { kind: 'past-edit', note: h.noteObj }); }
+}
+
+// --- Geometry, Group Bounding Boxes & Unified Spatial Hit-Testing ---
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+let W = 0, H = 0;
+const geo = { nowY: 0, nowBand: 22, padTop: 44, padBot: 34, pxPerStep: 12, gap: 48, locusX: new Float32Array(9), fieldL: 0, fieldR: 0, pad: { x: 0, y: 0, w: 120, h: 120 } };
+function layout() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  geo.nowY = Math.round(H * 0.5); geo.pxPerStep = clamp(Math.max(120, Math.min(geo.nowY - geo.padTop - 8, H - geo.nowY - geo.padBot - 8)) / 24, 8.5, 18);
+  const padSz = clamp(Math.round(Math.min(W * 0.145, H * 0.185)), 98, 134); geo.pad = { x: W - padSz - 22, y: H - padSz - 36, w: padSz, h: padSz };
+  geo.gap = clamp(Math.min((W - padSz - 92) / 9.2, 54), 26, 54);
+  const fieldW = geo.gap * 8; let cx = W * 0.5;
+  if (cx + fieldW * 0.5 > geo.pad.x - 30) cx = Math.max(fieldW * 0.5 + 46, (geo.pad.x - 30) - fieldW * 0.5);
+  const x0 = Math.round(cx - fieldW * 0.5); for (let i = 0; i < 9; i++) geo.locusX[i] = x0 + i * geo.gap;
+  geo.fieldL = geo.locusX[0]; geo.fieldR = geo.locusX[8];
+}
+window.addEventListener('resize', layout); layout();
+
+const stepToY = (step, cur) => geo.nowY + (step - cur) * geo.pxPerStep;
+const yToStep = (y, cur) => cur + (y - geo.nowY) / geo.pxPerStep;
+const nearestLocus = (mx) => (mx < geo.fieldL - geo.gap * 0.52 || mx > geo.fieldR + geo.gap * 0.52) ? -1 : clamp(Math.round((mx - geo.fieldL) / geo.gap), 0, 8);
+const inSteerPad = (mx, my, m = 8) => mx >= geo.pad.x - m && mx <= geo.pad.x + geo.pad.w + m && my >= geo.pad.y - m && my <= geo.pad.y + geo.pad.h + m;
+
+function getGroupBoxes(cur) {
+  const byId = new Map([...state.pastNotes.map(n => [n.id, { note: n, isFuture: false }]), ...state.futureNotes.map(n => [n.id, { note: n, isFuture: true }])]);
+  const boxes = [];
+  for (let gi = 0; gi < state.groups.length; gi++) {
+    const g = state.groups[gi], items = [...g.noteIds].map(id => byId.get(id)).filter(Boolean); if (!items.length) continue;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const { note } of items) { const x = geo.locusX[note.noteIdx], y0 = stepToY(note.step, cur), y1 = stepToY(note.step + note.dur, cur); minX = Math.min(minX, x - 15); maxX = Math.max(maxX, x + 15); minY = Math.min(minY, y0 - 11); maxY = Math.max(maxY, Math.max(y0 + 11, y1 + 8)); }
+    boxes.push({ group: g, idx: gi, label: `G${gi + 1}`, count: items.length, items, visible: maxY >= geo.padTop + 2 && minY <= H - geo.padBot - 2, x1: minX, x2: maxX, y1: clamp(minY, geo.padTop + 2, H - geo.padBot - 2), y2: clamp(maxY, geo.padTop + 2, H - geo.padBot - 2) });
+  }
+  return boxes;
+}
+const hitTestGroupBox = (mx, my, cur) => getGroupBoxes(cur).reverse().find(b => b.visible && mx >= b.x1 && mx <= b.x2 && my >= b.y1 && my <= b.y2) || null;
+function hitTestNotes(mx, my, cur) {
+  const hw = Math.min(16, geo.gap * 0.44);
+  const scan = (arr, isFuture) => {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const n = arr[i]; if ((!isFuture && n.step >= cur - 0.05) || (isFuture && n.step < cur - 0.05) || Math.abs(mx - geo.locusX[n.noteIdx]) > hw) continue;
+      const y0 = stepToY(n.step, cur), y1 = stepToY(n.step + n.dur, cur); if (y1 < geo.padTop || y0 > H - geo.padBot) continue;
+      const tailCut = Math.max(y0 + 5, y1 - 7);
+      if (my >= tailCut && my <= y1 + 10) return { part: 'tail', note: n, isFuture };
+      if (my >= y0 - 10 && my < tailCut) return { part: 'head', note: n, isFuture };
+    }
+    return null;
+  };
+  return my < geo.nowY ? scan(state.pastNotes, false) : scan(state.futureNotes, true);
+}
+
+const ptr = { x: -999, y: -999, inside: false }, hover = { kind: 'void', locus: -1, step: 0, note: null, isFuture: false, groupBox: null };
+// 7-state machine: 'idle' | 'strike-now' | 'move-group' | 'move-head' | 'resize-tail' | 'marquee' | 'steer-pad'
+const drag = { mode: 'idle', locus: -1, note: null, isFuture: false, inFuture: false, shiftAdd: false, startX: 0, startY: 0, curX: 0, curY: 0, origStep: 0, origLocus: 0, origDur: 2, groupItems: [], lastDPitch: 0, lastDStep: 0, moved: false, savedUndo: false, padTapT: 0, noteTapT: 0, noteTapId: -1 };
+
+function inspectHover(mx, my) {
+  const cur = getCurrentStep(), shift = isShiftHeld();
+  Object.assign(hover, { kind: 'void', locus: -1, step: 0, note: null, isFuture: false, groupBox: null });
+  if (inSteerPad(mx, my, 4)) { hover.kind = 'steer-pad'; canvas.style.cursor = 'grab'; return; }
+  const lIdx = nearestLocus(mx);
+  if (lIdx >= 0 && Math.abs(my - geo.nowY) <= geo.nowBand) { hover.kind = 'strike-now'; hover.locus = lIdx; canvas.style.cursor = 'pointer'; return; }
+  const hit = hitTestNotes(mx, my, cur);
+  if (hit && hit.part === 'tail') { Object.assign(hover, { note: hit.note, isFuture: hit.isFuture, locus: hit.note.noteIdx, kind: 'resize-tail' }); canvas.style.cursor = 'ns-resize'; return; }
+  if (hit && hit.part === 'head') {
+    Object.assign(hover, { note: hit.note, isFuture: hit.isFuture, locus: hit.note.noteIdx });
+    if (isNoteSelected(hit.note.id)) { hover.kind = shift ? 'shift-toggle' : 'move-group'; canvas.style.cursor = shift ? 'pointer' : 'move'; return; }
+    hover.kind = shift ? 'shift-add-note' : 'move-head'; canvas.style.cursor = shift ? 'cell' : 'ew-resize'; return;
+  }
+  const gBox = hitTestGroupBox(mx, my, cur);
+  if (gBox && !shift) { hover.groupBox = gBox; hover.kind = 'move-group'; canvas.style.cursor = 'move'; return; }
+  if (my >= geo.padTop && my <= H - geo.padBot && Math.abs(my - geo.nowY) > geo.nowBand) {
+    const inFut = my > geo.nowY; hover.locus = lIdx; hover.isFuture = inFut;
+    if (lIdx >= 0) { hover.step = inFut ? Math.max(Math.ceil(cur) + 1, Math.round(yToStep(my, cur))) : Math.min(Math.floor(cur) - 1, Math.round(yToStep(my, cur))); hover.kind = inFut ? 'plant-future' : 'plant-past'; }
+    else hover.kind = 'marquee-void';
+    canvas.style.cursor = 'crosshair'; return;
+  }
+  canvas.style.cursor = 'default';
+}
+
+// --- Musical Edits (STRICTLY ZERO AUDIO on ANY Past-Editing Path!) ---
+function eraseNote(note, isFuture) {
+  const cur = getCurrentStep(); pushUndo();
+  if (isFuture) { state.futureNotes = state.futureNotes.filter(n => n.id !== note.id); if (!note.userLocked) state.mutedSteps.add(note.step); playClick('erase', (note.noteIdx - 4) * 0.14); }
+  else { state.pastNotes = state.pastNotes.filter(n => n.id !== note.id); } // SILENT PAST EDIT
+  pruneGroups(); refreshPinnedMotif(); spawnFxPing(geo.locusX[note.noteIdx], stepToY(note.step, cur), 'ERASE ×'); recomputeFuture(true, { kind: 'erase' }); updateHud();
+}
+function eraseGroupBox(box) {
+  if (!box || !box.items.length) return;
+  const ids = new Set(box.group.noteIds); let anyFuture = false; pushUndo();
+  for (const { note, isFuture } of box.items) if (isFuture) { anyFuture = true; if (!note.userLocked) state.mutedSteps.add(note.step); }
+  state.pastNotes = state.pastNotes.filter(n => !ids.has(n.id)); state.futureNotes = state.futureNotes.filter(n => !ids.has(n.id)); state.groups = state.groups.filter(g => g.id !== box.group.id);
+  pruneGroups(); refreshPinnedMotif();
+  if (anyFuture) playClick('erase', 0); // SILENT when erasing Past-only group
+  spawnFxPing((box.x1 + box.x2) * 0.5, (box.y1 + box.y2) * 0.5, `ERASE ${box.label} ×${box.count}`); recomputeFuture(true, { kind: 'erase' }); updateHud();
+}
+function plantPastNote(step, locus) {
+  // SILENT PAST EDIT: strictly ZERO playVoice & ZERO playClick!
+  const nowPerf = performance.now(), cur = getCurrentStep(); pushUndo();
+  state.pastNotes = state.pastNotes.filter(n => !(Math.round(n.step) === step && n.noteIdx === locus));
+  const note = makePast(step, locus, 2, 0.84, { source: 'past-edit', edited: true, editPerf: nowPerf, flashPerf: nowPerf }); state.pastNotes.push(note);
+  spawnFxPing(geo.locusX[locus], stepToY(step, cur), 'PLANT +'); recomputeFuture(true, { kind: 'past-edit', note }); updateHud();
+}
+function plantFutureNote(step, locus, dur = 2) {
+  const nowPerf = performance.now(), cur = getCurrentStep(); pushUndo(); state.mutedSteps.delete(step);
+  state.futureNotes = state.futureNotes.filter(n => !(n.step === step && n.noteIdx === locus));
+  state.futureNotes.push({ id: state.nextId++, step, dur, noteIdx: locus, vel: 0.86, source: 'user', userLocked: true, selected: false, attn: null, flashPerf: nowPerf });
+  playClick('plant', (locus - 4) * 0.14); playVoice(locus, null, 0.64, dur, true);
+  spawnFxPing(geo.locusX[locus], stepToY(step, cur), 'LOCK +'); recomputeFuture(true, { kind: 'future-edit' }); updateHud();
+}
+function updateSteerFromPointer(mx, my) {
+  const b = geo.pad; let m = clamp(((mx - b.x) / b.w) * 2 - 1, -1, 1), t = clamp((1 - (my - b.y) / b.h) * 2 - 1, -1, 1);
+  if (Math.abs(m) < 0.045) m = 0; if (Math.abs(t) < 0.045) t = 0;
+  state.motion = m; state.tension = t; state.steerHotPerf = performance.now();
+  const det = `${Math.round(m * 4)}:${Math.round(t * 4)}`; if (det !== state.lastSteerDetent) { state.lastSteerDetent = det; playClick('drag-snap', 0.52); }
+  recomputeFuture(true, { kind: 'steer' });
+}
+const marqueeRect = () => ({ x1: Math.min(drag.startX, drag.curX), y1: Math.min(drag.startY, drag.curY), x2: Math.max(drag.startX, drag.curX), y2: Math.max(drag.startY, drag.curY) });
+function notesInMarquee(cur) {
+  const r = marqueeRect(), hits = [];
+  const check = (arr, isFuture) => { for (const n of arr) { if ((!isFuture && n.step >= cur - 0.05) || (isFuture && n.step < cur - 0.05)) continue; const x = geo.locusX[n.noteIdx], y0 = stepToY(n.step, cur), y1 = stepToY(n.step + n.dur, cur); if (y1 >= geo.padTop && y0 <= H - geo.padBot && x >= r.x1 - 8 && x <= r.x2 + 8 && y1 >= r.y1 && y0 <= r.y2) hits.push({ note: n, isFuture }); } };
+  check(state.pastNotes, false); check(state.futureNotes, true); return hits;
+}
+
+// --- Pointer & Keyboard Events (Multi-Group Select, True Group Move & Silent Past) ---
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => {
+  const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top, cur = getCurrentStep(), nowPerf = performance.now();
+  ptr.x = mx; ptr.y = my; ptr.inside = true;
+  if (e.button === 2) {
+    const hit = hitTestNotes(mx, my, cur);
+    if (hit && isNoteSelected(hit.note.id)) { const box = getGroupBoxes(cur).find(b => b.group.noteIds.has(hit.note.id)); if (box) return eraseGroupBox(box); }
+    const gBox = hitTestGroupBox(mx, my, cur); if (gBox) return eraseGroupBox(gBox);
+    if (hit) eraseNote(hit.note, hit.isFuture); return;
+  }
+  if (e.button !== 0) return;
+  canvas.setPointerCapture(e.pointerId); inspectHover(mx, my);
+  const shift = e.shiftKey || isShiftHeld();
+  if (hover.kind === 'steer-pad') {
+    ensureAudio(); if (nowPerf - drag.padTapT < 300) { state.motion = state.tension = 0; state.steerHotPerf = nowPerf; playClick('drag-snap', 0.5); recomputeFuture(true, { kind: 'steer' }); drag.padTapT = 0; return; }
+    drag.padTapT = nowPerf; drag.mode = 'steer-pad'; updateSteerFromPointer(mx, my); return;
+  }
+  if (hover.kind === 'strike-now') { drag.mode = 'strike-now'; drag.locus = hover.locus; startUserStrike(hover.locus, 'ptr'); return; }
+  if (hover.kind === 'resize-tail' && hover.note) return void Object.assign(drag, { mode: 'resize-tail', note: hover.note, isFuture: hover.isFuture, startX: mx, curX: mx, startY: my, curY: my, origDur: hover.note.dur, moved: false, savedUndo: false });
+  if (hover.kind === 'move-group' || hover.kind === 'shift-toggle') {
+    const items = allSelectedItems().map(it => ({ note: it.note, isFuture: it.isFuture, origLocus: it.note.noteIdx, origStep: it.note.step }));
+    return void Object.assign(drag, { mode: 'move-group', note: hover.note, isFuture: hover.isFuture, shiftAdd: shift, startX: mx, curX: mx, startY: my, curY: my, groupItems: items, lastDPitch: 0, lastDStep: 0, moved: false, savedUndo: false });
+  }
+  if (hover.kind === 'shift-add-note' && hover.note) return void Object.assign(drag, { mode: 'marquee', note: hover.note, isFuture: hover.isFuture, inFuture: hover.isFuture, shiftAdd: true, startX: mx, curX: mx, startY: my, curY: my, origStep: hover.note.step, origLocus: hover.note.noteIdx, moved: false });
+  if (hover.kind === 'move-head' && hover.note) return void Object.assign(drag, { mode: 'move-head', note: hover.note, isFuture: hover.isFuture, shiftAdd: shift, startX: mx, curX: mx, startY: my, curY: my, origStep: hover.note.step, origLocus: hover.note.noteIdx, moved: false, savedUndo: false });
+  if (hover.kind === 'plant-past' || hover.kind === 'plant-future' || hover.kind === 'marquee-void') Object.assign(drag, { mode: 'marquee', note: null, inFuture: hover.isFuture, shiftAdd: shift, startX: mx, curX: mx, startY: my, curY: my, origStep: hover.step, origLocus: hover.locus, moved: false });
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  ptr.x = mx; ptr.y = my; ptr.inside = true;
+  if (drag.mode === 'idle') { inspectHover(mx, my); return; }
+  const cur = getCurrentStep(), nowPerf = performance.now(); drag.curX = mx; drag.curY = my;
+  if (drag.mode === 'steer-pad') return updateSteerFromPointer(mx, my);
+  if (drag.mode === 'strike-now') { const lIdx = nearestLocus(mx); if (lIdx >= 0 && lIdx !== drag.locus) { endUserStrike('ptr'); drag.locus = lIdx; startUserStrike(lIdx, 'ptr'); } return; }
+  if (drag.mode === 'move-group' && drag.groupItems.length) {
+    if (!drag.moved && Math.hypot(mx - drag.startX, my - drag.startY) < 6) return;
+    const active = drag.groupItems.filter(it => (it.isFuture ? state.futureNotes : state.pastNotes).includes(it.note)); if (!active.length) return;
+    let minL = 8, maxL = 0, loS = -Infinity, hiS = Infinity; const minFut = Math.max(state.nextSchedStep, Math.ceil(cur) + 1), maxPast = Math.floor(cur) - 1;
+    for (const it of active) {
+      if (it.origLocus < minL) minL = it.origLocus; if (it.origLocus > maxL) maxL = it.origLocus;
+      if (it.isFuture) { loS = Math.max(loS, minFut - it.origStep); hiS = Math.min(hiS, Math.ceil(cur) + 42 - it.origStep); }
+      else { loS = Math.max(loS, Math.floor(cur) - 42 - it.origStep); hiS = Math.min(hiS, maxPast - it.origStep); }
+    }
+    const dPitch = clamp(Math.round((mx - drag.startX) / geo.gap), -minL, 8 - maxL), dStep = loS <= hiS ? clamp(Math.round((my - drag.startY) / geo.pxPerStep), loS, hiS) : 0;
+    if (dPitch !== drag.lastDPitch || dStep !== drag.lastDStep) {
+      if (!drag.savedUndo) { pushUndo(); drag.savedUndo = true; }
+      drag.moved = true; drag.lastDPitch = dPitch; drag.lastDStep = dStep;
+      const movedPast = []; let anyFuture = false;
+      for (const it of active) {
+        it.note.noteIdx = it.origLocus + dPitch; it.note.step = it.origStep + dStep; it.note.flashPerf = nowPerf;
+        if (it.isFuture) { anyFuture = true; it.note.userLocked = true; state.mutedSteps.delete(it.note.step); } else { it.note.edited = true; it.note.editPerf = nowPerf; movedPast.push(it.note); }
+      }
+      state.pastNotes.sort((a, b) => a.step - b.step); state.futureNotes.sort((a, b) => a.step - b.step || a.noteIdx - b.noteIdx); refreshPinnedMotif();
+      if (anyFuture && !movedPast.length) playClick('drag-snap', dPitch * 0.08); // SILENT when moving Past!
+      recomputeFuture(true, { kind: 'group-move', movedPast }); updateHud();
+    }
+    return;
+  }
+  if (drag.mode === 'move-head' && drag.note) {
+    if (!drag.moved && Math.hypot(mx - drag.startX, my - drag.startY) < 6) return;
+    const lIdx = nearestLocus(mx), dStep = Math.round((my - drag.startY) / geo.pxPerStep), tLocus = lIdx >= 0 ? lIdx : drag.note.noteIdx;
+    const tStep = drag.isFuture ? clamp(drag.origStep + dStep, Math.max(state.nextSchedStep, Math.ceil(cur) + 1), Math.ceil(cur) + 42) : clamp(drag.origStep + dStep, Math.floor(cur) - 42, Math.floor(cur) - 1);
+    if (tLocus !== drag.note.noteIdx || tStep !== drag.note.step) {
+      if (!drag.savedUndo) { pushUndo(); drag.savedUndo = true; }
+      drag.moved = true; drag.note.noteIdx = tLocus; drag.note.step = tStep; drag.note.flashPerf = nowPerf;
+      if (drag.isFuture) { drag.note.userLocked = true; state.mutedSteps.delete(tStep); playClick('drag-snap', (tLocus - 4) * 0.14); playVoice(tLocus, null, 0.58, drag.note.dur, true); }
+      else { drag.note.edited = true; drag.note.editPerf = nowPerf; refreshPinnedMotif(); } // SILENT PAST EDIT
+      recomputeFuture(true, drag.isFuture ? { kind: 'future-edit' } : { kind: 'past-edit', note: drag.note }); updateHud();
+    }
+    return;
+  }
+  if (drag.mode === 'resize-tail' && drag.note) {
+    const nextDur = snapDur(clamp((my - stepToY(drag.note.step, cur)) / geo.pxPerStep, 0.6, 8.4));
+    if (nextDur !== drag.note.dur) {
+      if (!drag.savedUndo) { pushUndo(); drag.savedUndo = true; }
+      drag.moved = true; drag.note.dur = nextDur; drag.note.flashPerf = nowPerf;
+      if (drag.isFuture) { drag.note.userLocked = true; playClick('drag-snap', (drag.note.noteIdx - 4) * 0.14); }
+      else { drag.note.edited = true; drag.note.editPerf = nowPerf; refreshPinnedMotif(); } // SILENT PAST EDIT
+      recomputeFuture(true, drag.isFuture ? { kind: 'future-edit' } : { kind: 'past-edit', note: drag.note }); updateHud();
+    }
+    return;
+  }
+  if (drag.mode === 'marquee' && !drag.moved && Math.hypot(mx - drag.startX, my - drag.startY) > 7) drag.moved = true;
+});
+
+function applySelectionUpdate(label, px, py) { pruneGroups(); refreshPinnedMotif(); if (label) spawnFxPing(px, py, label); recomputeFuture(true, { kind: 'marquee' }); updateHud(); }
+function finishPointer(cancelled = false) {
+  const cur = getCurrentStep(), nowPerf = performance.now(), shift = drag.shiftAdd || isShiftHeld();
+  if (drag.mode === 'strike-now') endUserStrike('ptr');
+  else if (!cancelled && drag.mode === 'marquee') {
+    if (!drag.moved) {
+      if (shift && drag.note) { pushUndo(); state.groups.push({ id: state.nextGroupId++, noteIds: new Set([drag.note.id]) }); applySelectionUpdate(`+G${state.groups.length}`, geo.locusX[drag.note.noteIdx], stepToY(drag.note.step, cur)); }
+      else if (drag.origLocus >= 0 && !shift) { if (drag.inFuture) plantFutureNote(drag.origStep, drag.origLocus, 2); else plantPastNote(drag.origStep, drag.origLocus); }
+      else if (drag.origLocus < 0 && !shift && state.groups.length) { pushUndo(); clearAllGroups(); recomputeFuture(true); updateHud(); }
+    } else {
+      const hits = notesInMarquee(cur), r = marqueeRect(), cx = (r.x1 + r.x2) * 0.5; pushUndo();
+      if (shift) { const fresh = hits.filter(h => !isNoteSelected(h.note.id)); if (fresh.length) { state.groups.push({ id: state.nextGroupId++, noteIds: new Set(fresh.map(h => h.note.id)) }); applySelectionUpdate(`+G${state.groups.length} ×${fresh.length}`, cx, r.y1); } }
+      else { state.groups = hits.length ? [{ id: state.nextGroupId++, noteIds: new Set(hits.map(h => h.note.id)) }] : []; applySelectionUpdate(hits.length ? `G1 ×${hits.length}` : 'CLEAR', cx, r.y1); }
+    }
+  } else if (!cancelled && drag.mode === 'move-group' && !drag.moved && drag.note) {
+    if (shift) { pushUndo(); for (const g of state.groups) g.noteIds.delete(drag.note.id); applySelectionUpdate('−SEL', geo.locusX[drag.note.noteIdx], stepToY(drag.note.step, cur)); }
+    else if (drag.noteTapId === drag.note.id && nowPerf - drag.noteTapT < 290) { eraseNote(drag.note, drag.isFuture); drag.noteTapId = -1; }
+    else { drag.noteTapId = drag.note.id; drag.noteTapT = nowPerf; if (selectedNoteCount() === 1) { pushUndo(); clearAllGroups(); applySelectionUpdate('', 0, 0); } }
+  } else if (!cancelled && drag.mode === 'move-head' && !drag.moved && drag.note) {
+    if (drag.noteTapId === drag.note.id && nowPerf - drag.noteTapT < 290) { eraseNote(drag.note, drag.isFuture); drag.noteTapId = -1; }
+    else { drag.noteTapId = drag.note.id; drag.noteTapT = nowPerf; pushUndo(); state.groups = [{ id: state.nextGroupId++, noteIds: new Set([drag.note.id]) }]; applySelectionUpdate('', 0, 0); }
+  }
+  drag.mode = 'idle'; drag.note = null; drag.locus = -1; drag.moved = false; drag.groupItems = [];
+  if (ptr.inside) inspectHover(ptr.x, ptr.y);
+}
+canvas.addEventListener('pointerup', () => finishPointer(false));
+canvas.addEventListener('pointercancel', () => finishPointer(true));
+canvas.addEventListener('pointerleave', () => { ptr.inside = false; if (drag.mode === 'idle') hover.kind = 'void'; });
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { keysDown.add(e.code); if (ptr.inside && drag.mode === 'idle') inspectHover(ptr.x, ptr.y); return; }
+  if (e.code === 'Space') { e.preventDefault(); return togglePlay(); }
+  if (e.code === 'KeyW' || e.code === 'KeyA' || e.code === 'KeyS' || e.code === 'KeyD') { keysDown.add(e.code); return; }
+  if (e.code === 'KeyZ' && !e.repeat) { e.preventDefault(); return undoLast(); }
+  if (e.key === 'Escape') { if (state.groups.length || state.pinnedMotif.length) { pushUndo(); clearAllGroups(); spawnFxPing((geo.fieldL + geo.fieldR) * 0.5, geo.nowY - 38, 'CLEAR ALL'); recomputeFuture(true); updateHud(); } return; }
+  if (!e.repeat && e.key >= '1' && e.key <= '9') startUserStrike(Number(e.key) - 1, `k:${e.key}`);
+});
+window.addEventListener('keyup', (e) => {
+  keysDown.delete(e.code);
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { if (ptr.inside && drag.mode === 'idle') inspectHover(ptr.x, ptr.y); return; }
+  if (e.key >= '1' && e.key <= '9') endUserStrike(`k:${e.key}`);
+});
+window.addEventListener('blur', () => { keysDown.clear(); for (const k of [...state.activeHolds.keys()]) endUserStrike(k); if (drag.mode !== 'idle') finishPointer(true); });
+
+// --- Rendering: Strict 100% Monochrome White-on-Black Editorial Grammar ---
+const edgeFade = (y) => Math.min(clamp((y - geo.padTop) / 34, 0, 1), clamp((H - geo.padBot - y) / 34, 0, 1));
+const strokeLine = (x1, y1, x2, y2, col, lw = 1) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+const strokeCirc = (x, y, r, col, lw = 1) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); };
+const fillCirc   = (x, y, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+const bezPt = (p0, p1, p2, p3, t) => { const u = 1 - t; return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3; };
+
+function drawMetricField(cur) {
+  const xL = geo.fieldL - 22, xR = geo.fieldR + 22; ctx.textBaseline = 'middle'; ctx.font = '9px ui-monospace, monospace';
+  for (let g = Math.floor(cur) - 28; g <= Math.ceil(cur) + 28; g++) {
+    if ((g & 3) !== 0) continue;
+    const y = Math.round(stepToY(g, cur)) + 0.5; if (y < geo.padTop || y > H - geo.padBot) continue;
+    const f = edgeFade(y);
+    if (((g % 16) + 16) % 16 === 0) {
+      strokeLine(xL, y, xR, y, ink(0.11 * f)); ctx.fillStyle = ink(0.24 * f); for (let i = 0; i < 9; i++) ctx.fillRect(geo.locusX[i] - 0.5, y - 1.5, 1, 3);
+      ctx.fillStyle = ink(0.32 * f); ctx.textAlign = 'right'; ctx.fillText(String(Math.max(1, Math.floor(g / 16) + 1)).padStart(2, '0'), xL - 7, y);
+    } else { const c = ink(0.14 * f); strokeLine(xL, y, xL + 4, y, c); strokeLine(xR - 4, y, xR, y, c); }
+  }
+  ctx.textAlign = 'center';
+  for (let i = 0; i < 9; i++) {
+    const x = geo.locusX[i], loc = loci[i], hov = hover.locus === i;
+    ctx.font = '10px ui-monospace, monospace'; ctx.textBaseline = 'bottom'; ctx.fillStyle = lum(loc.heat, 0.28 + loc.glow * 0.72 + (hov ? 0.36 : 0)); ctx.fillText(NOTES[i].name, x, geo.padTop - 8);
+    if (hov) strokeLine(x - 7, geo.padTop - 5.5, x + 7, geo.padTop - 5.5, ink(0.72), 1);
+    ctx.font = '9px ui-monospace, monospace'; ctx.textBaseline = 'top'; ctx.fillStyle = ink(clamp(0.20 + loc.glow * 0.45 + (hov ? 0.28 : 0), 0, 0.92)); ctx.fillText(NOTES[i].deg, x, H - geo.padBot + 8);
+  }
+}
+
+function drawAttentionAndWavefronts(cur, nowPerf) {
+  const pastById = new Map(state.pastNotes.map(p => [p.id, p]));
+  for (const fn of state.futureNotes) {
+    if (!fn.attn || fn.userLocked) continue;
+    const src = pastById.get(fn.attn.pastId), x1 = geo.locusX[src ? src.noteIdx : fn.attn.srcLocus], rawY1 = stepToY(src ? src.step : fn.attn.srcStep, cur);
+    const y1 = Math.max(geo.padTop + 3, rawY1), y2 = stepToY(fn.step, cur); if (y2 > H - geo.padBot + 6 || y1 >= y2 - 6) continue;
+    const x2 = geo.locusX[fn.noteIdx], bow = ((fn.attn.srcLocus + fn.noteIdx) < 8 ? -1 : 1) * clamp(18 + (fn.step - (src ? src.step : fn.attn.srcStep)) * 1.15, 18, 62);
+    const f = Math.min(rawY1 < geo.padTop ? 0.65 : edgeFade(y1), edgeFade(y2)), isSel = fn.attn.kind === 'selected', isEd = fn.attn.kind === 'edited', isSymp = fn.attn.kind === 'symp';
+    ctx.save(); if (isEd || isSymp) ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = isSel ? ink(0.56 * f) : isEd ? ink(0.34 * f) : isSymp ? ink(0.24 * f) : ink(0.12 * fn.attn.weight * f);
+    ctx.lineWidth = isSel ? 1.25 : isEd ? 1.0 : 0.75; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.bezierCurveTo(x1 + bow, lerp(y1, y2, 0.32), x2 + bow, lerp(y1, y2, 0.68), x2, y2); ctx.stroke(); ctx.restore();
+    if (rawY1 < geo.padTop && isSel) fillCirc(x1, y1, 2.2, '#fff');
+  }
+  for (let i = wavefronts.length - 1; i >= 0; i--) {
+    const w = wavefronts[i], p = (nowPerf - w.bornPerf) / w.lifeMs; if (p >= 1) { wavefronts.splice(i, 1); continue; }
+    const x1 = geo.locusX[w.srcLocus], y1 = clamp(stepToY(w.srcStep, cur), geo.padTop + 2, H - geo.padBot - 2), x2 = geo.locusX[w.dstLocus], y2 = clamp(stepToY(w.dstStep, cur), geo.padTop + 2, H - geo.padBot - 2);
+    const c1x = x1 + w.bow, c1y = lerp(y1, y2, 0.32), c2x = x2 + w.bow, c2y = lerp(y1, y2, 0.68), t0 = Math.max(0, p - 0.24), t1 = Math.min(1, p), fade = Math.sin(p * Math.PI);
+    ctx.strokeStyle = ink(0.92 * fade); ctx.lineWidth = w.kind === 'up' ? 1.4 : 1.8; ctx.beginPath();
+    for (let k = 0; k <= 10; k++) { const t = lerp(t0, t1, k / 10), px = bezPt(x1, c1x, c2x, x2, t), py = bezPt(y1, c1y, c2y, y2, t); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    ctx.stroke();
+    const hx = bezPt(x1, c1x, c2x, x2, t1), hy = bezPt(y1, c1y, c2y, y2, t1); fillCirc(hx, hy, 2.5, ink(0.98 * fade)); strokeCirc(hx, hy, 5.2, ink(0.42 * fade), 0.9);
+  }
+}
+
+function drawGroupBoxes(cur) {
+  const boxes = getGroupBoxes(cur); if (!boxes.length) return;
+  const groupHot = hover.kind === 'move-group' || drag.mode === 'move-group';
+  for (const b of boxes) {
+    if (!b.visible) continue;
+    const bw = Math.max(8, b.x2 - b.x1), bh = Math.max(8, b.y2 - b.y1);
+    ctx.fillStyle = ink(groupHot ? 0.08 : 0.04); ctx.fillRect(b.x1, b.y1, bw, bh);
+    ctx.save();
+    if (groupHot) {
+      ctx.strokeStyle = ink(0.84); ctx.lineWidth = 1.1; ctx.strokeRect(b.x1 + 0.5, b.y1 + 0.5, bw - 1, bh - 1);
+      if (bw > 8 && bh > 8) { ctx.strokeStyle = ink(0.28); ctx.lineWidth = 0.8; ctx.strokeRect(b.x1 + 3.5, b.y1 + 3.5, bw - 7, bh - 7); }
+    } else { ctx.setLineDash([4, 3]); ctx.strokeStyle = ink(0.42); ctx.lineWidth = 1.0; ctx.strokeRect(b.x1 + 0.5, b.y1 + 0.5, bw - 1, bh - 1); }
+    ctx.restore();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6;
+    for (const [cx, cy, dx, dy] of [[b.x1,b.y1,1,1],[b.x2,b.y1,-1,1],[b.x1,b.y2,1,-1],[b.x2,b.y2,-1,-1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 7, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + dy * 7); ctx.stroke(); }
+    const tag = groupHot ? `${b.label}·${b.count}` : b.label; ctx.font = '8.5px ui-monospace, monospace';
+    const tw = Math.ceil(ctx.measureText(tag).width) + 7, th = 12, tx = b.x1, ty = Math.max(geo.padTop + 2, b.y1 - th - 2);
+    ctx.fillStyle = groupHot ? '#fff' : 'rgba(0,0,0,0.92)'; ctx.fillRect(tx, ty, tw, th);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 0.9; ctx.strokeRect(tx + 0.5, ty + 0.5, tw - 1, th - 1);
+    ctx.fillStyle = groupHot ? '#000' : '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(tag, tx + 3.5, ty + th * 0.5 + 0.5);
+  }
+}
+
+function drawWavePackets(cur, nowPerf) {
+  const tSec = nowPerf * 0.001, liveMarq = (drag.mode === 'marquee' && drag.moved) ? new Set(notesInMarquee(cur).map(h => h.note.id)) : null;
+  const drawOne = (n, isFuture) => {
+    const dur = n.holding ? Math.max(0.6, cur - n.step) : n.dur, y0 = stepToY(n.step, cur), y1 = stepToY(n.step + dur, cur);
+    if (y1 < geo.padTop || y0 > H - geo.padBot) return;
+    const x = geo.locusX[n.noteIdx], L = Math.max(8, (y1 - y0) - 2), f = edgeFade((y0 + y1) * 0.5);
+    const isHov = (hover.note && hover.note.id === n.id) || (drag.note && drag.note.id === n.id), isSel = isNoteSelected(n.id) || Boolean(liveMarq && liveMarq.has(n.id));
+    const sympHot = !isFuture ? clamp(1 - (nowPerf - (n.sympPerf || -9999)) / FLASH_MS, 0, 1) : 0, editHot = !isFuture ? clamp(1 - (nowPerf - (n.editPerf || -9999)) / FLASH_MS, 0, 1) : 0;
+    const heat = isFuture ? Math.max(isSel ? 0.85 : 0, clamp(1 - (nowPerf - (n.flashPerf || -9999)) / FLASH_MS, 0, 1)) : Math.max(isSel ? 0.9 : 0, sympHot, editHot);
+    const crossing = !isFuture && y0 <= geo.nowY && y1 >= geo.nowY, maxW = (3.6 + n.vel * 4.1) * (n.noteIdx === 0 ? 1.2 : 1) * (0.74 + 0.26 * clamp(dur / 6, 0, 1));
+    const segs = clamp(Math.round(L / 2.4), 10, 34), cycles = (0.95 + n.noteIdx * 0.25) * Math.max(0.75, dur * 0.45);
+    const shimmer = isFuture ? (n.userLocked ? 0.14 : 0.36) : clamp(1 - Math.max(0, cur - n.step) / (dur + 2.5), 0, 1);
+    const phase = isFuture ? -tSec * 3.6 + n.step * 0.7 : (shimmer > 0.02 ? tSec * (11 + n.noteIdx * 1.5) * shimmer : 0) + n.step * 0.9;
+    ctx.beginPath();
+    for (let k = 0; k <= segs; k++) { const u = k / segs, e = Math.min(1, u / 0.10) * Math.pow(1 - u, 1.36); k ? ctx.lineTo(x + e * maxW, y0 + u * L) : ctx.moveTo(x + e * maxW, y0); }
+    for (let k = segs; k >= 0; k--) { const u = k / segs, e = Math.min(1, u / 0.10) * Math.pow(1 - u, 1.36); ctx.lineTo(x - e * maxW, y0 + u * L); }
+    ctx.closePath();
+    ctx.fillStyle = ink((isSel ? 0.22 : !isFuture ? 0.13 + (crossing ? 0.14 : 0) : (n.userLocked ? 0.14 : 0.04 + heat * 0.10)) * f); ctx.fill();
+    ctx.save(); if (isFuture && !n.userLocked && !isSel) ctx.setLineDash([2.5, 2.5]);
+    ctx.strokeStyle = lum(heat, (isSel ? 0.92 : !isFuture ? (0.40 + n.vel * 0.26) : (n.userLocked ? 0.72 : 0.24 + n.vel * 0.20)) * f);
+    ctx.lineWidth = isSel || isHov ? 1.35 : (!isFuture || n.userLocked ? 0.95 : 0.75); ctx.stroke(); ctx.restore();
+    ctx.beginPath();
+    for (let k = 0; k <= segs; k++) { const u = k / segs, e = Math.min(1, u / 0.08) * Math.pow(1 - u, 1.40), px = x + e * maxW * 0.84 * Math.sin(u * cycles * Math.PI * 2 + phase); k ? ctx.lineTo(px, y0 + u * L) : ctx.moveTo(px, y0); }
+    ctx.strokeStyle = lum(heat, (isSel ? 0.96 : !isFuture ? 0.70 + n.vel * 0.28 : (n.userLocked ? 0.84 : 0.34 + n.vel * 0.26)) * f); ctx.lineWidth = isSel ? 1.4 : (!isFuture || n.userLocked ? 1.2 : 0.9); ctx.stroke();
+    const rHead = (n.noteIdx === 0 ? 3.5 : 2.6) + n.vel * 1.0;
+    strokeLine(x - maxW * 0.9, y0, x + maxW * 0.9, y0, lum(heat, (!isFuture || n.userLocked || isSel ? 0.72 : 0.32) * f), 0.9);
+    if (isSel) { fillCirc(x, y0, rHead + 1.5, ink(0.98 * f)); fillCirc(x, y0, rHead * 0.52, '#000'); const b = rHead + 5.2; ctx.strokeStyle = ink(0.96 * f); ctx.lineWidth = 1.25; ctx.strokeRect(x - b, y0 - b, b * 2, b * 2); }
+    else if (!isFuture) { fillCirc(x, y0, rHead, lum(heat, 0.94 * f)); if (n.edited) strokeCirc(x, y0, rHead + 3.0, ink((0.46 + editHot * 0.52) * f), 1.0); if (sympHot > 0.04) strokeCirc(x, y0, rHead + 4 + (1 - sympHot) * 12, ink(sympHot * 0.86 * f), 1.2); }
+    else if (n.userLocked) { fillCirc(x, y0, rHead, lum(heat, 0.96 * f)); const d = rHead + 3.6; ctx.strokeStyle = lum(heat, 0.88 * f); ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(x, y0 - d); ctx.lineTo(x + d, y0); ctx.lineTo(x, y0 + d); ctx.lineTo(x - d, y0); ctx.closePath(); ctx.stroke(); }
+    else { fillCirc(x, y0, rHead, '#000'); strokeCirc(x, y0, rHead, lum(heat, (0.54 + n.vel * 0.34) * f), heat > 0.05 ? 1.4 : 1.05); if (n.attn && n.attn.kind === 'selected') fillCirc(x, y0, 1.8, ink(0.96 * f)); }
+    const tailActive = isHov && (hover.kind === 'resize-tail' || drag.mode === 'resize-tail');
+    if (isHov) { const tw = tailActive ? 8.0 : 4.5; strokeLine(x - tw, y1, x + tw, y1, tailActive ? '#fff' : ink(0.72), tailActive ? 2.0 : 1.1); if (hover.kind === 'move-head' || drag.mode === 'move-head') strokeCirc(x, y0, rHead + 5.5, drag.mode === 'move-head' ? '#fff' : ink(0.72), 1.2); }
+    else { ctx.fillStyle = lum(heat, (!isFuture || n.userLocked || isSel ? 0.56 : 0.28) * f); ctx.fillRect(x - 1.5, y0 + L - 0.5, 3, 1); }
+  };
+  for (const n of state.pastNotes) drawOne(n, n.step > cur);
+  for (const n of state.futureNotes) drawOne(n, true);
+}
+
+function drawNowInterferometer(dt, nowPerf) {
+  const y = geo.nowY, xL = geo.fieldL - 22, xR = geo.fieldR + 22, span = xR - xL;
+  for (const loc of loci) { loc.glow = Math.max(0, loc.glow * Math.exp(-dt * loc.damp)); loc.heat = Math.max(0, loc.heat - dt * 2.4); }
+  for (let i = blooms.length - 1; i >= 0; i--) if (nowPerf - blooms[i].bornPerf >= blooms[i].lifeMs) blooms.splice(i, 1);
+  for (const b of blooms) {
+    const ageMs = nowPerf - b.bornPerf, p = clamp(ageMs / b.lifeMs, 0, 1), e = Math.pow(1 - p, 1.85), bx = geo.locusX[b.idx], h = b.hot ? clamp(1 - ageMs / FLASH_MS, 0, 1) : 0;
+    const rx = 5 + Math.pow(p, 0.72) * (26 + b.dur * 11) * (0.70 + b.vel * 0.42) * (b.idx === 0 ? 1.22 : 1), ry = rx * (0.62 + 0.30 * Math.pow(p, 0.6));
+    ctx.strokeStyle = lum(h, e * 0.70); ctx.lineWidth = 0.8 + e * 1.1; ctx.beginPath(); ctx.ellipse(bx, y, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+    if (p > 0.04 && rx > 11) { ctx.strokeStyle = lum(h * 0.6, e * 0.30); ctx.lineWidth = 0.7; ctx.beginPath(); ctx.ellipse(bx, y, rx * 0.58, ry * 0.58, 0, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  let energy = 0; for (const b of blooms) energy += Math.pow(1 - (nowPerf - b.bornPerf) / b.lifeMs, 2);
+  if (!blooms.length) strokeLine(xL, y + 0.5, xR, y + 0.5, ink(0.46));
+  else {
+    ctx.strokeStyle = ink(clamp(0.52 + energy * 0.36, 0.52, 0.98)); ctx.lineWidth = 1.15; ctx.beginPath();
+    for (let s = 0; s <= 136; s++) {
+      const u = s / 136, px = xL + u * span, win = Math.pow(Math.sin(u * Math.PI), 0.45); let dy = 0;
+      for (const b of blooms) { const age = (nowPerf - b.bornPerf) * 0.001, e = Math.pow(1 - (nowPerf - b.bornPerf) / b.lifeMs, 1.8), dist = Math.abs(px - geo.locusX[b.idx]); dy += e * (4.5 + b.vel * 6.2) * (b.idx === 0 ? 1.24 : 1) * Math.cos(dist * (0.075 + b.idx * 0.014) - age * (16 + b.idx * 2.2)) * Math.exp(-dist / (44 + b.dur * 11)); }
+      s ? ctx.lineTo(px, y + clamp(dy * win, -20, 20)) : ctx.moveTo(px, y + clamp(dy * win, -20, 20));
+    }
+    ctx.stroke();
+  }
+  for (let i = 0; i < 9; i++) {
+    const x = geo.locusX[i], loc = loci[i], hov = hover.kind === 'strike-now' && hover.locus === i;
+    strokeLine(x + 0.5, y - 5, x + 0.5, y + 5, lum(loc.heat, 0.24 + loc.glow * 0.65 + (hov ? 0.38 : 0)));
+    if (i === 0 || loc.glow > 0.08 || hov) strokeCirc(x, y, (i === 0 ? 6.5 : 5) + loc.glow * 3.2, lum(hov ? 0.9 : loc.heat, (i === 0 ? 0.32 : 0) + loc.glow * 0.72 + (hov ? 0.55 : 0)), hov ? 1.3 : 1.0);
+    fillCirc(x, y, (i === 0 ? 2.6 : 2.0) + loc.glow * 2.0 + (hov ? 1.0 : 0), lum(hov ? 1 : loc.heat, 0.58 + loc.glow * 0.42));
+  }
+  ctx.font = '8.5px ui-monospace, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = ink(0.28); ctx.textBaseline = 'bottom'; ctx.fillText('PAST ↑', xR + 8, y - 6); ctx.textBaseline = 'top'; ctx.fillText('FUTURE ↓', xR + 8, y + 6);
+}
+
+function drawMarqueeAndPings(cur, nowPerf) {
+  if (drag.mode === 'marquee' && drag.moved) {
+    const r = marqueeRect(), hits = notesInMarquee(cur), addMode = drag.shiftAdd || isShiftHeld();
+    ctx.fillStyle = ink(0.08); ctx.fillRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
+    ctx.save(); ctx.strokeStyle = ink(0.88); ctx.lineWidth = 1.1; ctx.setLineDash([4, 3]); ctx.strokeRect(r.x1 + 0.5, r.y1 + 0.5, Math.max(1, r.x2 - r.x1 - 1), Math.max(1, r.y2 - r.y1 - 1)); ctx.restore();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6;
+    for (const [cx, cy, dx, dy] of [[r.x1,r.y1,1,1],[r.x2,r.y1,-1,1],[r.x1,r.y2,1,-1],[r.x2,r.y2,-1,-1]]) { ctx.beginPath(); ctx.moveTo(cx + dx * 7, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + dy * 7); ctx.stroke(); }
+    const lbl = addMode ? `+G${state.groups.length + 1} ×${hits.length}` : `G1 ×${hits.length}`; ctx.font = '9px ui-monospace, monospace';
+    const lw = Math.ceil(ctx.measureText(lbl).width) + 8, lh = 14, ly = Math.max(geo.padTop + 2, r.y1 - lh - 3);
+    ctx.fillStyle = '#fff'; ctx.fillRect(r.x1, ly, lw, lh); ctx.fillStyle = '#000'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(lbl, r.x1 + 4, ly + lh * 0.5 + 0.5);
+  }
+  for (let i = fxPings.length - 1; i >= 0; i--) {
+    const p = fxPings[i], u = (nowPerf - p.bornPerf) / p.lifeMs; if (u >= 1) { fxPings.splice(i, 1); continue; }
+    const a = 1 - u; strokeCirc(p.x, p.y, 4 + u * 18, ink(a * 0.82), 1.1);
+    ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = ink(a); ctx.fillText(p.label, p.x, p.y - 8 - u * 10);
+  }
+}
+
+function drawSteerPad(nowPerf) {
+  const b = geo.pad, cx = b.x + b.w * 0.5, cy = b.y + b.h * 0.5, px = b.x + (state.motion * 0.5 + 0.5) * b.w, py = b.y + (0.5 - state.tension * 0.5) * b.h;
+  const act = drag.mode === 'steer-pad' || keysDown.has('KeyW') || keysDown.has('KeyA') || keysDown.has('KeyS') || keysDown.has('KeyD'), heat = act ? 1 : clamp(1 - (nowPerf - state.steerHotPerf) / FLASH_MS, 0, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.92)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.strokeStyle = lum(heat, act ? 0.96 : (hover.kind === 'steer-pad' ? 0.55 : 0.20)); ctx.lineWidth = act ? 1.4 : 1; ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+  strokeLine(cx + 0.5, b.y + 4, cx + 0.5, b.y + b.h - 4, ink(0.08)); strokeLine(b.x + 4, cy + 0.5, b.x + b.w - 4, cy + 0.5, ink(0.08));
+  strokeCirc(cx, cy, b.w * 0.25, ink(0.08)); strokeLine(cx, cy, px, py, lum(heat, act ? 0.95 : 0.56), act ? 1.5 : 1.0);
+  fillCirc(px, py, act ? 6 : 5, act ? '#fff' : '#000'); strokeCirc(px, py, act ? 6 : 5, lum(heat, 0.95), 1.4); fillCirc(px, py, 1.8, act ? '#000' : lum(heat, 0.95));
+  ctx.font = '8.5px ui-monospace, monospace';
+  const lbl = (txt, x, y, al, bl, lit) => { ctx.textAlign = al; ctx.textBaseline = bl; ctx.fillStyle = ink(lit ? 0.98 : 0.36); ctx.fillText(txt, x, y); };
+  lbl('W TENSION', cx, b.y - 5, 'center', 'bottom', keysDown.has('KeyW') || state.tension > 0.2); lbl('S RELEASE', cx, b.y + b.h + 5, 'center', 'top', keysDown.has('KeyS') || state.tension < -0.2);
+  lbl('A', b.x + 5, cy, 'left', 'middle', keysDown.has('KeyA') || state.motion < -0.2); lbl('D', b.x + b.w - 5, cy, 'right', 'middle', keysDown.has('KeyD') || state.motion > 0.2);
+  const sgn = (v) => (v >= 0 ? '+' : '') + v.toFixed(2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = lum(heat * 0.7, 0.40); ctx.fillText(`T${sgn(state.tension)} M${sgn(state.motion)}`, cx, b.y + b.h + 17);
+}
+
+// Smart Monochrome Live Cursor Reticle (Crisp Inverted White-Fill / Black-Ink for Active & Group Move)
+function drawSmartReticle(cur) {
+  if (!ptr.inside) return;
+  let badge = '', inverted = drag.mode !== 'idle'; const shift = isShiftHeld(), selN = selectedNoteCount();
+  if (drag.mode === 'strike-now' || (drag.mode === 'idle' && hover.kind === 'strike-now')) {
+    const l = drag.mode === 'strike-now' ? drag.locus : hover.locus, x = geo.locusX[l], y = geo.nowY, col = drag.mode === 'strike-now' ? '#fff' : ink(0.68);
+    badge = `STRIKE ${NOTES[l].name}`;
+    for (const [dx, dy] of [[-1,-1],[1,-1],[-1,1],[1,1]]) { strokeLine(x + dx * 10, y + dy * 10, x + dx * 6, y + dy * 10, col); strokeLine(x + dx * 10, y + dy * 10, x + dx * 10, y + dy * 6, col); }
+  } else if (drag.mode === 'move-group' || (drag.mode === 'idle' && hover.kind === 'move-group')) {
+    inverted = true; const dStr = drag.mode === 'move-group' && drag.moved ? ` Δp${drag.lastDPitch >= 0 ? '+' : ''}${drag.lastDPitch} Δt${drag.lastDStep >= 0 ? '+' : ''}${drag.lastDStep}` : '';
+    badge = `MOVE GROUP ✥ (${selN})${dStr}`;
+  } else if (drag.mode === 'idle' && hover.kind === 'shift-toggle') { inverted = true; badge = '−GROUP'; }
+  else if (drag.mode === 'idle' && hover.kind === 'shift-add-note') { inverted = true; badge = `+G${state.groups.length + 1} NOTE`; }
+  else if (drag.mode === 'move-head' || (drag.mode === 'idle' && hover.kind === 'move-head')) { const n = drag.mode === 'move-head' ? drag.note : hover.note; badge = drag.mode === 'move-head' && n ? `MOVE ⇕ ${NOTES[n.noteIdx].name}` : 'MOVE ⇕'; }
+  else if (drag.mode === 'resize-tail' || (drag.mode === 'idle' && hover.kind === 'resize-tail')) { const n = drag.mode === 'resize-tail' ? drag.note : hover.note; badge = drag.mode === 'resize-tail' && n ? `LENGTH ↕ ${n.dur}/16` : 'LENGTH ↕'; }
+  else if (drag.mode === 'marquee') { const addM = drag.shiftAdd || shift; badge = drag.moved ? `${addM ? '+GROUP' : 'MARQUEE'} ▢ ${notesInMarquee(cur).length}` : (addM ? '+GROUP ▢' : 'PLANT +'); }
+  else if (drag.mode === 'steer-pad' || (drag.mode === 'idle' && hover.kind === 'steer-pad')) badge = 'STEER ⊹';
+  else if (drag.mode === 'idle' && (hover.kind === 'plant-past' || hover.kind === 'plant-future' || hover.kind === 'marquee-void')) {
+    if (shift) { inverted = true; badge = '+GROUP ▢'; } else badge = hover.kind === 'marquee-void' ? 'MARQUEE ▢' : 'PLANT + / ▢';
+    if (hover.locus >= 0 && !shift) { const sx = geo.locusX[hover.locus], sy = stepToY(hover.step, cur); strokeLine(sx - 6, sy + 0.5, sx + 6, sy + 0.5, ink(0.32)); strokeLine(sx + 0.5, sy - 6, sx + 0.5, sy + 6, ink(0.32)); strokeCirc(sx, sy, 3.2, ink(0.46), 0.9); }
+  }
+  if (!badge) return;
+  ctx.font = inverted ? '600 9.5px ui-monospace, monospace' : '9.5px ui-monospace, monospace';
+  const bw = Math.ceil(ctx.measureText(badge).width) + 12, bh = 18, bx = clamp(ptr.x + 14, 8, W - bw - 8), by = clamp(ptr.y - 25, 34, H - bh - 8);
+  ctx.fillStyle = inverted ? '#fff' : 'rgba(0,0,0,0.92)'; ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = inverted ? '#fff' : ink(0.42); ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+  ctx.fillStyle = inverted ? '#000' : ink(0.92); ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(badge, bx + 6, by + bh * 0.5 + 0.5);
+}
+
+// --- 60 FPS Animation Loop + Left-Hand WASD Bimanual Future Steering ---
+seedOpeningScore(); updateHud();
+let lastFrame = performance.now();
+(function frame(nowPerf) {
+  const dt = Math.min(0.05, (nowPerf - lastFrame) / 1000); lastFrame = nowPerf; const cur = getCurrentStep();
+  const ax = (keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0), ay = (keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0);
+  if (ax || ay) {
+    state.motion = clamp(state.motion + ax * dt * 1.18, -1, 1); state.tension = clamp(state.tension + ay * dt * 1.18, -1, 1); state.steerHotPerf = nowPerf;
+    const det = `${Math.round(state.motion * 4)}:${Math.round(state.tension * 4)}`; if (det !== state.lastSteerDetent) { state.lastSteerDetent = det; playClick('drag-snap', 0.52); }
+    if (nowPerf - state.lastWasdRecomp > 65) { state.lastWasdRecomp = nowPerf; recomputeFuture(true, { kind: 'steer' }); }
+  }
+  for (let i = state.pastNotes.length - 1; i >= 0; i--) {
+    const n = state.pastNotes[i]; if (n.sympBoost > 0) n.sympBoost = Math.max(0, n.sympBoost - dt * 0.12);
+    if (!n.firedVisual && cur >= n.step) { n.firedVisual = true; triggerResonator(n.noteIdx, n.vel, n.dur, Boolean(n.edited || (n.attn && n.attn.kind === 'selected'))); }
+  }
+  if (ptr.inside && drag.mode === 'idle') inspectHover(ptr.x, ptr.y);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  drawMetricField(cur); drawAttentionAndWavefronts(cur, nowPerf); drawGroupBoxes(cur); drawWavePackets(cur, nowPerf);
+  drawNowInterferometer(dt, nowPerf); drawMarqueeAndPings(cur, nowPerf); drawSteerPad(nowPerf); drawSmartReticle(cur);
+  requestAnimationFrame(frame);
+})(lastFrame);
+</script>
+</body>
+</html>

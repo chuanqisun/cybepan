@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>35 — Future Attitude Mandala (Non-Timeline Cymatic Horizon)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff;
+    font: 11px/1.3 ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; user-select: none; touch-action: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  header {
+    position: fixed; top: 12px; left: 16px; right: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    pointer-events: none; z-index: 2;
+  }
+  .hint { color: rgba(255,255,255,0.34); letter-spacing: 0.05em; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hint b { color: rgba(255,255,255,0.68); font-weight: 500; }
+  .ctrls { display: inline-flex; align-items: center; gap: 8px; pointer-events: auto; }
+  button {
+    appearance: none; background: #000; color: rgba(255,255,255,0.58);
+    border: 1px solid rgba(255,255,255,0.16); border-radius: 2px;
+    font: inherit; font-size: 10px; letter-spacing: 0.1em; height: 24px; padding: 0 9px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; transition: border-color 140ms, color 140ms;
+  }
+  button:hover, button.on { border-color: rgba(255,255,255,0.68); color: #fff; }
+  button .dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.32); }
+  button.on .dot { background: #fff; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header>
+  <span class="hint"><b>35</b> · SPACE play · DRAG glyph / WASD steer · WHEEL / Q·E / I·K coherence · J·L curve · 1-9 strike · P peek</span>
+  <div class="ctrls">
+    <button id="peekBtn" type="button">PEEK</button>
+    <button id="playBtn" type="button"><span class="dot"></span><span id="playLbl">PLAY</span></button>
+  </div>
+</header>
+<script type="module">
+// 35 — Future Attitude Mandala · Non-Timeline Holistic Glyph & Musical Artificial Horizon (D Kurd)
+const NOTES = [
+  ['D3','^1', 146.83,-1.00], ['A3','^5', 220.00,-0.68], ['Bb3','^b6',233.08, 0.96],
+  ['C4','^b7',261.63, 0.86], ['D4','^1', 293.66,-0.78], ['E4','^2',  329.63, 0.58],
+  ['F4','^b3',349.23,-0.22], ['G4','^4', 392.00, 0.66], ['A4','^5',  440.00, 0.20],
+].map(([name, deg, freq, tension]) => ({ name, deg, freq, tension }));
+
+const BPM = 84, TATUM = 60 / BPM / 4, LOOKAHEAD = 0.11, FLASH_MS = 350, FUTURE_BARS = 4, TAU = Math.PI * 2;
+const QUANT_DURS = [1, 2, 3, 4, 6, 8];
+const METRIC_W = [1.00,.12,.44,.18, .74,.12,.48,.22, .88,.12,.46,.18, .70,.14,.50,.24];
+const CELLS = {
+  cantus:     [[8], [6,-2], [4,-4], [-4,4], [-2,6], [6,2], [4,4]],
+  lyrical:    [[4,2,2], [2,2,4], [2,4,2], [4,-2,2], [4,2,-2], [2,2,2,2]],
+  tresillo:   [[3,3,2], [3,2,3], [2,3,3], [3,3,-2], [3,3,1,1], [3,-1,2,2]],
+  syncopated: [[1,1,2,1,1,2], [2,1,1,2,1,1], [1,2,1,2,1,1], [1,1,2,3,1], [2,1,2,1,2], [1,1,1,1,2,2]],
+};
+const FIELD_HOME = [1.00, .90, .06, .08, .96, .10, .48, .10, .24];
+const FIELD_MID  = [ .44, .54, .56, .58, .76, .48, .88, .50, .54];
+const FIELD_TENS = [ .05, .14,1.00, .94, .16, .80, .54, .90, .74];
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const hash01 = (a, b, c = 0) => {
+  let x = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2147483647)) | 0;
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+};
+const mixInk = (heat, alpha) => {
+  const h = clamp(heat, 0, 1), a = clamp(alpha, 0, 1);
+  if (h <= 0.005) return `rgba(255,255,255,${a.toFixed(3)})`;
+  return `rgba(255,${Math.round(lerp(255, 90, h))},${Math.round(lerp(255, 31, h))},${clamp(lerp(a, Math.max(a, 0.94), h), 0, 1).toFixed(3)})`;
+};
+
+// --- Synthetic D Kurd Handpan Voice + Dry Stereo Mechanical Detent Micro-Clicks ---
+let actx = null, dryBus = null, revSend = null, uiBus = null, noiseBuf = null;
+
+function ensureAudio() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = actx.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 3.1; comp.release.value = 0.17; comp.connect(actx.destination);
+    const master = actx.createGain(); master.gain.value = 0.86; master.connect(comp);
+    dryBus = actx.createGain(); dryBus.connect(master);
+    const irLen = Math.floor(actx.sampleRate * 1.85), ir = actx.createBuffer(2, irLen, actx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); let lp = 0; for (let i = 0; i < irLen; i++) { lp = lp * 0.62 + (Math.random() * 2 - 1) * 0.38; d[i] = lp * Math.pow(1 - i / irLen, 3.0) * 0.50; } }
+    const conv = actx.createConvolver(); conv.buffer = ir;
+    revSend = actx.createGain(); revSend.gain.value = 0.28; revSend.connect(conv); conv.connect(master);
+    uiBus = actx.createGain(); uiBus.gain.value = 0.21; uiBus.connect(comp);
+    noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.12), actx.sampleRate);
+    const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  }
+  if (actx.state === 'suspended') actx.resume();
+}
+
+function playVoice(noteIdx, when, vel = 0.8, durSteps = 4) {
+  ensureAudio();
+  const t0 = Math.max(actx.currentTime + 0.001, when), f0 = NOTES[noteIdx].freq, v = clamp(vel, 0.12, 1.0);
+  const tau = clamp(0.18 + durSteps * 0.26, 0.28, 2.55) * (noteIdx === 0 ? 1.18 : 1.0), bloom = 0.55 + 0.45 * clamp(durSteps / 5, 0, 1);
+  const out = actx.createGain(), lp = actx.createBiquadFilter(), pan = actx.createStereoPanner();
+  out.gain.setValueAtTime(1, t0); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2400 + v * 2200, t0); lp.frequency.exponentialRampToValueAtTime(880, t0 + tau * 1.4);
+  pan.pan.setValueAtTime((noteIdx - 4) * 0.11, t0); out.connect(lp); lp.connect(pan); pan.connect(dryBus); pan.connect(revSend);
+  const fg = actx.createGain(); fg.gain.setValueAtTime(0.0001, t0); fg.gain.linearRampToValueAtTime(0.30 * v, t0 + 0.005); fg.gain.exponentialRampToValueAtTime(0.0001, t0 + tau); fg.connect(out);
+  for (const [df, w] of [[0, 0.72], [0.7, 0.28]]) { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(f0 + df, t0); g.gain.value = w; o.connect(g); g.connect(fg); o.start(t0); o.stop(t0 + tau + 0.05); }
+  for (const [r, del, lvl, mul] of [[2.001, 0.032, 0.19, 0.68], [2.998, 0.048, 0.064, 0.44]]) {
+    const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(f0 * r, t0);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(lvl * v * bloom, t0 + del); g.gain.exponentialRampToValueAtTime(0.0001, t0 + tau * mul);
+    o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + tau * mul + 0.05);
+  }
+  const ns = actx.createBufferSource(), bp = actx.createBiquadFilter(), ng = actx.createGain();
+  ns.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.setValueAtTime(clamp(f0 * 3.0, 520, 1850), t0); bp.Q.value = 2.0;
+  ng.gain.setValueAtTime(0.0001, t0); ng.gain.linearRampToValueAtTime(0.14 * v, t0 + 0.002); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.026);
+  ns.connect(bp); bp.connect(ng); ng.connect(out); ns.start(t0); ns.stop(t0 + 0.035);
+  return { damp() { const now = actx.currentTime; out.gain.cancelScheduledValues(now); out.gain.setValueAtTime(Math.max(0.001, out.gain.value), now); out.gain.exponentialRampToValueAtTime(0.0001, now + 0.22); } };
+}
+
+function playClick(panVal = 0, strong = false) {
+  if (!actx) ensureAudio(); if (actx.state !== 'running') return;
+  const t0 = actx.currentTime + 0.001, src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain(), p = actx.createStereoPanner();
+  src.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = strong ? 1900 : 2750; bp.Q.value = 4.4;
+  g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(strong ? 0.17 : 0.09, t0 + 0.0012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.013);
+  p.pan.value = clamp(panVal, -0.82, 0.82); src.connect(bp); bp.connect(g); g.connect(p); p.connect(uiBus); src.start(t0); src.stop(t0 + 0.018);
+}
+
+// --- Musical State, Steering Parameters & Live Eigenvector Buffers ---
+const state = {
+  steer: { energy: 0.56, gravity: 0.12, coherence: 0.66, resolveBias: -0.10 },
+  playing: false, playheadStep: 32.0, anchorStep: 32.0, anchorAudioTime: 0,
+  nextSchedStep: 32, nextId: 1, seed: 29, lastUserPitch: 0, peek: false,
+  pastNotes: [], futureNotes: [], activeHolds: new Map(), lastAnalyzedBeat: -1,
+};
+const loci = NOTES.map(() => ({ glow: 0, heat: 0, damp: 1.8 })), blooms = [];
+const heat = { lobe: 0, horizon: 0, aperture: 0, coherence: 0 };
+
+const makeEigen = () => ({
+  cantus: 0.15, lyrical: 0.35, tresillo: 0.35, syncop: 0.15,
+  dft2: 0.2, dft3: 0.3, dft4: 0.3, dft6: 0.25, dft8: 0.15, chiral: 0.2, regime: '3·3·2',
+  horizonShift: 0.1, horizonLift: 0.1, tiltAngle: -0.05, trajectory: 0,
+  aperture: 0.52, ringCount: 3, density: 0.42, coherence: 0.64, dots: [],
+});
+let targetEigen = makeEigen();
+const dispEigen = makeEigen();
+
+const getCurrentStep = () =>
+  (!state.playing || !actx) ? state.playheadStep : state.anchorStep + Math.max(0, (actx.currentTime - state.anchorAudioTime) / TATUM);
+
+function triggerResonator(idx, vel, durSteps, hot = false) {
+  const loc = loci[idx];
+  loc.glow = clamp(Math.max(loc.glow * 0.4, 0.48 + vel * 0.52), 0, 1);
+  loc.damp = clamp(3.6 / (0.68 + durSteps * 0.46), 0.65, 3.6);
+  if (hot) loc.heat = 1.0;
+  blooms.push({ idx, vel, dur: durSteps, bornPerf: performance.now(), lifeMs: clamp(360 + durSteps * 270, 420, 2500) * (idx === 0 ? 1.15 : 1.0), hot });
+  if (blooms.length > 22) blooms.shift();
+}
+
+// --- Quantized 16th-Note Variable-Duration D Kurd Generative Engine ---
+function barGravityTarget(barIdx, baseBar) {
+  const rel = barIdx - baseBar, g = state.steer.gravity, rb = state.steer.resolveBias;
+  const breath = (barIdx % 4 === 3) ? -0.24 : (barIdx % 4 === 2 ? 0.16 : (barIdx % 4 === 1 ? 0.08 : -0.06));
+  if (rel <= 1) return clamp(g - (rb > 0 ? rb * 0.36 : 0) + breath * 0.18, -1, 1);
+  return clamp(g + rb * (rb > 0 ? 0.56 : 0.78) + (Math.abs(rb) < 0.08 ? breath * 0.58 : 0), -1, 1);
+}
+
+function pickCell(len, barIdx, subIdx, isCadence) {
+  const E = state.steer.energy;
+  if (len === 8) {
+    const bands = [
+      [CELLS.cantus,     Math.exp(-Math.pow((E - 0.08) / 0.18, 2)) + (isCadence && E < 0.3 ? 0.35 : 0)],
+      [CELLS.lyrical,    Math.exp(-Math.pow((E - 0.36) / 0.17, 2))],
+      [CELLS.tresillo,   Math.exp(-Math.pow((E - 0.64) / 0.17, 2))],
+      [CELLS.syncopated, Math.exp(-Math.pow((E - 0.94) / 0.18, 2))],
+    ];
+    let r = hash01(barIdx * 17 + subIdx, state.seed, 101) * bands.reduce((s, b) => s + b[1], 0), chosen = CELLS.lyrical;
+    for (const [bank, w] of bands) { r -= w; if (r <= 0) { chosen = bank; break; } }
+    return chosen[Math.floor(hash01(barIdx * 23 + subIdx, state.seed + 7, 109) * chosen.length)];
+  }
+  const out = [];
+  for (let rem = len, k = 0; rem > 0; k++) {
+    const avail = QUANT_DURS.filter(d => d <= rem), u = hash01(barIdx * 31 + subIdx, rem * 7 + k, 202);
+    if (rem >= 2 && k > 0 && u < clamp(0.34 - E * 0.26, 0.04, 0.35)) { const rLen = rem >= 4 && E < 0.3 ? 4 : 2; out.push(-rLen); rem -= rLen; }
+    else { const d = avail[clamp(Math.round((1 - E) * (avail.length - 1) + (u - 0.5) * 1.3), 0, avail.length - 1)]; out.push(d); rem -= d; }
+  }
+  return out;
+}
+
+function choosePitch(step, dur, barIdx, barT, prevPitch, prevInt, echo, lockNote) {
+  const pos = ((step % 16) + 16) % 16, C = state.steer.coherence, E = state.steer.energy;
+  if (lockNote && hash01(step, lockNote.id, 303) < 0.72 + C * 0.24) return { noteIdx: lockNote.noteIdx, echoWeight: 0.96, locked: true };
+  if (echo) {
+    const gap = Math.abs(NOTES[echo.noteIdx].tension - barT);
+    const compat = echo.samePlan ? (gap < 0.9 ? 1.0 : 0.25) : (gap < 0.62 ? clamp(1 - gap * 1.1, 0.2, 1.0) : 0);
+    const echoProb = clamp((C - 0.08) * 1.08 * (echo.source === 'user' ? 1.25 : 1) * echo.lagW * compat, 0, 0.96);
+    if (hash01(step, barIdx * 3 + 1, 404) < echoProb) return { noteIdx: echo.noteIdx, echoWeight: clamp(C * echo.lagW, 0.25, 0.96), locked: false };
+  }
+  const t01 = clamp((barT + 1) * 0.5, 0, 1);
+  const wHome = clamp(Math.pow(1 - t01, 1.45) * 1.35, 0.02, 1.35), wMid = Math.sin(t01 * Math.PI) * 0.62, wTens = clamp(Math.pow(t01, 1.35) * 1.40, 0.02, 1.40);
+  const targetReg = clamp(0.14 + E * 0.40 + t01 * 0.34, 0.06, 0.90), weights = new Float32Array(9);
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    let w = (FIELD_HOME[i] * wHome + FIELD_MID[i] * wMid + FIELD_TENS[i] * wTens) * (0.48 + 0.90 * Math.exp(-Math.pow((i / 8 - targetReg) / 0.38, 2)));
+    if (pos === 0 && dur >= 3) {
+      if (barT <= 0.08 && (i === 0 || i === 1 || i === 4)) w *= 3.0 - barT;
+      if (barT > 0.25 && (i === 2 || i === 3 || i === 7)) w *= 1.9 + barT * 0.8;
+    }
+    if (prevPitch >= 0) {
+      const d = i - prevPitch, ad = Math.abs(d);
+      w *= dur === 1 ? (ad === 1 ? 2.5 : ad === 2 ? 1.4 : 0.32) : (ad === 0 ? (pos === 0 ? 0.55 : 0.26) : ad <= 2 ? 1.72 : ad <= 4 ? 0.92 : 0.40);
+      if (Math.abs(prevInt) >= 3 && Math.sign(d) === -Math.sign(prevInt) && ad > 0 && ad <= 2) w *= 2.05;
+      if (barT < -0.18 && d < 0) w *= 1 + (-barT) * 0.65;
+      if (barT >  0.22 && d > 0) w *= 1 + barT * 0.45;
+    }
+    if (echo && echo.noteIdx === i && Math.abs(NOTES[i].tension - barT) < 0.65) w *= 1 + C * 1.1;
+    weights[i] = Math.max(0.001, w); sum += weights[i];
+  }
+  let r = hash01(step * 17 + dur, barIdx * 11 + prevPitch + 2, 505) * sum;
+  for (let i = 0; i < 9; i++) { r -= weights[i]; if (r <= 0) return { noteIdx: i, echoWeight: 0, locked: false }; }
+  return { noteIdx: 4, echoWeight: 0, locked: false };
+}
+
+function findPastAt(history, targetStep) {
+  let best = null, bestDist = 1.5;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const dist = Math.abs(history[i].step - targetStep);
+    if (dist < bestDist) { best = history[i]; bestDist = dist; if (dist < 0.35) break; }
+  }
+  return best;
+}
+
+function generateBar(barIdx, baseBar, history, lockedNotes, prevPitchIn, prevIntIn) {
+  const barStart = barIdx * 16, barNotes = [], C = state.steer.coherence, E = state.steer.energy;
+  const barT = barGravityTarget(barIdx, baseBar), slots = [];
+  const pushFill = (start, len, sub, cad) => {
+    let p = start;
+    for (const v of pickCell(len, barIdx, sub, cad)) { if (v > 0) slots.push({ pos: p, dur: v, lockNote: null }); p += Math.abs(v); }
+  };
+  const anchors = [];
+  for (const ln of lockedNotes) {
+    const rel = ((Math.round(ln.step) % 16) + 16) % 16;
+    if (!anchors.some(a => a.rel === rel)) anchors.push({ rel, note: ln });
+  }
+  anchors.sort((a, b) => a.rel - b.rel);
+
+  // High Coherence locks upcoming bars 2..4 to the freshly steered bar 1 (ostinato phase-lock!)
+  let echoRhythm = null;
+  if (C > 0.28 && !anchors.length && barIdx > baseBar) {
+    const srcStart = barStart - 16;
+    const found = history.filter(n => n.step >= srcStart - 0.25 && n.step < srcStart + 15.75);
+    if (found.length >= 1 && hash01(barIdx, state.seed, 606) < (C - 0.18) * 1.25) echoRhythm = found;
+  }
+  if (echoRhythm) {
+    let cursor = 0;
+    for (const en of echoRhythm) {
+      const rel = clamp(Math.round(en.step - Math.floor(en.step / 16) * 16), cursor, 15);
+      if (rel < cursor) continue;
+      const d = clamp(en.dur, 1, 16 - rel);
+      slots.push({ pos: rel, dur: d, lockNote: null }); cursor = rel + d;
+    }
+  } else if (anchors.length) {
+    let cursor = 0;
+    for (let k = 0; k < anchors.length; k++) {
+      const a = anchors[k];
+      if (a.rel > cursor) pushFill(cursor, a.rel - cursor, k, false);
+      const dur = clamp(a.note.dur, 1, Math.max(1, (k + 1 < anchors.length ? anchors[k + 1].rel : 16) - a.rel));
+      slots.push({ pos: a.rel, dur, lockNote: a.note }); cursor = a.rel + dur;
+    }
+    if (cursor < 16) pushFill(cursor, 16 - cursor, 9, (barIdx & 1) === 1);
+  } else {
+    pushFill(0, 8, 0, false); pushFill(8, 8, 1, (barIdx & 1) === 1);
+  }
+
+  let prevPitch = prevPitchIn, prevInt = prevIntIn;
+  for (const sl of slots) {
+    const step = barStart + sl.pos, l16 = findPastAt(history, step - 16), l32 = findPastAt(history, step - 32);
+    const echo = l16 ? { ...l16, lagW: 1.0, samePlan: barIdx > baseBar } : (l32 ? { ...l32, lagW: 0.78, samePlan: barIdx > baseBar + 1 } : null);
+    const { noteIdx, echoWeight, locked } = choosePitch(step, sl.dur, barIdx, barT, prevPitch, prevInt, echo, sl.lockNote);
+    const vel = clamp(0.38 + E * 0.18 + METRIC_W[sl.pos] * 0.34 + (sl.dur >= 4 ? 0.07 : sl.dur === 1 ? -0.10 : 0) + barT * 0.05, 0.25, 0.98);
+    barNotes.push({ id: 0, step, dur: sl.dur, noteIdx, vel, source: 'gen', locked: false, echoWeight, echoLocked: locked, barT, flashPerf: -9999 });
+    if (prevPitch >= 0) prevInt = noteIdx - prevPitch;
+    prevPitch = noteIdx;
+  }
+  return { barNotes, prevPitch, prevInt };
+}
+
+// --- 4 Pre-Attentive Visual Eigenvectors (100% Computed Directly from Live Future Buffer!) ---
+function analyzeFutureBuffer(curStep) {
+  const near = state.futureNotes.filter(n => n.step >= curStep - 0.1 && n.step < curStep + 32);
+  const far  = state.futureNotes.filter(n => n.step >= curStep + 32 && n.step < curStep + 64);
+  const all  = near.length ? near : state.futureNotes.slice(0, 24);
+  const e = makeEigen();
+  if (!all.length) return e;
+
+  // Eigenvector 1: Radial Symmetry & Lobe Geometry (16-step Circular DFT + Duration & LHL Syncopation)
+  const impulse = new Float32Array(16);
+  let durSum = 0, longDur = 0, evenDur = 0, tresScore = 0, syncScore = 0, shortCnt = 0, velSum = 0, regSum = 0, regW = 0;
+  for (let k = 0; k < all.length; k++) {
+    const n = all[k], pos16 = ((Math.round(n.step) % 16) + 16) % 16, pos8 = pos16 % 8;
+    impulse[pos16] += 0.55 + n.vel * 0.45;
+    durSum += n.dur; velSum += n.vel; regSum += (n.noteIdx / 8) * n.dur; regW += n.dur;
+    if (n.dur >= 6 || (n.dur === 4 && all.length <= 7)) longDur += n.dur;
+    if ((n.dur === 2 || (n.dur === 4 && all.length >= 6)) && pos16 % 2 === 0) evenDur += n.dur;
+    const nextN = all[k + 1], ioi = nextN ? Math.round(nextN.step - n.step) : n.dur;
+    if (n.dur === 3 || ioi === 3) tresScore += 1.35;
+    if (pos8 === 3 || pos8 === 6) tresScore += 0.85;
+    if (n.dur === 1) shortCnt += 1.0;
+    let maxCrossed = METRIC_W[pos16];
+    for (let s = 1; s < n.dur; s++) maxCrossed = Math.max(maxCrossed, METRIC_W[(pos16 + s) % 16]);
+    if (maxCrossed > METRIC_W[pos16] + 0.14) syncScore += (maxCrossed - METRIC_W[pos16]) * 1.4;
+    if (pos16 % 2 === 1) syncScore += 0.45;
+  }
+  const dftMag = (m) => {
+    let re = 0, im = 0, sum = 0;
+    for (let p = 0; p < 16; p++) { const a = (TAU * m * p) / 16; re += impulse[p] * Math.cos(a); im += impulse[p] * Math.sin(a); sum += impulse[p]; }
+    return sum > 0 ? Math.hypot(re, im) / sum : 0;
+  };
+  e.dft2 = dftMag(2); e.dft3 = dftMag(3); e.dft4 = dftMag(4); e.dft6 = dftMag(6); e.dft8 = dftMag(8);
+
+  const restFrac = clamp(1 - durSum / 32, 0, 1);
+  const rawCan = clamp((longDur / Math.max(1, durSum)) * 0.85 + restFrac * 0.72 + (all.length <= 6 ? 0.50 : 0), 0, 1.6);
+  const rawLyr = clamp((evenDur / Math.max(1, durSum)) * 0.78 + e.dft4 * 0.48 - (all.length <= 6 ? 0.35 : 0) - (shortCnt / all.length) * 0.5, 0, 1.4);
+  const rawTre = clamp((tresScore / Math.max(2, all.length)) * 0.64 + e.dft6 * 0.46 + e.dft3 * 0.22, 0, 1.4);
+  const rawSyn = clamp((shortCnt / all.length) * 0.88 + (syncScore / Math.max(2, all.length)) * 0.52 + e.dft8 * 0.34, 0, 1.4);
+  const rSum = rawCan + rawLyr + rawTre + rawSyn + 0.001;
+  e.cantus = rawCan / rSum; e.lyrical = rawLyr / rSum; e.tresillo = rawTre / rSum; e.syncop = rawSyn / rSum;
+  e.chiral = clamp((e.tresillo - 0.16) * 1.85 + Math.max(0, e.dft6 - e.dft4) * 0.22, 0, 1);
+  const maxW = Math.max(e.cantus, e.lyrical, e.tresillo, e.syncop);
+  e.regime = maxW === e.cantus ? 'CANTUS' : (maxW === e.lyrical ? '4·2·2' : (maxW === e.tresillo ? '3·3·2' : '16TH'));
+
+  // Eigenvector 2: Artificial Horizon Tilt, Eccentricity & Resolution Trajectory (Near 2b vs Far 2b)
+  const tonalGravityOf = (list) => {
+    if (!list.length) return { grav: -0.75, reg: 0.25 };
+    let num = 0, den = 0, rNum = 0;
+    for (const n of list) {
+      const w = (0.55 + METRIC_W[((Math.round(n.step) % 16) + 16) % 16] * 0.65) * (0.65 + n.dur * 0.22);
+      num += NOTES[n.noteIdx].tension * w; rNum += (n.noteIdx / 8) * w; den += w;
+    }
+    return { grav: den > 0 ? num / den : -0.75, reg: den > 0 ? rNum / den : 0.25 };
+  };
+  const gNear = tonalGravityOf(all), gFar = tonalGravityOf(far.length ? far : all);
+  const mapShift = (g) => { const s = clamp((g + 0.56) / 1.18, -0.14, 1.0); return Math.abs(s) < 0.06 ? 0 : s; };
+  const nearShift = mapShift(gNear.grav), farShift = mapShift(gFar.grav);
+  e.horizonShift = nearShift;
+  e.horizonLift  = clamp(nearShift * 0.74 + (gNear.reg - 0.34) * 0.42, -0.22, 1.0);
+  e.tiltAngle    = -clamp(nearShift, -0.14, 1.0) * 0.46;
+  e.trajectory   = clamp(farShift - nearShift, -1, 1);
+
+  // Eigenvector 3: Aperture Expansion & Luminous Ring Count (Density, Fill, Register & Velocity)
+  e.density   = clamp((all.length - 3) / 19, 0, 1);
+  const fill  = clamp(durSum / 32, 0, 1), meanV = velSum / all.length, meanR = regW > 0 ? regSum / regW : 0.25;
+  e.aperture  = clamp(e.density * 0.56 + fill * 0.14 + meanR * 0.22 + (meanV - 0.38) * 0.20, 0.05, 1.0);
+  e.ringCount = clamp(Math.round(1 + e.aperture * 4), 1, 5);
+
+  // Eigenvector 4: Coherence / Phase-Lock (Actual Echo Links + Bar-to-Bar Self-Similarity)
+  const near64 = state.futureNotes.filter(n => n.step >= curStep - 0.1 && n.step < curStep + 64);
+  const bar2plus = near64.filter(n => n.step >= curStep + 15.5);
+  const evalSet = bar2plus.length >= 3 ? bar2plus : near64;
+  let echoSum = 0, simHits = 0, simPairs = 0;
+  for (const n of evalSet) {
+    echoSum += n.echoWeight || 0;
+    const prev = state.futureNotes.find(m => Math.abs((n.step - m.step) - 16) < 0.6) || findPastAt(state.pastNotes, n.step - 16);
+    simPairs++;
+    if (prev) {
+      const pM = prev.noteIdx === n.noteIdx ? 1.0 : (Math.abs(prev.noteIdx - n.noteIdx) <= 1 ? 0.4 : 0);
+      simHits += clamp(pM * 0.65 + (prev.dur === n.dur ? 0.50 : 0.15), 0, 1);
+    }
+  }
+  const echoRatio = evalSet.length ? echoSum / evalSet.length : 0;
+  const selfSim = simPairs > 0 ? simHits / simPairs : 0;
+  e.coherence = clamp(echoRatio * 0.54 + selfSim * 0.54, 0.04, 1.0);
+
+  e.dots = all.map((n, idx) => ({
+    ang: ((((n.step % 16) + 16) % 16) / 16) * TAU - Math.PI * 0.5,
+    vel: n.vel, dur: n.dur, noteIdx: n.noteIdx, novel: 1 - clamp(n.echoWeight || 0, 0, 1),
+    seed: hash01(Math.round(n.step), n.noteIdx, 707 + idx), bar: Math.floor((n.step - curStep) / 16),
+  }));
+  return e;
+}
+
+function recomputeFuture(flashChanges = true) {
+  const nowPerf = performance.now(), prevEigen = targetEigen;
+  const prevByStep = new Map(state.futureNotes.map(n => [n.step, n]));
+  const curStep = getCurrentStep(), minStep = Math.max(state.nextSchedStep, Math.ceil(curStep - 0.001)), curBar = Math.floor(minStep / 16);
+  for (const p of state.pastNotes) if (p.locked && curStep - p.step > 42) p.locked = false;
+  const locked = state.pastNotes.filter(p => p.locked), hist = state.pastNotes.slice();
+  let prevPitch = hist.length ? hist[hist.length - 1].noteIdx : state.lastUserPitch;
+  let prevInt = hist.length >= 2 ? hist[hist.length - 1].noteIdx - hist[hist.length - 2].noteIdx : 0;
+
+  const nextFuture = [];
+  for (let b = curBar; b < curBar + FUTURE_BARS + 1; b++) {
+    const res = generateBar(b, curBar, hist, locked, prevPitch, prevInt);
+    prevPitch = res.prevPitch; prevInt = res.prevInt;
+    for (const ev of res.barNotes) {
+      if (ev.step < minStep) continue;
+      const old = prevByStep.get(ev.step);
+      if (old && old.noteIdx === ev.noteIdx && old.dur === ev.dur) ev.flashPerf = old.flashPerf;
+      else if (flashChanges && prevByStep.size) ev.flashPerf = nowPerf;
+      nextFuture.push(ev); hist.push(ev);
+    }
+  }
+  state.futureNotes = nextFuture;
+  targetEigen = analyzeFutureBuffer(curStep);
+  if (flashChanges) {
+    const dL = Math.abs(targetEigen.cantus - prevEigen.cantus) + Math.abs(targetEigen.tresillo - prevEigen.tresillo) + Math.abs(targetEigen.syncop - prevEigen.syncop);
+    const dH = Math.abs(targetEigen.horizonShift - prevEigen.horizonShift) + Math.abs(targetEigen.trajectory - prevEigen.trajectory) * 0.7;
+    const dA = Math.abs(targetEigen.aperture - prevEigen.aperture), dC = Math.abs(targetEigen.coherence - prevEigen.coherence);
+    if (dL > 0.025) heat.lobe      = clamp(Math.max(heat.lobe, 0.55 + dL * 2.2), 0, 1);
+    if (dH > 0.025) heat.horizon   = clamp(Math.max(heat.horizon, 0.55 + dH * 2.4), 0, 1);
+    if (dA > 0.022) heat.aperture  = clamp(Math.max(heat.aperture, 0.55 + dA * 2.8), 0, 1);
+    if (dC > 0.025) heat.coherence = clamp(Math.max(heat.coherence, 0.55 + dC * 2.4), 0, 1);
+  }
+}
+
+function seedInitialPast() {
+  const seed = [[0,6,0,0.84],[6,2,1,0.58],[8,4,4,0.74],[12,4,6,0.68],[16,3,0,0.82],[19,3,4,0.68],[22,2,6,0.62],[24,3,2,0.78],[27,3,3,0.66],[30,2,4,0.60]];
+  state.pastNotes = seed.map(([step, dur, noteIdx, vel]) => ({ id: state.nextId++, step, dur, noteIdx, vel, source: 'gen', locked: false, firedVisual: true, barT: 0 }));
+  recomputeFuture(false);
+  Object.assign(dispEigen, targetEigen);
+}
+
+// --- Lookahead Web Audio Scheduler, Transport & Direct Performance ---
+let schedTimer = null;
+function schedulerTick() {
+  if (!state.playing || !actx) return;
+  const horizon = state.anchorStep + (actx.currentTime + LOOKAHEAD - state.anchorAudioTime) / TATUM;
+  while (state.futureNotes.length && state.futureNotes[0].step <= horizon) {
+    const ev = state.futureNotes.shift();
+    if (ev.step < state.nextSchedStep) continue;
+    playVoice(ev.noteIdx, state.anchorAudioTime + (ev.step - state.anchorStep) * TATUM, ev.vel, ev.dur);
+    ev.id = state.nextId++; ev.firedVisual = false; state.pastNotes.push(ev); state.nextSchedStep = ev.step + 1;
+  }
+  const curStep = getCurrentStep(), curBar = Math.floor(curStep / 16);
+  const maxFut = state.futureNotes.length ? state.futureNotes[state.futureNotes.length - 1].step : -1;
+  if (maxFut < (curBar + FUTURE_BARS) * 16 + 8) recomputeFuture(false);
+  else { const beat = Math.floor(curStep / 4); if (beat !== state.lastAnalyzedBeat) { state.lastAnalyzedBeat = beat; targetEigen = analyzeFutureBuffer(curStep); } }
+  if (state.pastNotes.length > 180) state.pastNotes = state.pastNotes.filter(n => n.locked || curStep - n.step < 64);
+}
+
+const playBtn = document.getElementById('playBtn'), playLbl = document.getElementById('playLbl'), peekBtn = document.getElementById('peekBtn');
+function togglePlay() {
+  ensureAudio();
+  if (!state.playing) {
+    state.anchorStep = state.playheadStep; state.anchorAudioTime = actx.currentTime + 0.025;
+    state.nextSchedStep = Math.ceil(state.playheadStep - 0.001); state.playing = true;
+    recomputeFuture(false); schedulerTick(); schedTimer = setInterval(schedulerTick, 24);
+  } else { state.playheadStep = getCurrentStep(); state.playing = false; clearInterval(schedTimer); schedTimer = null; }
+  playBtn.classList.toggle('on', state.playing); playLbl.textContent = state.playing ? 'PAUSE' : 'PLAY';
+}
+function togglePeek() { state.peek = !state.peek; peekBtn.classList.toggle('on', state.peek); if (actx) playClick(0, false); }
+playBtn.addEventListener('click', togglePlay); peekBtn.addEventListener('click', togglePeek);
+
+function startUserNote(noteIdx, holdKey) {
+  ensureAudio(); if (state.activeHolds.has(holdKey)) return;
+  const voice = playVoice(noteIdx, actx.currentTime, 0.9, 5);
+  triggerResonator(noteIdx, 0.96, 5, true); state.lastUserPitch = noteIdx;
+  const noteObj = state.playing ? { id: state.nextId++, step: getCurrentStep(), dur: 1, noteIdx, vel: 0.92, source: 'user', locked: false, firedVisual: true, holding: true, barT: NOTES[noteIdx].tension } : null;
+  if (noteObj) state.pastNotes.push(noteObj);
+  state.activeHolds.set(holdKey, { noteIdx, startPerf: performance.now(), voice, noteObj });
+}
+function endUserNote(holdKey) {
+  const h = state.activeHolds.get(holdKey); if (!h) return;
+  state.activeHolds.delete(holdKey);
+  const holdMs = performance.now() - h.startPerf;
+  if (holdMs < 155) { h.voice.damp(); loci[h.noteIdx].damp = 3.2; }
+  if (h.noteObj) {
+    const raw = (holdMs / 1000) / TATUM; let q = 1;
+    for (const d of QUANT_DURS) if (Math.abs(d - raw) <= Math.abs(q - raw)) q = d;
+    h.noteObj.dur = q; h.noteObj.holding = false; recomputeFuture(true);
+  }
+}
+
+// --- Geometry, Pointer & Keyboard Tactile Steering ---
+const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+let W = 1280, H = 800;
+const geo = { nowY: 304, padTop: 46, pxPerStep: 7.5, gap: 52, locusX: new Float32Array(9), fieldL: 0, fieldR: 0, gx: 640, gy: 552, R: 165, bezelR: 186 };
+
+function layout() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  geo.nowY = Math.round(H * 0.38); geo.pxPerStep = Math.max(4.5, (geo.nowY - geo.padTop - 12) / 32);
+  geo.gap = clamp(Math.min(W * 0.068, 66), 28, 66);
+  const x0 = Math.round(W * 0.5 - geo.gap * 4), lowerH = H - geo.nowY;
+  for (let i = 0; i < 9; i++) geo.locusX[i] = x0 + i * geo.gap;
+  geo.fieldL = geo.locusX[0]; geo.fieldR = geo.locusX[8];
+  geo.gx = Math.round(W * 0.5); geo.gy = Math.round(geo.nowY + lowerH * 0.50);
+  geo.R = clamp(Math.min(lowerH * 0.355, W * 0.285), 96, 206); geo.bezelR = geo.R * 1.13;
+}
+window.addEventListener('resize', layout); layout();
+
+const drag = { mode: null, locus: -1, detentE: '', detentG: '', detentC: '', clickT: 0 };
+const hover = { zone: null, locusIdx: -1, pastId: -1 }, keysDown = new Set();
+const nearestLocus = (mx) => (mx < geo.fieldL - geo.gap * 0.55 || mx > geo.fieldR + geo.gap * 0.55) ? -1 : clamp(Math.round((mx - geo.fieldL) / geo.gap), 0, 8);
+
+function hitTestPastNote(mx, my) {
+  if (my >= geo.nowY - 12) return null;
+  const cur = getCurrentStep(), hw = Math.min(18, geo.gap * 0.44);
+  for (let i = state.pastNotes.length - 1; i >= 0; i--) {
+    const n = state.pastNotes[i];
+    if (n.step >= cur || Math.abs(mx - geo.locusX[n.noteIdx]) > hw) continue;
+    const y0 = geo.nowY + (n.step - cur) * geo.pxPerStep, y1 = Math.min(geo.nowY, geo.nowY + (n.step + n.dur - cur) * geo.pxPerStep);
+    if (my >= y0 - 8 && my <= y1 + 6) return n;
+  }
+  return null;
+}
+
+function applySteer({ energy, gravity, coherence, resolveBias }, panHint = 0) {
+  let changed = false;
+  if (energy !== undefined) {
+    const v = clamp(energy, 0, 1);
+    if (Math.abs(v - state.steer.energy) > 0.002) {
+      state.steer.energy = v; changed = true; heat.lobe = 1; heat.aperture = 1;
+      const b = v < 0.24 ? 0 : (v < 0.50 ? 1 : (v < 0.78 ? 2 : 3)), key = `${b}:${Math.round(v * 12)}`;
+      if (key !== drag.detentE) { const maj = drag.detentE && drag.detentE[0] !== String(b); drag.detentE = key; playClick(panHint, maj); }
+    }
+  }
+  if (gravity !== undefined) {
+    const v = clamp(gravity, -1, 1);
+    if (Math.abs(v - state.steer.gravity) > 0.002) {
+      state.steer.gravity = Math.abs(v) < 0.04 ? 0 : v; changed = true; heat.horizon = 1;
+      const st = Math.round(state.steer.gravity * 6), key = `g:${st}`;
+      if (key !== drag.detentG) { drag.detentG = key; playClick(state.steer.gravity * 0.65, st === 0); }
+    }
+  }
+  if (coherence !== undefined) {
+    const v = clamp(coherence, 0, 1);
+    if (Math.abs(v - state.steer.coherence) > 0.002) {
+      state.steer.coherence = v; changed = true; heat.coherence = 1;
+      const st = Math.round(v * 10), key = `c:${st}`;
+      if (key !== drag.detentC) { drag.detentC = key; playClick((v - 0.5) * 0.55, st === 0 || st === 5 || st === 10); }
+    }
+  }
+  if (resolveBias !== undefined) {
+    const v = clamp(resolveBias, -1, 1);
+    if (Math.abs(v - state.steer.resolveBias) > 0.002) { state.steer.resolveBias = Math.abs(v) < 0.04 ? 0 : v; changed = true; heat.horizon = 1; }
+  }
+  if (changed) recomputeFuture(true);
+}
+
+const updateGlyphPointer = (mx, my) => {
+  const dx = clamp((mx - geo.gx) / (geo.R * 0.94), -1, 1), dy = clamp((geo.gy - my) / (geo.R * 0.94), -1, 1);
+  applySteer({ gravity: dx, energy: (dy + 1) * 0.5 }, dx * 0.65);
+};
+const updateCoherencePointer = (mx, my) => {
+  let s = Math.atan2(my - geo.gy, mx - geo.gx) + Math.PI * 0.5; if (s > Math.PI) s -= TAU;
+  const n = clamp((s / (Math.PI * 0.78) + 1) * 0.5, 0, 1); applySteer({ coherence: n }, (n - 0.5) * 0.7);
+};
+function resetNeutral() {
+  state.steer = { energy: 0.44, gravity: 0.0, coherence: 0.64, resolveBias: -0.10 };
+  heat.lobe = heat.horizon = heat.aperture = heat.coherence = 1; playClick(0, true); recomputeFuture(true);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, now = performance.now();
+  canvas.setPointerCapture(e.pointerId);
+  const lIdx = nearestLocus(mx);
+  if (lIdx >= 0 && Math.abs(my - geo.nowY) <= 32) { drag.mode = 'strike'; drag.locus = lIdx; return startUserNote(lIdx, 'ptr'); }
+  const pastHit = hitTestPastNote(mx, my);
+  if (pastHit) { pastHit.locked = !pastHit.locked; heat.coherence = 1; return recomputeFuture(true); }
+  if (my > geo.nowY + 18) {
+    ensureAudio(); const d = Math.hypot(mx - geo.gx, my - geo.gy);
+    if (Math.abs(d - geo.bezelR) <= 20) { drag.mode = 'coherence'; return updateCoherencePointer(mx, my); }
+    if (now - drag.clickT < 310 && d <= geo.R * 1.05) { drag.clickT = 0; return resetNeutral(); }
+    drag.clickT = now; drag.mode = 'glyph'; updateGlyphPointer(mx, my);
+  }
+});
+canvas.addEventListener('pointermove', (e) => {
+  const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  if (drag.mode === 'glyph') return updateGlyphPointer(mx, my);
+  if (drag.mode === 'coherence') return updateCoherencePointer(mx, my);
+  if (drag.mode === 'strike') { const l = nearestLocus(mx); if (l >= 0 && l !== drag.locus) { endUserNote('ptr'); drag.locus = l; startUserNote(l, 'ptr'); } return; }
+  hover.zone = null; hover.locusIdx = -1; hover.pastId = -1;
+  const lIdx = nearestLocus(mx), p = hitTestPastNote(mx, my);
+  if (lIdx >= 0 && Math.abs(my - geo.nowY) <= 32) { hover.zone = 'now'; hover.locusIdx = lIdx; canvas.style.cursor = 'pointer'; }
+  else if (p) { hover.zone = 'past'; hover.pastId = p.id; canvas.style.cursor = 'pointer'; }
+  else if (my > geo.nowY + 18) {
+    const d = Math.hypot(mx - geo.gx, my - geo.gy);
+    if (Math.abs(d - geo.bezelR) <= 20) { hover.zone = 'coherence'; canvas.style.cursor = 'ew-resize'; }
+    else if (d <= geo.bezelR + 70) { hover.zone = 'glyph'; canvas.style.cursor = 'grab'; }
+    else canvas.style.cursor = 'default';
+  } else canvas.style.cursor = 'default';
+});
+const endPointer = () => { if (drag.mode === 'strike') endUserNote('ptr'); drag.mode = null; drag.locus = -1; };
+canvas.addEventListener('pointerup', endPointer); canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); ensureAudio(); const d = -Math.sign(e.deltaY) * 0.055; applySteer({ coherence: state.steer.coherence + d }, d * 4); }, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); return togglePlay(); }
+  const k = e.key.toLowerCase();
+  if (!e.repeat && e.key >= '1' && e.key <= '9') return startUserNote(Number(e.key) - 1, `k:${e.key}`);
+  if (!e.repeat && k === 'p') return togglePeek();
+  if (!e.repeat && k === 'r') return resetNeutral();
+  if (!e.repeat && e.key === 'Escape') { let a = false; for (const p of state.pastNotes) if (p.locked) { p.locked = false; a = true; } if (a) { heat.coherence = 1; recomputeFuture(true); } return; }
+  if ('wasdijklqe'.includes(k)) { ensureAudio(); keysDown.add(k); }
+});
+window.addEventListener('keyup', (e) => { if (e.key >= '1' && e.key <= '9') endUserNote(`k:${e.key}`); keysDown.delete(e.key.toLowerCase()); });
+
+// --- Drawing Primitives & 3-Stage Minimalist Layout (Past / NOW / Future Attitude Glyph) ---
+const strokeLine = (x1, y1, x2, y2, col, lw = 1) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+const strokeCirc = (x, y, r, col, lw = 1) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); };
+const fillCirc   = (x, y, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); };
+
+function drawPastConstellation(curStep) {
+  const yTop = geo.padTop, yNow = geo.nowY, xL = geo.fieldL - 20, xR = geo.fieldR + 20;
+  for (let g = Math.floor(curStep) - 34; g < Math.ceil(curStep); g++) {
+    if (((g % 16) + 16) % 16 !== 0) continue;
+    const y = Math.round(yNow + (g - curStep) * geo.pxPerStep) + 0.5;
+    if (y >= yTop && y <= yNow - 10) strokeLine(xL, y, xR, y, `rgba(255,255,255,${(0.06 * clamp((y - yTop) / 42, 0, 1)).toFixed(3)})`);
+  }
+  let prev = null;
+  for (const n of state.pastNotes) {
+    if (n.step > curStep) continue;
+    const dur = n.holding ? Math.max(0.6, curStep - n.step) : n.dur, y0 = yNow + (n.step - curStep) * geo.pxPerStep, y1 = Math.min(yNow, yNow + (n.step + dur - curStep) * geo.pxPerStep);
+    if (y1 < yTop) { prev = null; continue; }
+    const x = geo.locusX[n.noteIdx], fade = clamp((y0 - yTop) / 44, 0, 1), tTop = Math.max(yTop, y0), tBot = Math.min(yNow - 1, y1);
+    if (prev && n.step - prev.step <= 8 && y0 >= yTop) strokeLine(prev.x, prev.y, x, y0, `rgba(255,255,255,${(0.11 * Math.min(fade, prev.fade)).toFixed(3)})`, 0.8);
+    if (y0 >= yTop) prev = { x, y: y0, step: n.step, fade };
+    if (tBot > tTop + 1) { const g = ctx.createLinearGradient(x, tTop, x, tBot); g.addColorStop(0, mixInk(n.locked ? 1 : 0, 0.52 * fade)); g.addColorStop(1, 'rgba(255,255,255,0)'); strokeLine(x, tTop, x, tBot, g, n.noteIdx === 0 ? 1.9 : 1.3); }
+    if (y0 >= yTop && y0 <= yNow) {
+      const r = (n.noteIdx === 0 ? 2.4 : 1.8) + n.vel * 1.1;
+      fillCirc(x, y0, r, mixInk(n.locked ? 1 : 0, (n.source === 'user' ? 0.94 : 0.72) * fade));
+      if (n.locked || hover.pastId === n.id) strokeCirc(x, y0, r + 4.8, n.locked ? '#ff5a1f' : 'rgba(255,255,255,0.52)', n.locked ? 1.25 : 0.9);
+    }
+  }
+}
+
+function drawPeekGhost(curStep, nowPerf) {
+  if (!state.peek) return;
+  const yNow = geo.nowY, pxStep = (H - yNow - 24) / 64, xL = geo.fieldL - 18, xR = geo.fieldR + 18;
+  ctx.font = '8.5px ui-monospace, monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let b = 1; b <= 4; b++) { const y = Math.round(yNow + b * 16 * pxStep) + 0.5; strokeLine(xL, y, xR, y, 'rgba(255,255,255,0.06)'); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(`+${b}b`, xL - 6, y); }
+  for (const n of state.futureNotes) {
+    const dt = n.step - curStep; if (dt < 0 || dt > 64) continue;
+    const x = geo.locusX[n.noteIdx], y0 = yNow + dt * pxStep, y1 = Math.min(H - 18, y0 + Math.max(4, n.dur * pxStep - 1.5)), fade = clamp(1 - dt / 68, 0.14, 1), h = clamp(1 - (nowPerf - n.flashPerf) / FLASH_MS, 0, 1);
+    strokeLine(x, y0, x, y1, mixInk(h, (0.20 + n.vel * 0.14) * fade), 1.3); fillCirc(x, y0, 2.0 + n.vel * 0.8, mixInk(h, (0.42 + h * 0.52) * fade));
+  }
+}
+
+function drawNowHorizon(dt, nowPerf) {
+  const y = geo.nowY, xL = geo.fieldL - 22, xR = geo.fieldR + 22, span = xR - xL;
+  for (const loc of loci) { loc.glow = Math.max(0, loc.glow * Math.exp(-dt * loc.damp)); loc.heat = Math.max(0, loc.heat - dt * 2.8); }
+  for (let i = blooms.length - 1; i >= 0; i--) if (nowPerf - blooms[i].bornPerf >= blooms[i].lifeMs) blooms.splice(i, 1);
+  for (const b of blooms) {
+    const ageMs = nowPerf - b.bornPerf, p = clamp(ageMs / b.lifeMs, 0, 1), e = Math.pow(1 - p, 1.9);
+    const rx = 5 + Math.pow(p, 0.72) * (22 + b.dur * 8.5) * (0.7 + b.vel * 0.4);
+    ctx.strokeStyle = mixInk(b.hot ? clamp(1 - ageMs / FLASH_MS, 0, 1) : 0, e * 0.48); ctx.lineWidth = 0.8 + e * 0.7;
+    ctx.beginPath(); ctx.ellipse(geo.locusX[b.idx], y, rx, rx * 0.44, 0, 0, TAU); ctx.stroke();
+  }
+  strokeLine(18, y + 0.5, xL, y + 0.5, 'rgba(255,255,255,0.10)'); strokeLine(xR, y + 0.5, W - 18, y + 0.5, 'rgba(255,255,255,0.10)');
+  if (!blooms.length) strokeLine(xL, y + 0.5, xR, y + 0.5, 'rgba(255,255,255,0.48)');
+  else {
+    ctx.strokeStyle = 'rgba(255,255,255,0.78)'; ctx.lineWidth = 1.1; ctx.beginPath();
+    for (let s = 0; s <= 120; s++) {
+      const u = s / 120, px = xL + u * span, win = Math.pow(Math.sin(u * Math.PI), 0.45); let dy = 0;
+      for (const b of blooms) {
+        const age = (nowPerf - b.bornPerf) * 0.001, e = Math.pow(1 - (nowPerf - b.bornPerf) / b.lifeMs, 1.9), dist = Math.abs(px - geo.locusX[b.idx]);
+        dy += e * (3.6 + b.vel * 5.2) * Math.cos(dist * (0.075 + b.idx * 0.013) - age * (15 + b.idx * 2.1)) * Math.exp(-dist / (40 + b.dur * 9));
+      }
+      s ? ctx.lineTo(px, y + clamp(dy * win, -16, 16)) : ctx.moveTo(px, y + clamp(dy * win, -16, 16));
+    }
+    ctx.stroke();
+  }
+  ctx.font = '9px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  for (let i = 0; i < 9; i++) {
+    const x = geo.locusX[i], loc = loci[i], hov = hover.locusIdx === i;
+    strokeLine(x + 0.5, y - 4.5, x + 0.5, y + 4.5, mixInk(loc.heat, 0.24 + loc.glow * 0.65 + (hov ? 0.35 : 0)));
+    if (i === 0 || loc.glow > 0.08 || hov) strokeCirc(x, y, (i === 0 ? 6.0 : 4.8) + loc.glow * 3.2, mixInk(loc.heat, (i === 0 ? 0.24 : 0) + loc.glow * 0.68 + (hov ? 0.4 : 0)), 0.9);
+    fillCirc(x, y, (i === 0 ? 2.5 : 1.9) + loc.glow * 2.0 + (hov ? 0.8 : 0), mixInk(loc.heat, 0.55 + loc.glow * 0.45));
+    ctx.fillStyle = mixInk(loc.heat, 0.20 + loc.glow * 0.72 + (hov ? 0.52 : 0)); ctx.fillText(NOTES[i].name, x, y - 9);
+  }
+  ctx.font = '8.5px ui-monospace, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.44)'; ctx.fillText('NOW', 18, y - 6);
+}
+
+// --- BOTTOM STAGE (38% .. 100%): MONUMENTAL FUTURE ATTITUDE GLYPH ---
+function sampleContourRadius(theta, rBase, phaseOffset, tSec, beatPhase, E) {
+  const breathe = 1 + 0.018 * Math.sin(beatPhase * TAU);
+  const spin3 = tSec * (0.28 + E.tresillo * 0.62) + phaseOffset, spin8 = tSec * (0.95 + E.syncop * 1.45) - phaseOffset * 1.5;
+  const m2 = (0.042 * E.cantus + 0.024 * E.dft2) * Math.cos(2 * theta + tSec * 0.22 + phaseOffset);
+  const m4 = (0.145 * E.lyrical + 0.048 * E.dft4) * Math.cos(4 * theta - Math.PI * 0.5 + phaseOffset);
+  const m3 = (0.200 * E.tresillo + 0.052 * E.dft6) * (Math.cos(3 * theta - spin3) + 0.38 * E.chiral * Math.sin(6 * theta - 2 * spin3));
+  const m8 = (0.148 * E.syncop + 0.048 * E.dft8) * (Math.cos(8 * theta + spin8) + 0.42 * Math.cos(12 * theta - spin8 * 1.35));
+  return rBase * breathe * clamp(1 + m2 + m4 + m3 + m8, 0.54, 1.44);
+}
+
+function drawFutureAttitudeGlyph(curStep, tSec) {
+  const gx = geo.gx, gy = geo.gy, R = geo.R, bzR = geo.bezelR, E = dispEigen;
+  const beatPhase = (curStep % 4) / 4, barPhase = (((curStep % 16) + 16) % 16) / 16;
+  const cohHot = Math.max(heat.coherence, drag.mode === 'coherence' ? 1 : 0);
+
+  // Outer Aviation Compass Bezel + Interactive Coherence Phase-Lock Arc (Eigenvector 4)
+  strokeCirc(gx, gy, bzR, mixInk(cohHot * 0.35, hover.zone === 'coherence' ? 0.26 : 0.11), 0.85);
+  for (let d = 0; d < 36; d++) {
+    const a = (d / 36) * TAU - Math.PI * 0.5, maj = d % 9 === 0, r0 = bzR - (maj ? 6 : 2.5), r1 = bzR + (maj ? 3 : 0);
+    strokeLine(gx + Math.cos(a) * r0, gy + Math.sin(a) * r0, gx + Math.cos(a) * r1, gy + Math.sin(a) * r1, `rgba(255,255,255,${maj ? 0.26 : 0.10})`);
+  }
+  const arcSpan = Math.PI * 0.78, arcStart = -Math.PI * 0.5 - arcSpan, arcEnd = arcStart + arcSpan * 2 * state.steer.coherence;
+  ctx.strokeStyle = mixInk(cohHot, drag.mode === 'coherence' || hover.zone === 'coherence' ? 0.88 : 0.36);
+  ctx.lineWidth = drag.mode === 'coherence' ? 2.0 : 1.35;
+  ctx.beginPath(); ctx.arc(gx, gy, bzR, arcStart, arcEnd); ctx.stroke();
+  fillCirc(gx + Math.cos(arcEnd) * bzR, gy + Math.sin(arcEnd) * bzR, drag.mode === 'coherence' ? 4.2 : 3.0, mixInk(cohHot, 0.92));
+
+  const swA = barPhase * TAU - Math.PI * 0.5;
+  strokeLine(gx + Math.cos(swA) * (bzR - 11), gy + Math.sin(swA) * (bzR - 11), gx + Math.cos(swA) * (bzR - 4), gy + Math.sin(swA) * (bzR - 4), 'rgba(255,255,255,0.44)', 1.2);
+
+  // Eigenvectors 1 + 3 + 4: Nested Concentric Cymatic Standing-Wave Contours
+  const rBase = R * lerp(0.34, 0.90, E.aperture), ringCount = clamp(Math.round(E.ringCount), 1, 5);
+  const contourHot = Math.max(heat.lobe, heat.aperture * 0.9, heat.coherence * 0.55);
+  if (E.aperture > 0.22) {
+    const rg = ctx.createRadialGradient(gx, gy, rBase * 0.08, gx, gy, rBase * 1.08);
+    rg.addColorStop(0, 'rgba(255,255,255,0)'); rg.addColorStop(0.75, mixInk(contourHot * 0.4, 0.032 * E.aperture)); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(gx, gy, rBase * 1.08, 0, TAU); ctx.fill();
+  }
+  for (let ring = ringCount - 1; ring >= 0; ring--) {
+    const isOuter = ring === 0, scale = 1 - ring * lerp(0.165, 0.135, E.aperture);
+    if (scale < 0.34) continue;
+    const dephase = (1 - E.coherence) * ring * (0.48 + 0.22 * Math.sin(tSec * 0.7 + ring * 1.4)) * (ring & 1 ? 1 : -1);
+    ctx.beginPath();
+    for (let s = 0; s <= 180; s++) {
+      const th = (s / 180) * TAU, rr = sampleContourRadius(th, rBase * scale, dephase, tSec, beatPhase, E);
+      s ? ctx.lineTo(gx + Math.cos(th) * rr, gy + Math.sin(th) * rr) : ctx.moveTo(gx + Math.cos(th) * rr, gy + Math.sin(th) * rr);
+    }
+    ctx.closePath();
+    const baseA = isOuter ? lerp(0.58, 0.96, E.aperture * 0.65 + E.coherence * 0.35) : lerp(0.14, 0.44, (1 - ring / 5) * (0.55 + E.coherence * 0.45));
+    ctx.strokeStyle = mixInk(isOuter ? contourHot : contourHot * 0.72, baseA);
+    ctx.lineWidth = isOuter ? lerp(1.15, 1.85, E.coherence * 0.5 + E.aperture * 0.5) : lerp(0.7, 1.05, E.coherence);
+    ctx.stroke();
+  }
+
+  // Phase-Lock Radial Alignment Stitches (razor-sharp concentric lock at high Coherence)
+  if (E.coherence > 0.48 && ringCount >= 2) {
+    const lockA = clamp((E.coherence - 0.48) / 0.52, 0, 1);
+    const spokes = E.tresillo > 0.36 ? 6 : (E.syncop > 0.34 ? 8 : (E.lyrical > 0.34 ? 4 : 2));
+    const innerScale = Math.max(0.36, 1 - (ringCount - 1) * lerp(0.165, 0.135, E.aperture));
+    for (let k = 0; k < spokes; k++) {
+      const th = (k / spokes) * TAU - Math.PI * 0.5 + (E.tresillo > 0.36 ? tSec * (0.28 + E.tresillo * 0.62) / 3 : 0);
+      const rIn = sampleContourRadius(th, rBase * innerScale, 0, tSec, beatPhase, E), rOut = sampleContourRadius(th, rBase, 0, tSec, beatPhase, E);
+      strokeLine(gx + Math.cos(th) * rIn, gy + Math.sin(th) * rIn, gx + Math.cos(th) * rOut, gy + Math.sin(th) * rOut, mixInk(cohHot, lockA * 0.34), 0.85);
+    }
+  }
+
+  // Eigenvector 4: Shimmering Orbital Phase Dots (Locked to Outer Contour vs Dispersed Cloud)
+  const disp = Math.pow(1 - E.coherence, 1.35);
+  for (const d of targetEigen.dots) {
+    const ang = d.ang + disp * Math.sin(tSec * (0.9 + d.seed * 1.1) + d.seed * TAU) * 0.42;
+    const rad = sampleContourRadius(ang, rBase, 0, tSec, beatPhase, E) + disp * (10 + d.seed * 34 + d.novel * 20) * (0.75 + 0.25 * Math.cos(tSec * 1.4 + d.seed * 12));
+    const dotA = clamp((d.bar === 0 ? 0.86 : 0.44) * (0.52 + 0.48 * E.coherence + 0.28 * d.novel), 0.18, 0.96);
+    fillCirc(gx + Math.cos(ang) * rad, gy + Math.sin(ang) * rad, (1.3 + d.vel * 1.4) * (d.bar === 0 ? 1.05 : 0.82), mixInk(Math.max(cohHot, heat.lobe * 0.4), dotA));
+  }
+
+  // Eigenvector 2: ARTIFICIAL HORIZON TILT, ECCENTRICITY & RESOLUTION TRAJECTORY VECTOR
+  const horHot = heat.horizon, comX = gx + E.horizonShift * R * 0.42, comY = gy - E.horizonLift * R * 0.22;
+  strokeLine(gx - 17, gy + 0.5, gx - 7, gy + 0.5, 'rgba(255,255,255,0.32)'); strokeLine(gx + 7, gy + 0.5, gx + 17, gy + 0.5, 'rgba(255,255,255,0.32)');
+  strokeLine(gx + 0.5, gy - 5, gx + 0.5, gy - 2, 'rgba(255,255,255,0.24)'); strokeCirc(gx, gy, 2.5, 'rgba(255,255,255,0.36)', 0.9);
+  const eccDist = Math.hypot(comX - gx, comY - gy);
+  if (eccDist > 5) { ctx.setLineDash([2, 3]); strokeLine(gx, gy, comX, comY, mixInk(horHot, 0.30 + clamp(eccDist / (R * 0.5), 0, 1) * 0.25), 0.9); ctx.setLineDash([]); }
+
+  const halfSpan = clamp(rBase * 0.68, 36, R * 0.72), cosA = Math.cos(E.tiltAngle), sinA = Math.sin(E.tiltAngle), nx = -sinA, ny = cosA;
+  strokeLine(comX - cosA * halfSpan, comY - sinA * halfSpan, comX + cosA * halfSpan, comY + sinA * halfSpan, mixInk(horHot, 0.86), 1.35);
+  for (const sgn of [-1, 1]) { const ex = comX + cosA * halfSpan * sgn, ey = comY + sinA * halfSpan * sgn; strokeLine(ex, ey, ex + nx * 5, ey + ny * 5, mixInk(horHot, 0.55)); }
+  if (Math.abs(E.tiltAngle) > 0.04) {
+    const ladA = clamp(Math.abs(E.tiltAngle) * 2.2, 0.14, 0.42);
+    for (const off of [-14, 14]) { const lx = comX + nx * off, ly = comY + ny * off; strokeLine(lx - cosA * 14, ly - sinA * 14, lx - cosA * 5, ly - sinA * 5, mixInk(horHot, ladA), 0.85); strokeLine(lx + cosA * 5, ly + sinA * 5, lx + cosA * 14, ly + sinA * 14, mixInk(horHot, ladA), 0.85); }
+  }
+  fillCirc(comX, comY, 3.0, '#000'); strokeCirc(comX, comY, 5.2, mixInk(horHot, 0.94), 1.35); fillCirc(comX, comY, 1.9, mixInk(horHot, 0.96));
+
+  if (Math.abs(E.trajectory) > 0.045) {
+    const resolving = E.trajectory < 0, mag = clamp(Math.abs(E.trajectory) * 1.45, 0.25, 1.0), vLen = 18 + mag * 30;
+    const aimA = resolving ? (eccDist > 8 ? Math.atan2(gy - comY, gx - comX) : Math.PI) : (E.tiltAngle - 0.24);
+    const len = resolving ? Math.min(vLen, Math.max(16, eccDist * 0.85)) : vLen;
+    const tx = comX + Math.cos(aimA) * len, ty = comY + Math.sin(aimA) * len;
+    const cx = (comX + tx) * 0.5 + nx * (resolving ? 10 : -8), cy = (comY + ty) * 0.5 + ny * (resolving ? 10 : -8);
+    ctx.strokeStyle = mixInk(horHot, 0.45 + mag * 0.42); ctx.lineWidth = 1.15;
+    ctx.beginPath(); ctx.moveTo(comX, comY); ctx.quadraticCurveTo(cx, cy, tx, ty); ctx.stroke();
+    const headA = Math.atan2(ty - cy, tx - cx);
+    for (const s of [-1, 1]) strokeLine(tx, ty, tx - Math.cos(headA + s * 0.48) * 6.5, ty - Math.sin(headA + s * 0.48) * 6.5, mixInk(horHot, 0.72 + mag * 0.24), 1.15);
+  }
+  if (drag.mode === 'glyph') { const sx = gx + state.steer.gravity * R * 0.94, sy = gy - (state.steer.energy * 2 - 1) * R * 0.94; strokeCirc(sx, sy, 6.5, '#ff5a1f', 1.25); fillCirc(sx, sy, 2.0, '#ff5a1f'); }
+
+  ctx.font = '9px ui-monospace, monospace';
+  const lbl = (txt, x, y, al, bl, h, a) => { ctx.textAlign = al; ctx.textBaseline = bl; ctx.fillStyle = mixInk(h, a); ctx.fillText(txt, x, y); };
+  lbl(E.regime, gx, gy - bzR - 10, 'center', 'bottom', Math.max(heat.lobe, heat.aperture), 0.34 + E.aperture * 0.34);
+  lbl('STILL',  gx, gy + bzR + 10, 'center', 'top',    heat.aperture * (1 - E.aperture), 0.22 + (1 - E.aperture) * 0.24);
+  lbl('i · HOME',   gx - bzR - 12, gy, 'right', 'middle', heat.horizon * (E.horizonShift < 0.2 ? 1 : 0), 0.26 + clamp(1 - E.horizonShift, 0, 1) * 0.32);
+  lbl('bVI / bVII', gx + bzR + 12, gy, 'left',  'middle', heat.horizon * (E.horizonShift > 0.2 ? 1 : 0), 0.26 + clamp(E.horizonShift, 0, 1) * 0.42);
+  lbl(E.coherence > 0.62 ? 'PHASE-LOCK' : (E.coherence < 0.35 ? 'DISPERSED' : 'COHERENCE'), gx + bzR * 0.74, gy - bzR * 0.74 - 4, 'left', 'bottom', cohHot, 0.22 + cohHot * 0.52);
+}
+
+// --- 60 FPS Main Loop ---
+seedInitialPast();
+let lastFrame = performance.now(), keySteerAcc = 0;
+const SMOOTH_KEYS = ['cantus','lyrical','tresillo','syncop','dft2','dft3','dft4','dft6','dft8','chiral','horizonShift','horizonLift','tiltAngle','trajectory','aperture','ringCount','density','coherence'];
+
+(function frame(nowPerf) {
+  const dt = Math.min(0.05, (nowPerf - lastFrame) / 1000), tSec = nowPerf * 0.001; lastFrame = nowPerf;
+  if (keysDown.size && (keySteerAcc += dt) >= 0.045) {
+    const sDt = keySteerAcc; keySteerAcc = 0;
+    const dE = ((keysDown.has('w') ? 1 : 0) - (keysDown.has('s') ? 1 : 0)) * sDt * 0.95;
+    const dG = ((keysDown.has('d') ? 1 : 0) - (keysDown.has('a') ? 1 : 0)) * sDt * 1.45;
+    const dC = ((keysDown.has('e') || keysDown.has('i') ? 1 : 0) - (keysDown.has('q') || keysDown.has('k') ? 1 : 0)) * sDt * 0.95;
+    const dR = ((keysDown.has('l') ? 1 : 0) - (keysDown.has('j') ? 1 : 0)) * sDt * 1.35;
+    applySteer({ energy: dE ? state.steer.energy + dE : undefined, gravity: dG ? state.steer.gravity + dG : undefined, coherence: dC ? state.steer.coherence + dC : undefined, resolveBias: dR ? state.steer.resolveBias + dR : undefined }, dG ? Math.sign(dG) * 0.5 : 0);
+  }
+  const curStep = getCurrentStep(), cool = dt / (FLASH_MS / 1000), sm = 1 - Math.exp(-dt * 12.5);
+  for (let i = state.pastNotes.length - 1; i >= 0; i--) { const n = state.pastNotes[i]; if (!n.firedVisual && curStep >= n.step) { n.firedVisual = true; triggerResonator(n.noteIdx, n.vel, n.dur, Boolean(n.echoLocked)); } }
+  for (const k of ['lobe','horizon','aperture','coherence']) heat[k] = Math.max(0, heat[k] - cool);
+  for (const k of SMOOTH_KEYS) dispEigen[k] = lerp(dispEigen[k], targetEigen[k], sm);
+  dispEigen.regime = targetEigen.regime;
+
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  drawPastConstellation(curStep); drawPeekGhost(curStep, nowPerf); drawNowHorizon(dt, nowPerf); drawFutureAttitudeGlyph(curStep, tSec);
+  requestAnimationFrame(frame);
+})(lastFrame);
+</script>
+</body>
+</html>
