@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>22 — Bi-Manual Steer Pads &amp; Organic Rhythm Curve</title>
+  <style>
+    :root {
+      --bg: #000; --ink-1: #fff; --ink-2: rgba(255,255,255,.64);
+      --ink-3: rgba(255,255,255,.36); --ink-4: rgba(255,255,255,.16);
+      --signal: #ff5a1f;
+      --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink-1);
+      font: 11px var(--mono); font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased; user-select: none;
+    }
+    canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+    #hud {
+      position: fixed; top: 10px; left: 16px; right: 16px; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      pointer-events: none; letter-spacing: .05em; color: var(--ink-3); white-space: nowrap; gap: 14px;
+    }
+    #hud .strip { overflow: hidden; text-overflow: ellipsis; }
+    #hud b { color: var(--ink-1); font-weight: 600; }
+    #hud .ctl { display: inline-flex; align-items: center; gap: 8px; pointer-events: auto; }
+    .pill {
+      appearance: none; background: transparent; color: var(--ink-2); border: 1px solid var(--ink-4);
+      font: inherit; letter-spacing: .06em; padding: 3px 9px; border-radius: 99px; cursor: pointer;
+      transition: border-color .16s ease, color .16s ease, background .16s ease;
+    }
+    .pill:hover { border-color: var(--ink-2); color: var(--ink-1); }
+    .pill.on { border-color: var(--ink-1); color: var(--bg); background: var(--ink-1); }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="hud">
+    <div class="strip"><b>22</b> · SPACE play · <b>WASD</b> left pad · <b>IJKL/←↑↓→</b> right pad · <b>Q</b> lock · <b>R</b> center · <b>1-9</b> strike</div>
+    <div class="ctl">
+      <span id="status-readout">LYRICAL · III/iv · 03.1 · 84 BPM</span>
+      <button class="pill" id="btn-play" type="button">PLAY</button>
+      <button class="pill" id="btn-lock" type="button">LOCK ○</button>
+    </div>
+  </div>
+  <script type="module">
+    'use strict';
+
+    // ==================== 1. D KURD SCALE, GTTM METRIC & LHL RHYTHM THEORY ====================
+    const BPM = 84, STEP_SEC = 60 / BPM / 4; // Strict 16th-note quantized grid
+    const NOTES = ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'];
+    const FREQS = [146.83, 220.00, 233.08, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00];
+    const DEGREES = ['^1', '^5', '^b6', '^b7', '^1', '^2', '^b3', '^4', '^5'];
+    const PANS = [-0.48, -0.36, -0.24, -0.12, 0.0, 0.12, 0.24, 0.36, 0.48];
+    const CHORDS = { i: [0, 1, 4, 6, 8], iv: [0, 2, 4, 7], III: [1, 3, 6, 8], v: [1, 3, 5, 8], bVI: [2, 4, 6, 8], bVII: [3, 5, 7, 8] };
+
+    const metricWeight = (step) => { const s = ((step % 16) + 16) % 16; return s === 0 ? 4 : s === 8 ? 3 : s % 4 === 0 ? 2 : s % 2 === 0 ? 1 : 0; };
+    function lhlSyncopation(onset, dur) {
+      const w0 = metricWeight(onset); let maxCross = -1;
+      for (let k = 1; k < dur; k++) maxCross = Math.max(maxCross, metricWeight(onset + k));
+      return maxCross > w0 ? maxCross - w0 : 0;
+    }
+
+    // 4 Continuous LHL/GTTM Regimes (negative = structural rest; {d, tie:true} = barline anticipation)
+    const REGIMES = [
+      { name: 'CANTUS', minX: 0.00, maxX: 0.25, patterns: [[8, 8], [8, 4, -4], [6, 2, 8], [6, 2, 6, -2], [4, 4, 8], [4, 4, 6, 2]] },
+      { name: 'LYRICAL', minX: 0.25, maxX: 0.55, patterns: [[4, 2, 2, 8], [2, 4, 2, 6, -2], [4, 2, 2, 4, 4], [2, 2, 4, 6, 2], [2, 2, 4, 2, 2, 4], [3, 1, 4, 2, 2, 4]] },
+      { name: 'TRESILLO', minX: 0.55, maxX: 0.80, patterns: [[8, 3, 3, 2], [3, 3, 4, 2, 4], [3, 3, 2, 4, 2, -2], [3, 3, 2, 3, 3, 2], [2, 3, 3, 3, 3, 2], [3, 3, 2, 2, 1, 1, 4]] },
+      { name: 'SYNCOPATE', minX: 0.80, maxX: 1.00, patterns: [
+        [2, 2, 3, 3, 1, 1, 2, 2], [1, 1, 2, 3, 3, 2, 1, 1, 2], [2, 1, 1, 3, 5, 1, 1, 2],
+        [1, 1, 2, 3, 3, 1, 3, 1, 1], [3, 3, 1, 3, 2, 1, 2, { d: 3, tie: true }], [1, 1, 2, 2, 1, 5, 2, 1, { d: 3, tie: true }]
+      ]}
+    ];
+
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v)), lerp = (a, b, t) => a + (b - a) * t;
+    const regimeForX = (x) => x < 0.25 ? REGIMES[0] : x < 0.55 ? REGIMES[1] : x < 0.80 ? REGIMES[2] : REGIMES[3];
+    const harmonyLabel = (rx) => rx < 0.33 ? 'DING i' : rx < 0.67 ? 'III/iv' : 'bVI/bVII';
+    const memoryLabel = (ly) => ly < 0.32 ? 'DISCOVERY' : ly < 0.68 ? 'ECHO' : 'OSTINATO';
+
+    function seededRand(seed) { let s = (seed * 1664525 + 1013904223) >>> 0; return () => (((s = (s * 1664525 + 1013904223) >>> 0) >>> 8) / 16777216); }
+    function selectPattern(x, barIdx, isCadence) {
+      const reg = regimeForX(x), t = clamp((x - reg.minX) / Math.max(0.001, reg.maxX - reg.minX), 0, 0.9999);
+      const alt = ((barIdx * 7 + 3) % 3 === 0) ? (barIdx % 2 === 0 ? 1 : -1) : 0;
+      let pat = reg.patterns[clamp(Math.floor(t * reg.patterns.length) + alt, 0, reg.patterns.length - 1)];
+      if (isCadence && x < 0.72) pat = x < 0.25 ? [6, 2, 8] : x < 0.55 ? [4, 2, 2, 8] : [3, 3, 2, 8];
+      return pat;
+    }
+
+    // ==================== 2. SINGLE CLEAN SYNTHETIC D KURD HANDPAN VOICE ====================
+    let audioCtx = null, dryBus = null, wetBus = null, uiBus = null, noiseBuf = null;
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const comp = audioCtx.createDynamicsCompressor();
+        comp.threshold.value = -10; comp.ratio.value = 3.2; comp.attack.value = 0.004; comp.release.value = 0.14;
+        comp.connect(audioCtx.destination);
+        dryBus = audioCtx.createGain(); dryBus.gain.value = 0.86; dryBus.connect(comp);
+        uiBus = audioCtx.createGain(); uiBus.gain.value = 0.32; uiBus.connect(audioCtx.destination);
+
+        const sr = audioCtx.sampleRate;
+        noiseBuf = audioCtx.createBuffer(1, Math.floor(sr * 0.06), sr);
+        const nd = noiseBuf.getChannelData(0);
+        for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.012));
+
+        const irLen = Math.floor(sr * 1.65), ir = audioCtx.createBuffer(2, irLen, sr);
+        for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 2.7) * 0.42; }
+        const conv = audioCtx.createConvolver(); conv.buffer = ir;
+        const revLp = audioCtx.createBiquadFilter(); revLp.type = 'lowpass'; revLp.frequency.value = 2600;
+        wetBus = audioCtx.createGain(); wetBus.gain.value = 0.28; wetBus.connect(conv); conv.connect(revLp); revLp.connect(comp);
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playHandpan(lane, when, vel = 0.8, durSteps = 4, bloom = 0.5) {
+      ensureAudio();
+      const freq = FREQS[lane]; if (!freq) return;
+      const t0 = Math.max(audioCtx.currentTime + 0.002, when), isDing = lane === 0, dF = clamp(durSteps, 1, 8), bM = clamp(bloom, 0, 1);
+      const tau1 = (0.19 + 0.29 * Math.pow(dF, 0.94)) * (isDing ? 1.18 : 1.0) * Math.pow(220 / freq, 0.18);
+      const vg = audioCtx.createGain(); vg.gain.setValueAtTime(clamp(vel, 0.12, 1.0) * 0.44, t0);
+      const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass';
+      const cut = Math.min(7600, (1600 + 2400 * vel + 1200 * bM) * (0.85 + 0.04 * dF));
+      lp.frequency.setValueAtTime(cut, t0); lp.frequency.exponentialRampToValueAtTime(Math.max(640, cut * 0.40), t0 + tau1 * 2.4);
+      if (audioCtx.createStereoPanner) {
+        const sp = audioCtx.createStereoPanner(); sp.pan.value = PANS[lane] || 0;
+        vg.connect(lp); lp.connect(sp); sp.connect(dryBus); sp.connect(wetBus);
+      } else { vg.connect(lp); lp.connect(dryBus); lp.connect(wetBus); }
+
+      const mode = (hz, amp, rise, tau) => {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = 'sine'; o.frequency.setValueAtTime(hz * (1 + 0.0028 * vel), t0); o.frequency.exponentialRampToValueAtTime(hz, t0 + 0.042);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(amp, t0 + rise); g.gain.setTargetAtTime(0.0001, t0 + rise, tau);
+        o.connect(g); g.connect(vg); o.start(t0); o.stop(t0 + Math.min(5.2, rise + tau * 4.8));
+      };
+      mode(freq, 0.62, 0.006, tau1); mode(freq + 0.68, 0.21, 0.011, tau1 * 0.94);
+      mode(freq * 2.001, 0.22 * (0.45 + 0.45 * vel + 0.25 * bM), 0.018, tau1 * 0.58);
+      mode(freq * 2.999, 0.10 * (0.35 + 0.50 * vel + 0.30 * bM), 0.026, tau1 * 0.36);
+
+      const n = audioCtx.createBufferSource(), bp = audioCtx.createBiquadFilter(), ng = audioCtx.createGain();
+      n.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = isDing ? 440 : 720; bp.Q.value = 1.3;
+      ng.gain.setValueAtTime(0.19 * vel, t0); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.016);
+      n.connect(bp); bp.connect(ng); ng.connect(vg); n.start(t0); n.stop(t0 + 0.024);
+
+      if (isDing || lane === 1) {
+        const bo = audioCtx.createOscillator(), bg = audioCtx.createGain();
+        bo.type = 'sine'; bo.frequency.setValueAtTime(isDing ? 96 : 112, t0); bo.frequency.exponentialRampToValueAtTime(76, t0 + 0.085);
+        bg.gain.setValueAtTime(0.0001, t0); bg.gain.linearRampToValueAtTime((isDing ? 0.28 : 0.11) * vel, t0 + 0.007);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + (isDing ? 0.22 : 0.12));
+        bo.connect(bg); bg.connect(vg); bo.start(t0); bo.stop(t0 + 0.25);
+      }
+    }
+
+    // Subtle stereo mechanical detent micro-clicks (Left pad left-panned, Right pad right-panned)
+    function playDetent(str = 0.6, pan = 0) {
+      if (!audioCtx || audioCtx.state !== 'running') return;
+      const t0 = audioCtx.currentTime + 0.001, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime((pan < 0 ? 1280 : pan > 0 ? 1620 : 1450) + str * 360, t0);
+      o.frequency.exponentialRampToValueAtTime(pan < 0 ? 350 : 460, t0 + 0.011);
+      g.gain.setValueAtTime(0.085 * str, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.013);
+      o.connect(g);
+      if (audioCtx.createStereoPanner) { const sp = audioCtx.createStereoPanner(); sp.pan.value = clamp(pan, -0.8, 0.8); g.connect(sp); sp.connect(uiBus); }
+      else g.connect(uiBus);
+      o.start(t0); o.stop(t0 + 0.016);
+    }
+
+    // ==================== 3. BI-MANUAL PAD STATE, LOCI & HEURISTIC ENGINE ====================
+    const makePad = (id, x, y, pan) => ({ id, x, y, tx: x, ty: y, vx: 0, vy: 0, pan, signal: 0, lastKey: '', trail: [], waves: [], kbdActive: false });
+    const pads = { L: makePad('L', 0.44, 0.48, -0.45), R: makePad('R', 0.46, 0.52, 0.45) };
+    const state = {
+      playing: false, nowStep: 32.0, nextSchedStep: 32, nextSchedTime: 0,
+      echoLock: null, spineBreath: 0, lastBeatMark: -1, lastHumanLane: -1, lastHumanAt: 0,
+      hoverLocus: -1, hoverLockBtn: false, bars: new Map(), humanNotes: [], activePointers: new Map(), keysHeld: new Set()
+    };
+    const isPadHeld = (id) => pads[id].kbdActive || [...state.activePointers.values()].includes(id);
+    const loci = NOTES.map((name, i) => ({
+      name, deg: DEGREES[i], idx: i, e0: 0, e2: 0, e3: 0, p0: i * 0.7, p2: i * 1.1, p3: i * 1.6, rot: (i * Math.PI) / 9, flash: 0, durTau: 0.45, ripples: []
+    }));
+
+    function chordForBar(barIdx, rx) {
+      const pos = ((barIdx % 4) + 4) % 4;
+      return rx < 0.33 ? ['i', 'i', 'iv', 'i'][pos] : rx < 0.67 ? ['i', 'iv', 'III', 'i'][pos] : ['bVI', 'bVII', 'III', 'bVII'][pos];
+    }
+
+    // Pitch selector shaped by Right Pad (Harmony X × Energy Y) + Left Pad Memory & Human nudges
+    function pickNextLane(prevLane, prevInt, chordPool, rx, ry, stepInBar, dur, isCadence, rng) {
+      const w = metricWeight(stepInBar), targetLane = clamp(lerp(1.1, 6.2, rx) + lerp(-1.4, 2.2, ry), 0.3, 7.8);
+      if (isCadence && stepInBar >= 8 && dur >= 6 && rx < 0.68) return rx < 0.34 ? 0 : (rng() < 0.55 ? 0 : 4);
+      if (stepInBar === 0) {
+        if (rx < 0.34) return rng() < 0.78 ? 0 : 4;
+        if (rx < 0.67) return ry > 0.62 ? chordPool[Math.min(2, chordPool.length - 1)] : chordPool[0];
+        return chordPool[Math.min(chordPool.length - 1, Math.floor(rng() * 2) + 1)];
+      }
+      const humanFresh = (performance.now() - state.lastHumanAt) < 4200 && state.lastHumanLane >= 0;
+      let bestLane = chordPool[0], bestScore = -1e9;
+      for (let lane = 0; lane < 9; lane++) {
+        const iv = lane - prevLane, aIv = Math.abs(iv);
+        let sc = (chordPool.includes(lane) ? ((w >= 2 || dur >= 4) ? 3.2 : 1.15) : -0.85) - Math.abs(lane - targetLane) * (0.58 + (w >= 2 ? 0.24 : 0));
+        if (humanFresh) sc += Math.exp(-Math.abs(lane - state.lastHumanLane) * 0.7) * 1.35;
+        if (Math.abs(prevInt) >= 3) { const opp = Math.sign(iv) === -Math.sign(prevInt); sc += opp && (aIv === 1 || aIv === 2) ? 3.5 : (!opp && aIv >= 2 ? -2.3 : 0); }
+        else if (Math.abs(prevInt) > 0) sc += (Math.sign(iv) === Math.sign(prevInt) && aIv <= 2) ? 1.55 : (aIv <= 2 ? 0.85 : 0);
+        if (dur <= 2 && aIv > 3) sc -= 2.2;
+        if (aIv === 0) sc -= (dur <= 2 ? 2.4 : 1.1);
+        if (lane === 0 && w < 2 && dur <= 2) sc -= 1.8;
+        sc += (rng() - 0.5) * lerp(2.1, 0.75, pads.L.ty);
+        if (sc > bestScore) { bestScore = sc; bestLane = lane; }
+      }
+      return bestLane;
+    }
+
+    function formatPartition(events, carryIn) {
+      const L = carryIn > 0 ? [`~${carryIn}`] : [], R = [];
+      for (const ev of events) (ev.stepInBar < 8 ? L : R).push(ev.rest ? `r${ev.dur}` : `${ev.dur}${ev.tiesMid || ev.tiesBar ? '⌒' : ''}`);
+      return `${L.join('·') || '—'} | ${R.join('·') || '—'}`;
+    }
+
+    function buildBar(barIdx, opts = {}) {
+      const lx = opts.lx ?? pads.L.tx, ly = opts.ly ?? pads.L.ty, rx = opts.rx ?? pads.R.tx, ry = opts.ry ?? pads.R.ty;
+      const flashMs = opts.flash ? performance.now() : 0;
+      const prevBar = state.bars.get(barIdx - 1), prev2Bar = state.bars.get(barIdx - 2), carryIn = prevBar ? prevBar.overhang : 0;
+      const isCadence = ((barIdx % 4) + 4) % 4 === 3, chordKey = chordForBar(barIdx, rx), chordPool = CHORDS[chordKey];
+      const rng = seededRand(barIdx * 977 + Math.round(lx * 19) * 31 + Math.round(rx * 13) * 17 + Math.round(ry * 9) * 7);
+
+      let prevLane = 0, prevInt = 0;
+      if (prevBar && prevBar.notes.length) {
+        const last = prevBar.notes[prevBar.notes.length - 1]; prevLane = last.lane;
+        if (prevBar.notes.length >= 2) prevInt = last.lane - prevBar.notes[prevBar.notes.length - 2].lane;
+      }
+
+      const snapOf = (b) => ({ tokens: b.tokens, lanes: b.notes.map(n => n.lane), baseRx: b.rxSnap, baseRy: b.rySnap });
+      const echoSrc = state.echoLock || (ly >= 0.68 && prevBar ? snapOf(prevBar) : (ly >= 0.42 && prev2Bar && barIdx % 2 === 0 ? snapOf(prev2Bar) : null));
+      const rawPattern = state.echoLock ? state.echoLock.tokens
+        : (echoSrc && ly >= 0.74 && Math.abs(lx - (prevBar?.lxSnap ?? lx)) < 0.14 ? echoSrc.tokens : selectPattern(lx, barIdx, isCadence));
+
+      const events = [], notes = [];
+      let cursor = 0, overhang = 0, totalSync = 0, noteOrder = 0;
+      for (const tok of rawPattern) {
+        if (cursor >= 16) break;
+        const isObj = typeof tok === 'object', isRest = !isObj && tok < 0, d = isObj ? tok.d : Math.abs(tok), tieOut = isObj && tok.tie;
+        const evStep = cursor, advance = tieOut ? (16 - evStep) : Math.min(d, 16 - evStep); cursor += advance;
+        let startStep = evStep, effDur = tieOut ? d : advance;
+        if (startStep < carryIn) { const trim = carryIn - startStep; if (trim >= effDur) continue; startStep = carryIn; effDur -= trim; }
+        if (effDur <= 0) continue;
+
+        const tiesMid = !isRest && startStep < 8 && (startStep + effDur) > 8, tiesBar = !isRest && (startStep + effDur) > 16;
+        if (tiesBar) overhang = (startStep + effDur) - 16;
+        const sync = isRest ? 0 : lhlSyncopation(startStep, effDur);
+        events.push({ stepInBar: startStep, dur: effDur, rest: isRest, tiesMid, tiesBar, sync });
+
+        if (!isRest) {
+          const useEcho = echoSrc && noteOrder < echoSrc.lanes.length && (state.echoLock || rng() < clamp((ly - 0.34) * 1.35, 0, 0.92));
+          const lane = useEcho ? clamp(echoSrc.lanes[noteOrder] + Math.round((rx - echoSrc.baseRx) * 3.2 + (ry - echoSrc.baseRy) * 2.2), 0, 8)
+            : pickNextLane(prevLane, prevInt, chordPool, rx, ry, startStep, effDur, isCadence, rng);
+          const w = metricWeight(startStep), agogic = effDur >= 6 ? 0.12 : effDur >= 4 ? 0.05 : 0; totalSync += sync;
+          const vel = clamp(lerp(0.36, 0.80, ry) + w * 0.06 + agogic + (sync > 0 ? 0.07 : 0) + (rng() - 0.5) * 0.08, 0.26, 1.0);
+          notes.push({ barIdx, onsetStep: barIdx * 16 + startStep, stepInBar: startStep, dur: effDur, lane, vel, sync, bloom: ry, scheduled: false, flashMs });
+          prevInt = lane - prevLane; prevLane = lane; noteOrder++;
+        }
+      }
+
+      const memW = clamp(ly, 0.06, 1.0);
+      const links = state.echoLock ? [{ fromBar: state.echoLock.sourceBarIdx, kind: 'lock', weight: 0.95 }]
+        : [...(barIdx >= 1 && ly > 0.16 ? [{ fromBar: barIdx - 1, kind: 'echo', weight: 0.20 + memW * 0.68 }] : []),
+           ...(barIdx >= 2 && ly > 0.38 ? [{ fromBar: barIdx - 2, kind: 'antecedent', weight: 0.14 + memW * 0.44 }] : [])];
+      const bar = { barIdx, startStep: barIdx * 16, tokens: rawPattern, carryIn, overhang, chordKey, events, notes, syncScore: totalSync, label: formatPartition(events, carryIn), links, flashMs, lxSnap: lx, lySnap: ly, rxSnap: rx, rySnap: ry };
+      state.bars.set(barIdx, bar);
+      return bar;
+    }
+
+    function ensureTimeline() {
+      const curBar = Math.floor(state.nowStep / 16);
+      for (let b = Math.max(0, curBar - 4); b <= curBar + 3; b++) if (!state.bars.has(b)) buildBar(b);
+      for (const k of state.bars.keys()) if (k < curBar - 8 && (!state.echoLock || k !== state.echoLock.sourceBarIdx)) state.bars.delete(k);
+      state.humanNotes = state.humanNotes.filter(n => n.onsetStep > state.nowStep - 64);
+    }
+
+    function revoiceFuture(flash = true) {
+      const curBar = Math.floor(state.nowStep / 16), minSafe = Math.ceil(state.nowStep) + 1;
+      for (let b = curBar; b <= curBar + 3; b++) {
+        const prev = state.bars.get(b);
+        if (b === curBar && prev) {
+          const kept = prev.notes.filter(n => n.onsetStep < minSafe), fresh = buildBar(b, { flash });
+          fresh.notes = [...kept, ...fresh.notes.filter(n => n.onsetStep >= minSafe)];
+          fresh.flashMs = flash ? performance.now() : 0; state.bars.set(b, fresh);
+        } else buildBar(b, { flash });
+      }
+      updateHudReadout();
+    }
+
+    function toggleEchoLock(targetBarIdx = null) {
+      const curBar = Math.floor(state.nowStep / 16);
+      if (targetBarIdx === null) {
+        if (state.echoLock) { state.echoLock = null; playDetent(0.55, -0.35); revoiceFuture(true); return; }
+        targetBarIdx = Math.max(0, curBar - 1);
+      } else if (state.echoLock && state.echoLock.sourceBarIdx === targetBarIdx) {
+        state.echoLock = null; playDetent(0.55, -0.35); revoiceFuture(true); return;
+      }
+      const src = state.bars.get(targetBarIdx) || state.bars.get(curBar); if (!src) return;
+      state.echoLock = { sourceBarIdx: src.barIdx, tokens: src.tokens, lanes: src.notes.map(n => n.lane), baseRx: src.rxSnap, baseRy: src.rySnap, lockedAtMs: performance.now() };
+      pads.L.signal = 1.0; playDetent(0.95, -0.35); revoiceFuture(true);
+    }
+
+    // ==================== 4. SCHEDULER & ACOUSTIC EXCITATION ====================
+    function exciteLocus(lane, vel, durSteps, isHuman = false) {
+      const pt = loci[lane]; if (!pt) return;
+      pt.durTau = 0.24 + clamp(durSteps / 8, 0.14, 1.0) * 1.42;
+      pt.e0 = Math.min(1.25, pt.e0 * 0.28 + 0.54 + vel * 0.52); pt.e2 = Math.min(1.20, pt.e2 * 0.24 + 0.44 + vel * 0.56);
+      pt.e3 = Math.min(1.10, pt.e3 * 0.20 + 0.30 + vel * 0.50); pt.flash = isHuman ? 1.15 : 0.95; pt.rot += isHuman ? 0.42 : 0.28;
+      const rx0 = geo.locusRx * (lane === 0 ? 1.18 : 1.0);
+      pt.ripples.push({ r: rx0, alpha: 0.72 * vel, maxR: rx0 + 18 + durSteps * 4.4 });
+      if (pt.ripples.length > 4) pt.ripples.shift();
+      state.spineBreath = Math.min(1.0, state.spineBreath + 0.22 + durSteps * 0.065 * vel);
+      for (const pad of [pads.L, pads.R]) {
+        pad.waves.push({ r: 7, maxR: 26 + vel * 24 + durSteps * 2.4, alpha: (0.28 + vel * 0.36) * (isHuman ? 1.2 : 1.0), lobes: 2 + (lane % 3), phase: lane * 0.9 });
+        if (pad.waves.length > 4) pad.waves.shift();
+      }
+    }
+
+    function directStrike(lane, vel = 0.88) {
+      ensureAudio();
+      const dur = pads.L.x < 0.3 ? 6 : pads.L.x < 0.65 ? 4 : 2, bloom = clamp(0.45 + pads.R.y * 0.55, 0, 1);
+      playHandpan(lane, audioCtx.currentTime, vel, dur, bloom); exciteLocus(lane, vel, dur, true);
+      state.lastHumanLane = lane; state.lastHumanAt = performance.now();
+      state.humanNotes.push({ onsetStep: state.nowStep, dur, lane, vel, bloom, human: true, sync: 0 });
+    }
+
+    function schedulerTick() {
+      if (!state.playing || !audioCtx) return;
+      while (state.nextSchedTime < audioCtx.currentTime + 0.11) {
+        const step = state.nextSchedStep, bar = state.bars.get(Math.floor(step / 16));
+        if (bar) {
+          const sib = step % 16;
+          for (const n of bar.notes) if (n.stepInBar === sib && !n.scheduled) {
+            n.scheduled = true; playHandpan(n.lane, state.nextSchedTime, n.vel, n.dur, n.bloom ?? pads.R.y);
+            const ms = Math.max(0, (state.nextSchedTime - audioCtx.currentTime) * 1000);
+            setTimeout(() => { if (state.playing) exciteLocus(n.lane, n.vel, n.dur, false); }, ms);
+          }
+        }
+        state.nextSchedStep++; state.nextSchedTime += STEP_SEC;
+      }
+    }
+
+    function setPlaying(on) {
+      ensureAudio(); state.playing = on;
+      if (on) { state.nextSchedStep = Math.ceil(state.nowStep); state.nextSchedTime = audioCtx.currentTime + (state.nextSchedStep - state.nowStep) * STEP_SEC; }
+      updateHudReadout();
+    }
+    setInterval(schedulerTick, 25);
+
+    // ==================== 5. SYMMETRICAL ARCHITECTURAL LAYOUT & HUD ====================
+    const canvas = document.getElementById('stage'), ctx = canvas.getContext('2d');
+    const readoutEl = document.getElementById('status-readout'), btnPlay = document.getElementById('btn-play'), btnLock = document.getElementById('btn-lock');
+    let W = window.innerWidth, H = window.innerHeight, DPR = 1;
+    const geo = {
+      scoreTop: 40, scoreBottom: 460, nowY: 240, stepPx: 10, fieldLeft: 260, fieldRight: 720,
+      locusX: [], locusRx: 14, locusRy: 10, glyphW: 7, rulerX: 210, rightSpineX: 748,
+      padL: { x: 0, y: 0, w: 260, h: 200 }, padR: { x: 0, y: 0, w: 260, h: 200 }, lockBtn: { x: 0, y: 0, w: 56, h: 18 }
+    };
+
+    function resize() {
+      W = window.innerWidth; H = window.innerHeight; DPR = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+      const padGap = clamp(Math.round(W * 0.03), 18, 42), padH = clamp(Math.round(H * 0.295), 156, 246);
+      const padW = clamp(Math.min(Math.round(padH * 1.42), Math.floor((W - 44 - padGap) * 0.5)), 150, 356);
+      const padY = Math.round(H - padH - 30), deckW = padW * 2 + padGap, deckL = Math.round((W - deckW) * 0.5);
+      geo.padL = { x: deckL, y: padY, w: padW, h: padH }; geo.padR = { x: deckL + padW + padGap, y: padY, w: padW, h: padH };
+      geo.lockBtn = { x: geo.padL.x + geo.padL.w - 63, y: geo.padL.y + 6, w: 56, h: 18 };
+
+      geo.scoreTop = 40; geo.scoreBottom = padY - 26;
+      geo.nowY = Math.round(geo.scoreTop + Math.max(180, geo.scoreBottom - geo.scoreTop) * 0.44);
+      geo.stepPx = clamp(Math.max(90, geo.scoreBottom - geo.nowY) / 24, 6.4, 13.5);
+      const fieldW = clamp(Math.round(deckW * 0.64), 220, 490);
+      geo.fieldLeft = Math.round(clamp(W * 0.49 - fieldW * 0.5, 92, W - fieldW - 128)); geo.fieldRight = geo.fieldLeft + fieldW;
+      const sp = fieldW / 8;
+      geo.locusX = Array.from({ length: 9 }, (_, i) => geo.fieldLeft + sp * i);
+      geo.locusRx = clamp(Math.round(sp * 0.29), 10, 17); geo.locusRy = clamp(Math.round(geo.locusRx * 0.72), 7, 12);
+      geo.glyphW = clamp(sp * 0.16, 4.8, 8.6);
+      geo.rulerX = Math.max(50, geo.fieldLeft - clamp(Math.round(W * 0.036), 28, 52));
+      geo.rightSpineX = geo.fieldRight + clamp(Math.round(W * 0.024), 20, 34);
+    }
+
+    function updateHudReadout() {
+      const barNum = String(Math.floor(state.nowStep / 16) + 1).padStart(2, '0'), beatNum = Math.floor((state.nowStep % 16) / 4) + 1;
+      readoutEl.textContent = `${regimeForX(pads.L.tx).name} · ${harmonyLabel(pads.R.tx)} · ${barNum}.${beatNum} · ${BPM} BPM`;
+      btnPlay.textContent = state.playing ? 'PAUSE' : 'PLAY'; btnPlay.classList.toggle('on', state.playing);
+      btnLock.textContent = state.echoLock ? `LOCK ● B${String(state.echoLock.sourceBarIdx + 1).padStart(2, '0')}` : 'LOCK ○';
+      btnLock.classList.toggle('on', Boolean(state.echoLock));
+    }
+
+    // ==================== 6. MINIMALIST SCORE, ORGANIC SPINE & BI-MANUAL DECK ====================
+    const stepToY = (s) => geo.nowY + (s - state.nowStep) * geo.stepPx;
+    const mixSig = (sig, a) => { const t = clamp(sig, 0, 1); return `rgba(255,${Math.round(lerp(255, 90, t))},${Math.round(lerp(255, 31, t))},${clamp(a, 0, 1).toFixed(3)})`; };
+    const line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    const circ = (cx, cy, r, fill = false) => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); fill ? ctx.fill() : ctx.stroke(); };
+    const ell = (cx, cy, rx, ry, fill = false) => { ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); fill ? ctx.fill() : ctx.stroke(); };
+    const bez = (x0, y0, c1x, c1y, c2x, c2y, x1, y1, fill = false) => {
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x1, y1);
+      if (fill) { ctx.closePath(); ctx.fill(); } else ctx.stroke();
+    };
+
+    function drawMetricRuler() {
+      const rx = geo.rulerX, top = geo.scoreTop, bot = geo.scoreBottom;
+      const minS = Math.floor(state.nowStep - (geo.nowY - top) / geo.stepPx - 2), maxS = Math.ceil(state.nowStep + (bot - geo.nowY) / geo.stepPx + 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; line(rx, top + 2, rx, bot - 2);
+      ctx.font = '9px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.30)';
+      ctx.fillText('PAST ↑', 16, top + 14); ctx.fillText('FUTURE ↓', 16, bot - 6);
+      ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.fillText('NOW', 16, geo.nowY + 3);
+      for (let s = Math.max(0, minS); s <= maxS; s++) {
+        const y = stepToY(s); if (y < top || y > bot) continue;
+        const w = metricWeight(s), near = Math.exp(-Math.abs(y - geo.nowY) / 68);
+        if (w === 4) {
+          ctx.strokeStyle = `rgba(255,255,255,${(0.42 + near * 0.44).toFixed(2)})`; ctx.lineWidth = 1.2; line(rx - 22, y, rx + 5, y);
+          ctx.strokeStyle = `rgba(255,255,255,${s < state.nowStep ? 0.07 : 0.05})`; ctx.lineWidth = 1; line(geo.fieldLeft - 14, y, geo.fieldRight + 14, y);
+          ctx.fillStyle = `rgba(255,255,255,${(0.36 + near * 0.46).toFixed(2)})`; ctx.textAlign = 'right';
+          ctx.fillText(String(Math.floor(s / 16) + 1).padStart(2, '0'), rx - 27, y + 3);
+        } else if (w === 3) { ctx.strokeStyle = `rgba(255,255,255,${(0.24 + near * 0.26).toFixed(2)})`; ctx.lineWidth = 1; line(rx - 13, y, rx + 2, y); }
+        else if (w === 2) { ctx.strokeStyle = `rgba(255,255,255,${(0.16 + near * 0.16).toFixed(2)})`; ctx.lineWidth = 1; line(rx - 7, y, rx, y); }
+        else if (w === 1) { ctx.strokeStyle = 'rgba(255,255,255,0.11)'; line(rx - 3.5, y, rx, y); }
+        else { ctx.fillStyle = 'rgba(255,255,255,0.13)'; ctx.fillRect(rx - 1.5, y - 0.5, 1.5, 1.5); }
+      }
+    }
+
+    function drawAttentionArcs(nowMs) {
+      const curBar = Math.floor(state.nowStep / 16), ax = geo.fieldLeft - 18, memSig = pads.L.signal;
+      for (let b = curBar; b <= curBar + 2; b++) {
+        const dst = state.bars.get(b); if (!dst) continue;
+        const yD = stepToY(dst.startStep + 4); if (yD > geo.scoreBottom + 24) continue;
+        for (const link of dst.links) {
+          const src = state.bars.get(link.fromBar); if (!src) continue;
+          const yS = clamp(stepToY(src.startStep + 4), geo.scoreTop + 6, geo.nowY - 12); if (yS >= yD - 10) continue;
+          const isLock = link.kind === 'lock', bulge = 16 + Math.min(3, Math.max(1, dst.barIdx - src.barIdx)) * 15 + pads.L.y * 12;
+          const sig = Math.max(isLock && state.echoLock ? clamp(1 - (nowMs - state.echoLock.lockedAtMs) / 420, 0, 1) : 0, memSig * (isLock ? 0.9 : 0.65));
+          ctx.save();
+          ctx.strokeStyle = isLock ? mixSig(sig, 0.74) : mixSig(sig, clamp(link.weight * (0.34 + pads.L.y * 0.44), 0.10, 0.74));
+          ctx.lineWidth = isLock ? 1.45 : (0.85 + pads.L.y * 0.6);
+          if (!isLock && pads.L.y < 0.72) ctx.setLineDash([3, 4]);
+          bez(ax, yS, ax - bulge, yS + (yD - yS) * 0.25, ax - bulge, yD - (yD - yS) * 0.25, ax, yD);
+          ctx.setLineDash([]); ctx.fillStyle = isLock ? mixSig(sig, 0.95) : mixSig(sig, 0.25 + pads.L.y * 0.45);
+          const r = isLock ? 2.4 : 1.5 + pads.L.y * 0.6; circ(ax, yS, r, true); circ(ax, yD, r, true); ctx.restore();
+        }
+      }
+    }
+
+    // Discrete Pulse + Tapered Continuous Acoustic Wave-Decay Glyphs (NO vertical strings, NO stacked boxes)
+    function drawWaveGlyph(n, nowMs, isLockedBar) {
+      const cx = geo.locusX[n.lane], yHead = stepToY(n.onsetStep), yTail = stepToY(n.onsetStep + n.dur);
+      if (yTail < geo.scoreTop - 6 || yHead > geo.scoreBottom + 6) return;
+      const diff = n.flashMs ? clamp(1 - (nowMs - n.flashMs) / 400, 0, 1) : 0, span = Math.max(4, yTail - yHead);
+      const isPastHead = yHead < geo.nowY, isSounding = yHead <= geo.nowY && yTail >= geo.nowY;
+      const wMax = geo.glyphW * (0.58 + 0.46 * n.vel + (n.lane === 0 ? 0.16 : 0) + (n.dur >= 6 ? 0.12 : 0));
+      const samples = Math.max(8, Math.min(24, Math.round(n.dur * 4))), pts = [];
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples, atk = t < 0.10 ? Math.sin((t / 0.10) * Math.PI * 0.5) : 1;
+        pts.push([yHead + t * span, wMax * atk * Math.pow(1 - t, 1.48) * (isSounding ? 1 + 0.12 * Math.sin(t * 16 - nowMs * 0.028) : 1)]);
+      }
+      ctx.beginPath(); pts.forEach(([y, hw], i) => i === 0 ? ctx.moveTo(cx + hw, y) : ctx.lineTo(cx + hw, y));
+      for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(cx - pts[i][1], pts[i][0]);
+      ctx.closePath();
+
+      const midY = (yHead + yTail) * 0.5, grad = ctx.createLinearGradient(0, yHead, 0, yTail);
+      if (midY < geo.nowY) {
+        const age = clamp(1 - (geo.nowY - midY) / Math.max(100, (geo.nowY - geo.scoreTop) * 1.15), 0.16, 1);
+        const topA = clamp(age * (isLockedBar ? 0.92 : 0.48 + n.vel * 0.42), 0.14, 0.95);
+        grad.addColorStop(0, `rgba(255,255,255,${topA.toFixed(3)})`); grad.addColorStop(1, 'rgba(255,255,255,0.03)');
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.strokeStyle = `rgba(255,255,255,${clamp(topA * 0.85, 0.12, 0.88).toFixed(3)})`; ctx.lineWidth = isLockedBar ? 1.15 : 0.8; ctx.stroke();
+      } else {
+        const dist = clamp(1 - (yHead - geo.nowY) / Math.max(100, (geo.scoreBottom - geo.nowY) * 1.15), 0.24, 1);
+        grad.addColorStop(0, mixSig(diff, (0.14 + dist * 0.16) * (0.6 + n.vel * 0.4) + diff * 0.22)); grad.addColorStop(1, mixSig(diff, 0.01));
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.strokeStyle = mixSig(diff, (0.32 + dist * 0.48) * (0.7 + n.vel * 0.3) + diff * 0.28); ctx.lineWidth = diff > 0.05 || isSounding ? 1.25 : 0.9; ctx.stroke();
+      }
+
+      // Subtle quantized beat/subdivision ticks so d ∈ {1,2,3,4,6,8} reads cleanly
+      for (let k = 1; k < n.dur; k++) {
+        const s = n.onsetStep + k, ty = stepToY(s); if (ty < geo.scoreTop || ty > geo.scoreBottom) continue;
+        const beatTick = s % 4 === 0, hw = Math.max(1.8, wMax * Math.pow(1 - k / n.dur, 1.48) * (beatTick ? 1.18 : 0.72));
+        ctx.strokeStyle = midY < geo.nowY ? `rgba(255,255,255,${beatTick ? 0.42 : 0.18})` : mixSig(diff, beatTick ? 0.56 : 0.22);
+        ctx.lineWidth = beatTick ? 1.0 : 0.75; line(cx - hw, ty, cx + hw, ty);
+      }
+      if (n.sync > 0 && yHead >= geo.nowY - 4) {
+        const cross = Math.ceil((n.onsetStep + 0.01) / 4) * 4;
+        if (cross > n.onsetStep && cross < n.onsetStep + n.dur) {
+          const cy = stepToY(cross); ctx.fillStyle = mixSig(diff, 0.92);
+          ctx.beginPath(); ctx.moveTo(cx, cy - 3); ctx.lineTo(cx + 3, cy); ctx.lineTo(cx, cy + 3); ctx.lineTo(cx - 3, cy); ctx.closePath(); ctx.fill();
+        }
+      }
+      if (yHead >= geo.scoreTop - 2 && yHead <= geo.scoreBottom + 2) {
+        const fade = isPastHead ? clamp(1 - (geo.nowY - yHead) / Math.max(90, (geo.nowY - geo.scoreTop) * 1.15), 0.28, 1)
+          : clamp(1 - (yHead - geo.nowY) / Math.max(90, (geo.scoreBottom - geo.nowY) * 1.15), 0.34, 1);
+        const r = (n.lane === 0 ? 3.9 : 3.0) + (n.dur >= 6 ? 0.65 : 0);
+        if (isPastHead) {
+          ctx.fillStyle = `rgba(255,255,255,${clamp(fade * 1.05, 0.3, 1).toFixed(3)})`; circ(cx, yHead, r, true);
+          if (n.human) { ctx.strokeStyle = `rgba(255,255,255,${(fade * 0.85).toFixed(2)})`; ctx.lineWidth = 1; circ(cx, yHead, r + 3.2); }
+        } else { ctx.fillStyle = '#000'; circ(cx, yHead, r, true); ctx.strokeStyle = mixSig(diff, 0.76 + fade * 0.24); ctx.lineWidth = 1.4; circ(cx, yHead, r); }
+      }
+    }
+
+    function drawNotes(nowMs) {
+      for (const bar of state.bars.values()) { const locked = state.echoLock && state.echoLock.sourceBarIdx === bar.barIdx; for (const n of bar.notes) drawWaveGlyph(n, nowMs, locked); }
+      for (const hn of state.humanNotes) drawWaveGlyph(hn, nowMs, false);
+    }
+
+    // Living Organic Curved Rhythmic Phrase Spine along right edge — flexes & breathes live with Left Pad
+    function drawOrganicRhythmSpine(nowMs) {
+      const bx = geo.rightSpineX, lx = pads.L.x, ly = pads.L.y, lSig = pads.L.signal, breath = 1 + state.spineBreath * 0.24;
+      ctx.strokeStyle = 'rgba(255,255,255,0.11)'; ctx.lineWidth = 1; line(bx, geo.scoreTop + 2, bx, geo.scoreBottom - 2);
+      ctx.font = '9.5px ui-monospace, Menlo, monospace'; ctx.textAlign = 'left';
+
+      for (const bar of state.bars.values()) {
+        const y0 = stepToY(bar.startStep), y1 = stepToY(bar.startStep + 16);
+        if (y1 < geo.scoreTop - 10 || y0 > geo.scoreBottom + 10) continue;
+        const isFut = bar.startStep + 16 > state.nowStep, isLock = state.echoLock && state.echoLock.sourceBarIdx === bar.barIdx;
+        const diff = Math.max(bar.flashMs ? clamp(1 - (nowMs - bar.flashMs) / 400, 0, 1) : 0, isFut ? lSig * 0.72 : 0);
+        if (y0 >= geo.scoreTop && y0 <= geo.scoreBottom) {
+          ctx.strokeStyle = mixSig(diff, isLock ? 0.85 : 0.32); ctx.lineWidth = 1; line(bx - 5, y0, bx + 4, y0);
+          ctx.fillStyle = mixSig(diff, isLock ? 1.0 : isFut ? 0.72 : 0.42); circ(bx, y0, isLock ? 2.6 : 1.9, true);
+        }
+
+        let maxAmp = 14;
+        for (const ev of bar.events) {
+          const s0 = bar.startStep + ev.stepInBar, s1 = s0 + ev.dur, ey0 = stepToY(s0), ey1 = stepToY(s1);
+          if (ey1 < geo.scoreTop - 16 || ey0 > geo.scoreBottom + 16) continue;
+          const span = Math.max(3, ey1 - ey0), activeNow = s0 <= state.nowStep && s1 >= state.nowStep;
+          if (ev.rest) {
+            const inAmp = 4.5 + Math.min(6, ev.dur * 1.1);
+            ctx.save(); ctx.setLineDash([2, 3]); ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 0.85;
+            bez(bx, ey0, bx - inAmp, ey0 + span * 0.3, bx - inAmp, ey1 - span * 0.3, bx, ey1); ctx.restore();
+            continue;
+          }
+          const flex = (0.86 + lx * 0.34) * (activeNow ? breath * 1.16 : breath);
+          const amp = (7.5 + Math.pow(ev.dur, 0.86) * 4.5 + ev.sync * 3.8) * flex; if (amp > maxAmp) maxAmp = amp;
+          const skT = 1.04 + (ev.sync > 0 ? 0.24 : 0) + lx * 0.14, skB = 0.84 - lx * 0.08;
+          const c1y = ey0 + span * (ev.sync > 0 ? 0.18 : 0.26), c2y = ey1 - span * 0.26;
+          const evSig = activeNow ? Math.max(diff, 0.45) : (ev.sync > 0 ? Math.max(diff, lSig * 0.9) : diff);
+
+          ctx.fillStyle = mixSig(evSig, activeNow ? 0.12 : (isFut ? 0.045 : 0.025));
+          bez(bx, ey0, bx + amp * skT, c1y, bx + amp * skB, c2y, bx, ey1, true);
+          ctx.strokeStyle = mixSig(evSig, isLock ? 0.92 : activeNow ? 0.96 : isFut ? 0.68 : 0.38);
+          ctx.lineWidth = activeNow ? 1.75 : isLock ? 1.45 : (1.05 + (ev.dur >= 4 ? 0.25 : 0));
+          bez(bx, ey0, bx + amp * skT, c1y, bx + amp * skB, c2y, bx, ey1);
+          if (ly > 0.32 || isLock) {
+            ctx.strokeStyle = mixSig(evSig, isLock ? 0.42 : clamp((ly - 0.32) * 0.56, 0, 0.38)); ctx.lineWidth = 0.75;
+            bez(bx, ey0, bx + amp * 0.56 * skT, c1y, bx + amp * 0.56 * skB, c2y, bx, ey1);
+          }
+          ctx.fillStyle = mixSig(evSig, activeNow ? 1.0 : isFut ? 0.72 : 0.40); circ(bx, ey0, activeNow ? 2.2 : 1.35, true);
+        }
+
+        const midY = (Math.max(geo.scoreTop, y0) + Math.min(geo.scoreBottom, y1)) * 0.5;
+        if (midY > geo.scoreTop + 14 && midY < geo.scoreBottom - 12 && bx + maxAmp + 62 < W) {
+          const lxLbl = bx + Math.min(46, maxAmp * 0.9 + 12);
+          ctx.fillStyle = mixSig(diff, isLock ? 0.98 : isFut ? 0.74 : 0.42); ctx.fillText(bar.label, lxLbl, midY - 2);
+          ctx.fillStyle = mixSig(diff, isLock ? 0.72 : 0.28); ctx.fillText(`${bar.chordKey} · S:${bar.syncScore}${isLock ? ' · LOCK' : ''}`, lxLbl, midY + 10);
+        }
+      }
+    }
+
+    function drawScoreEdgeFade() {
+      const topG = ctx.createLinearGradient(0, geo.scoreTop, 0, geo.scoreTop + 26);
+      topG.addColorStop(0, 'rgba(0,0,0,0.92)'); topG.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = topG; ctx.fillRect(0, geo.scoreTop, W, 26);
+      const botG = ctx.createLinearGradient(0, geo.scoreBottom - 26, 0, geo.scoreBottom);
+      botG.addColorStop(0, 'rgba(0,0,0,0)'); botG.addColorStop(1, 'rgba(0,0,0,0.94)'); ctx.fillStyle = botG; ctx.fillRect(0, geo.scoreBottom - 26, W, 26);
+    }
+
+    // Crisp 9 Discrete Elliptical D Kurd Loci on NOW + Elliptical Bloom Ripples (NO scanning orb)
+    function drawPolarEllipse(cx, cy, rx, ry, a2, a3, rot) {
+      ctx.beginPath();
+      for (let k = 0; k <= 44; k++) {
+        const th = (k / 44) * Math.PI * 2, mod = 1 + a2 * Math.cos(2 * (th - rot)) + a3 * Math.cos(3 * (th + rot * 0.7));
+        k === 0 ? ctx.moveTo(cx + Math.cos(th) * rx * mod, cy + Math.sin(th) * ry * mod) : ctx.lineTo(cx + Math.cos(th) * rx * mod, cy + Math.sin(th) * ry * mod);
+      }
+      ctx.closePath(); ctx.stroke();
+    }
+
+    function drawNowLoci() {
+      const y = geo.nowY;
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
+      let curX = geo.fieldLeft - 24;
+      for (let i = 0; i < 9; i++) {
+        const rx = geo.locusRx * (i === 0 ? 1.18 : 1.0) + 4, xL = geo.locusX[i] - rx;
+        if (xL > curX) line(curX, y, xL, y);
+        curX = geo.locusX[i] + rx;
+      }
+      line(curX, y, geo.fieldRight + 24, y);
+
+      // Subtle Tonal Gravity pointer on NOW driven by Right Pad X (HARMONY)
+      const gravX = lerp(geo.locusX[0], geo.locusX[8], pads.R.x), rSig = pads.R.signal, gy = y + geo.locusRy + 17;
+      ctx.strokeStyle = mixSig(rSig, 0.24 + rSig * 0.62); ctx.lineWidth = 1.2; line(gravX - 18, gy, gravX + 18, gy);
+      ctx.fillStyle = mixSig(rSig, 0.55 + rSig * 0.45);
+      ctx.beginPath(); ctx.moveTo(gravX, gy - 4); ctx.lineTo(gravX + 3, gy); ctx.lineTo(gravX - 3, gy); ctx.closePath(); ctx.fill();
+
+      for (let i = 0; i < 9; i++) {
+        const pt = loci[i], cx = geo.locusX[i], sc = i === 0 ? 1.18 : 1.0, rx = geo.locusRx * sc, ry = geo.locusRy * sc, hov = state.hoverLocus === i;
+        for (const rp of pt.ripples) { ctx.strokeStyle = `rgba(255,255,255,${clamp(rp.alpha, 0, 1).toFixed(3)})`; ctx.lineWidth = 0.9; ell(cx, y, rp.r, rp.r * 0.68); }
+        ctx.fillStyle = '#000'; ell(cx, y, rx, ry, true);
+        if (pt.e0 + pt.e2 + pt.e3 > 0.025) {
+          const br = 1 + pt.e0 * 0.16 * Math.sin(pt.p0), a2 = pt.e2 * 0.17 * Math.sin(pt.p2), a3 = pt.e3 * 0.12 * Math.sin(pt.p3);
+          ctx.strokeStyle = `rgba(255,255,255,${clamp(0.48 + pt.e0 * 0.52, 0, 1).toFixed(3)})`;
+          ctx.lineWidth = 1.25 + clamp(pt.flash, 0, 1) * 0.65; drawPolarEllipse(cx, y, rx * br, ry * br, a2, a3, pt.rot);
+          if (pt.e2 + pt.e3 > 0.06) { ctx.strokeStyle = `rgba(255,255,255,${clamp((pt.e2 + pt.e3) * 0.34, 0, 0.52).toFixed(3)})`; ctx.lineWidth = 0.85; drawPolarEllipse(cx, y, rx * 0.60, ry * 0.60, -a2 * 0.55, a3 * 0.6, pt.rot); }
+        } else { ctx.strokeStyle = hov ? 'rgba(255,255,255,0.74)' : 'rgba(255,255,255,0.28)'; ctx.lineWidth = hov ? 1.35 : 1; ell(cx, y, rx, ry); }
+        ctx.fillStyle = `rgba(255,255,255,${(0.22 + clamp(pt.flash, 0, 1) * 0.78).toFixed(2)})`; circ(cx, y, 1.4 + clamp(pt.e0, 0, 1) * 1.4, true);
+        const lit = clamp(pt.flash + (hov ? 0.55 : 0), 0, 1);
+        ctx.font = '9px ui-monospace, Menlo, monospace'; ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(255,255,255,${(0.34 + lit * 0.66).toFixed(2)})`; ctx.fillText(pt.name, cx, y - ry - 6);
+        ctx.fillStyle = `rgba(255,255,255,${(0.18 + lit * 0.52).toFixed(2)})`; ctx.fillText(pt.deg, cx, y + ry + 11);
+      }
+    }
+
+    // HERO: Sculptural Tactile 2D Bi-Manual Steer Pads + Center Coupling Bridge
+    function drawSteerPad(pad, b, cfg) {
+      const sig = pad.signal, px = b.x + pad.x * b.w, py = b.y + (1 - pad.y) * b.h, cx = b.x + b.w * 0.5, cy = b.y + b.h * 0.5;
+      ctx.fillStyle = 'rgba(0,0,0,0.92)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = mixSig(sig, 0.22 + sig * 0.58); ctx.lineWidth = sig > 0.08 ? 1.35 : 1; ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      ctx.strokeStyle = mixSig(sig, 0.55 + sig * 0.45); ctx.lineWidth = 1.4;
+      for (const [sx, sy, dx, dy] of [[b.x, b.y, 1, 1], [b.x + b.w, b.y, -1, 1], [b.x, b.y + b.h, 1, -1], [b.x + b.w, b.y + b.h, -1, -1]]) { line(sx, sy, sx + dx * 8, sy); line(sx, sy, sx, sy + dy * 8); }
+
+      ctx.save(); ctx.beginPath(); ctx.rect(b.x + 1, b.y + 1, b.w - 2, b.h - 2); ctx.clip();
+      const radMax = Math.min(b.w, b.h) * 0.44;
+      ctx.strokeStyle = 'rgba(255,255,255,0.065)'; ctx.lineWidth = 1; circ(cx, cy, radMax * 0.48); circ(cx, cy, radMax * 0.96);
+      ctx.strokeStyle = 'rgba(255,255,255,0.045)'; line(cx - radMax, cy - radMax, cx + radMax, cy + radMax); line(cx - radMax, cy + radMax, cx + radMax, cy - radMax);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; for (const tx of cfg.divX) line(b.x + tx * b.w, b.y, b.x + tx * b.w, b.y + b.h); line(b.x, cy, b.x + b.w, cy);
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      for (let i = 1; i < 8; i++) {
+        const tx = b.x + (i / 8) * b.w, ty = b.y + (i / 8) * b.h, tk = i === 4 ? 6 : 3.5;
+        line(tx, b.y, tx, b.y + tk); line(tx, b.y + b.h, tx, b.y + b.h - tk); line(b.x, ty, b.x + tk, ty); line(b.x + b.w, ty, b.x + b.w - tk, ty);
+      }
+
+      // Live crosshairs + fading spring velocity trail + sympathetic acoustic wave-response
+      ctx.strokeStyle = mixSig(sig, 0.16 + sig * 0.46); ctx.lineWidth = 1; line(px, b.y, px, b.y + b.h); line(b.x, py, b.x + b.w, py);
+      for (let i = 1; i < pad.trail.length; i++) {
+        const p0 = pad.trail[i - 1], p1 = pad.trail[i];
+        ctx.strokeStyle = mixSig(Math.max(sig, p1.life * 0.85), clamp(p1.life * 0.65, 0, 0.65)); ctx.lineWidth = 1.0 + p1.life * 1.5;
+        line(b.x + p0.x * b.w, b.y + (1 - p0.y) * b.h, b.x + p1.x * b.w, b.y + (1 - p1.y) * b.h);
+      }
+      for (const wv of pad.waves) {
+        ctx.strokeStyle = mixSig(sig * 0.55, clamp(wv.alpha, 0, 0.62)); ctx.lineWidth = 0.9; ctx.beginPath();
+        for (let k = 0; k <= 36; k++) {
+          const th = (k / 36) * Math.PI * 2, r = wv.r + Math.sin(th * wv.lobes + wv.phase) * (1.4 + wv.alpha * 2.2);
+          k === 0 ? ctx.moveTo(px + Math.cos(th) * r, py + Math.sin(th) * r) : ctx.lineTo(px + Math.cos(th) * r, py + Math.sin(th) * r);
+        }
+        ctx.closePath(); ctx.stroke();
+      }
+
+      // Glowing spring-weighted active puck
+      const haloR = 26 + sig * 14, g = ctx.createRadialGradient(px, py, 2, px, py, haloR);
+      g.addColorStop(0, mixSig(sig, 0.34 + sig * 0.34)); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; circ(px, py, haloR, true);
+      ctx.strokeStyle = mixSig(sig, 0.92); ctx.lineWidth = 1.5; circ(px, py, 10.5 + sig * 1.5);
+      ctx.strokeStyle = mixSig(sig, 0.55); ctx.lineWidth = 1;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) line(px + dx * 13, py + dy * 13, px + dx * 16.5, py + dy * 16.5);
+      ctx.fillStyle = mixSig(sig, 1.0); circ(px, py, 3.8, true);
+
+      ctx.font = '9px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'left'; ctx.fillStyle = mixSig(sig, 0.80); ctx.fillText(cfg.liveText, b.x + 8, b.y + 15);
+      ctx.fillStyle = 'rgba(255,255,255,0.34)'; ctx.fillText(cfg.leftLbl, b.x + 8, b.y + b.h - 7);
+      ctx.textAlign = 'right'; ctx.fillText(cfg.rightLbl, b.x + b.w - 8, b.y + b.h - 7);
+      ctx.textAlign = 'center'; ctx.fillText(cfg.topLbl, cx, b.y + 15);
+      if (cfg.lockCorner) {
+        const lb = geo.lockBtn, on = Boolean(state.echoLock), hov = state.hoverLockBtn;
+        ctx.fillStyle = on ? '#fff' : (hov ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.78)'); ctx.fillRect(lb.x, lb.y, lb.w, lb.h);
+        ctx.strokeStyle = on ? '#fff' : mixSig(on ? 1 : sig, hov ? 0.72 : 0.34); ctx.lineWidth = 1; ctx.strokeRect(lb.x + 0.5, lb.y + 0.5, lb.w - 1, lb.h - 1);
+        ctx.fillStyle = on ? '#000' : 'rgba(255,255,255,0.78)'; ctx.textAlign = 'center'; ctx.fillText(on ? 'LOCK ●' : 'LOCK ○', lb.x + lb.w * 0.5, lb.y + 12);
+      }
+      ctx.restore();
+
+      ctx.font = '9.5px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'left'; ctx.fillStyle = mixSig(sig, 0.78); ctx.fillText(cfg.title, b.x, b.y - 7);
+      ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.34)'; ctx.fillText(cfg.keys, b.x + b.w, b.y - 7);
+      ctx.font = '9px ui-monospace, Menlo, monospace'; ctx.textAlign = 'center'; ctx.fillText(cfg.botLbl, cx, b.y + b.h + 13);
+    }
+
+    function drawBiManualDeck() {
+      const L = geo.padL, R = geo.padR, bothSig = Math.min(1, pads.L.signal + pads.R.signal);
+      const lxEdge = L.x + L.w, rxEdge = R.x, midX = (lxEdge + rxEdge) * 0.5, lyP = L.y + (1 - pads.L.y) * L.h, ryP = R.y + (1 - pads.R.y) * R.h;
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; line(midX, L.y + 10, midX, L.y + L.h - 10);
+      ctx.strokeStyle = mixSig(bothSig * 0.85, 0.24 + bothSig * 0.55); ctx.lineWidth = 1.2; bez(lxEdge, lyP, midX, lyP, midX, ryP, rxEdge, ryP);
+      ctx.fillStyle = mixSig(bothSig, 0.65 + bothSig * 0.35); circ(midX, (lyP + ryP) * 0.5, 2.2 + bothSig * 1.1, true);
+
+      drawSteerPad(pads.L, L, { title: 'L · TIME × MEMORY', keys: 'WASD · Q lock', liveText: regimeForX(pads.L.x).name, leftLbl: 'CANTUS', rightLbl: 'SYNCOPATE', topLbl: 'OSTINATO ↑', botLbl: `${memoryLabel(pads.L.y)} · DISCOVERY ↓`, divX: [0.25, 0.55, 0.80], lockCorner: true });
+      drawSteerPad(pads.R, R, { title: 'R · HARMONY × ENERGY', keys: 'IJKL / ARROWS · R center', liveText: `${harmonyLabel(pads.R.x)} · ${Math.round(pads.R.y * 100)}%`, leftLbl: 'DING i', rightLbl: 'bVI/bVII', topLbl: 'RADIANT ↑', botLbl: 'QUIET LOW ↓', divX: [0.33, 0.67], lockCorner: false });
+    }
+
+    // ==================== 7. ANIMATION LOOP (SPRING PHYSICS + BI-MANUAL KEYBOARD) ====================
+    function nudgePad(pad, nx, ny, ignite = true) {
+      pad.tx = clamp(nx, 0, 1); pad.ty = clamp(ny, 0, 1); if (ignite) pad.signal = 1.0;
+      const key = `${Math.floor(pad.tx * (pad.id === 'L' ? 18 : 12))}:${Math.floor(pad.ty * 8)}`;
+      if (key !== pad.lastKey) { pad.lastKey = key; playDetent(0.56, pad.pan); revoiceFuture(true); }
+    }
+
+    let lastFrameMs = performance.now();
+    function frame(nowMs) {
+      const dt = Math.min(0.05, (nowMs - lastFrameMs) / 1000); lastFrameMs = nowMs;
+
+      // Simultaneous Bi-Manual Keyboard Steering (WASD = Left Pad, IJKL or Arrows = Right Pad)
+      const k = state.keysHeld, spd = 0.72;
+      const ldx = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0), ldy = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
+      pads.L.kbdActive = Boolean(ldx || ldy);
+      if (pads.L.kbdActive) { ensureAudio(); const inv = ldx && ldy ? 0.7071 : 1; nudgePad(pads.L, pads.L.tx + ldx * inv * spd * dt, pads.L.ty + ldy * inv * spd * dt); }
+      const rdx = ((k.has('KeyL') || k.has('ArrowRight')) ? 1 : 0) - ((k.has('KeyJ') || k.has('ArrowLeft')) ? 1 : 0);
+      const rdy = ((k.has('KeyI') || k.has('ArrowUp')) ? 1 : 0) - ((k.has('KeyK') || k.has('ArrowDown')) ? 1 : 0);
+      pads.R.kbdActive = Boolean(rdx || rdy);
+      if (pads.R.kbdActive) { ensureAudio(); const inv = rdx && rdy ? 0.7071 : 1; nudgePad(pads.R, pads.R.tx + rdx * inv * spd * dt, pads.R.ty + rdy * inv * spd * dt); }
+
+      if (state.playing && audioCtx) {
+        state.nowStep += dt / STEP_SEC;
+        const beatMark = Math.floor(state.nowStep / 4);
+        if (beatMark !== state.lastBeatMark) { state.lastBeatMark = beatMark; updateHudReadout(); }
+        ensureTimeline();
+      }
+      state.spineBreath *= Math.exp(-3.8 * dt);
+
+      for (const pad of [pads.L, pads.R]) {
+        pad.vx += ((pad.tx - pad.x) * 260 - pad.vx * 28) * dt; pad.vy += ((pad.ty - pad.y) * 260 - pad.vy * 28) * dt;
+        pad.x = clamp(pad.x + pad.vx * dt, 0, 1); pad.y = clamp(pad.y + pad.vy * dt, 0, 1);
+        if (Math.hypot(pad.vx, pad.vy) > 0.035 || isPadHeld(pad.id)) {
+          const last = pad.trail[pad.trail.length - 1];
+          if (!last || Math.hypot(pad.x - last.x, pad.y - last.y) > 0.008) { pad.trail.push({ x: pad.x, y: pad.y, life: 1.0 }); if (pad.trail.length > 22) pad.trail.shift(); }
+        }
+        for (let i = pad.trail.length - 1; i >= 0; i--) { pad.trail[i].life -= dt * 2.8; if (pad.trail[i].life <= 0) pad.trail.splice(i, 1); }
+        for (let i = pad.waves.length - 1; i >= 0; i--) { const wv = pad.waves[i]; wv.r += dt * 44; wv.alpha *= Math.exp(-3.4 * dt); if (wv.r >= wv.maxR || wv.alpha < 0.015) pad.waves.splice(i, 1); }
+        if (!isPadHeld(pad.id)) pad.signal *= Math.exp(-6.2 * dt); // ~400ms cool-down
+      }
+
+      for (const pt of loci) {
+        const w0 = 14 + pt.idx * 2.2; pt.p0 += dt * w0; pt.p2 += dt * w0 * 2.001; pt.p3 += dt * w0 * 2.999;
+        pt.e0 *= Math.exp(-dt / Math.max(0.18, pt.durTau)); pt.e2 *= Math.exp(-dt / Math.max(0.12, pt.durTau * 0.62));
+        pt.e3 *= Math.exp(-dt / Math.max(0.09, pt.durTau * 0.38)); pt.flash *= Math.exp(-5.0 * dt);
+        for (let i = pt.ripples.length - 1; i >= 0; i--) { const rp = pt.ripples[i]; rp.r += dt * (44 + pt.durTau * 14); rp.alpha *= Math.exp(-3.3 * dt); if (rp.r >= rp.maxR || rp.alpha < 0.015) pt.ripples.splice(i, 1); }
+      }
+
+      ctx.save(); ctx.scale(DPR, DPR); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, geo.scoreTop - 2, W, geo.scoreBottom - geo.scoreTop + 4); ctx.clip();
+      drawMetricRuler(); drawAttentionArcs(nowMs); drawNotes(nowMs); drawOrganicRhythmSpine(nowMs); drawScoreEdgeFade();
+      ctx.restore();
+      drawNowLoci(); drawBiManualDeck(); ctx.restore();
+      requestAnimationFrame(frame);
+    }
+
+    // ==================== 8. TRUE MULTI-POINTER & BI-MANUAL INTERACTION ====================
+    const inRect = (x, y, b, m = 0) => x >= b.x - m && x <= b.x + b.w + m && y >= b.y - m && y <= b.y + b.h + m;
+    const hitLocus = (x, y) => geo.locusX.findIndex((lx, i) => Math.hypot((x - lx) / (geo.locusRx * (i === 0 ? 1.18 : 1.0) + 12), (y - geo.nowY) / (geo.locusRy * (i === 0 ? 1.18 : 1.0) + 14)) <= 1);
+    const steerPadFromPtr = (id, x, y) => { const b = id === 'L' ? geo.padL : geo.padR; nudgePad(pads[id], (x - b.x) / b.w, 1 - (y - b.y) / b.h, true); };
+
+    canvas.addEventListener('pointerdown', (e) => {
+      const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top; ensureAudio();
+      if (inRect(x, y, geo.lockBtn, 4)) { toggleEchoLock(null); return; }
+      for (const [id, box] of [['L', geo.padL], ['R', geo.padR]]) if (inRect(x, y, box, 10)) {
+        state.activePointers.set(e.pointerId, id); try { canvas.setPointerCapture(e.pointerId); } catch {} steerPadFromPtr(id, x, y); return;
+      }
+      const li = hitLocus(x, y); if (li >= 0) { directStrike(li, 0.88); return; }
+      if (y >= geo.scoreTop && y < geo.nowY - geo.locusRy - 12 && x >= geo.fieldLeft - 24 && x <= geo.rightSpineX + 70) {
+        const barIdx = Math.floor((state.nowStep + (y - geo.nowY) / geo.stepPx) / 16); if (state.bars.has(barIdx)) { toggleEchoLock(barIdx); return; }
+      }
+      if (y >= geo.scoreTop && y <= geo.scoreBottom && x >= geo.fieldLeft - 24 && x <= geo.fieldRight + 24) {
+        let best = 0, bestD = 1e9; geo.locusX.forEach((lx, i) => { const d = Math.abs(x - lx); if (d < bestD) { bestD = d; best = i; } }); directStrike(best, 0.84);
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      const pid = state.activePointers.get(e.pointerId); if (pid) { steerPadFromPtr(pid, x, y); return; }
+      state.hoverLockBtn = inRect(x, y, geo.lockBtn, 4); state.hoverLocus = hitLocus(x, y);
+      const overPad = !state.hoverLockBtn && (inRect(x, y, geo.padL, 6) || inRect(x, y, geo.padR, 6));
+      const overPast = y >= geo.scoreTop && y < geo.nowY - geo.locusRy - 12 && x >= geo.fieldLeft - 24 && x <= geo.rightSpineX + 70;
+      canvas.style.cursor = overPad ? 'grab' : (state.hoverLockBtn || state.hoverLocus >= 0 || overPast) ? 'pointer' : 'default';
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => canvas.addEventListener(ev, (e) => { state.activePointers.delete(e.pointerId); }));
+
+    canvas.addEventListener('dblclick', (e) => {
+      const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      if (inRect(x, y, geo.lockBtn, 4)) return; ensureAudio();
+      if (inRect(x, y, geo.padL, 6)) { nudgePad(pads.L, 0.5, 0.5, true); playDetent(0.82, -0.45); revoiceFuture(true); }
+      else if (inRect(x, y, geo.padR, 6)) { nudgePad(pads.R, 0.5, 0.5, true); playDetent(0.82, 0.45); revoiceFuture(true); }
+    });
+
+    btnPlay.addEventListener('click', () => { btnPlay.blur(); setPlaying(!state.playing); });
+    btnLock.addEventListener('click', () => { btnLock.blur(); ensureAudio(); toggleEchoLock(null); });
+
+    const STEER_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyI', 'KeyJ', 'KeyK', 'KeyL', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+    window.addEventListener('keydown', (e) => {
+      if (STEER_CODES.has(e.code)) { e.preventDefault(); state.keysHeld.add(e.code); return; }
+      if (e.repeat && (e.code === 'Space' || e.code === 'KeyQ' || e.code === 'KeyR')) return;
+      if (e.code === 'Space') { e.preventDefault(); setPlaying(!state.playing); }
+      else if (e.code === 'KeyQ') { e.preventDefault(); ensureAudio(); toggleEchoLock(null); }
+      else if (e.code === 'KeyR') { e.preventDefault(); ensureAudio(); nudgePad(pads.L, 0.5, 0.5, true); nudgePad(pads.R, 0.5, 0.5, true); playDetent(0.85, 0); revoiceFuture(true); }
+      else if (e.key >= '1' && e.key <= '9') directStrike(parseInt(e.key, 10) - 1, 0.88);
+    });
+    window.addEventListener('keyup', (e) => { state.keysHeld.delete(e.code); });
+    window.addEventListener('blur', () => { state.keysHeld.clear(); state.activePointers.clear(); });
+
+    window.addEventListener('resize', resize);
+    resize(); ensureTimeline(); updateHudReadout(); requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

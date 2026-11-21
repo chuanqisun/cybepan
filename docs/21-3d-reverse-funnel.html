@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>21 — 3D Reverse-Funnel Horizon (Abstract Minimalist Perspective)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff;
+    font: 11px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased; user-select: none; touch-action: none;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #bar {
+    position: fixed; inset: 0 0 auto 0; height: 32px; padding: 0 14px; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: rgba(0,0,0,0.82); border-bottom: 1px solid rgba(255,255,255,0.07); pointer-events: none;
+  }
+  #bar .left, #bar .hint { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  #playBtn {
+    pointer-events: auto; cursor: pointer; appearance: none; background: transparent; color: #fff;
+    font: inherit; letter-spacing: 0.08em; border: 1px solid rgba(255,255,255,0.34); border-radius: 2px;
+    height: 20px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  #playBtn:hover { border-color: #fff; }
+  #playBtn .dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.34); }
+  #playBtn.on .dot { background: #ff5a1f; box-shadow: 0 0 6px #ff5a1f; }
+  #meta, .hint { color: rgba(255,255,255,0.34); letter-spacing: 0.05em; }
+  .hint { overflow: hidden; text-overflow: ellipsis; }
+  .hint b { color: rgba(255,255,255,0.64); font-weight: 500; }
+  @media (max-width: 680px) { .hint { display: none; } }
+</style>
+</head>
+<body>
+<header id="bar">
+  <div class="left">
+    <button id="playBtn" aria-label="Play or Pause"><span class="dot"></span><span id="playLbl">PLAY</span></button>
+    <span id="meta">21 · D KURD · 84 BPM</span>
+  </div>
+  <div class="hint"><b>SCULPT</b> floor · <b>STRIKE</b> horizon · <b>MARQUEE</b> sky · <b>RMB</b> tilt · <b>SPACE</b> play</div>
+</header>
+<canvas id="stage"></canvas>
+
+<script type="module">
+// ============================================================================
+// 21 — 3D REVERSE-FUNNEL HORIZON (ABSTRACT MINIMALIST PERSPECTIVE)
+// FLOOR (z > 0, y = 0) = converging FUTURE · HORIZON (0, 0) = NOW METER
+// VERTICAL SKY (z = 0, y > 0) = ascending PAST reverse-waterfall lift-off
+// ============================================================================
+const NOTES   = ['D3', 'A3', 'Bb3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4'];
+const DEGREES = ['^1', '^5', '^b6', '^b7', '^1', '^2', '^b3', '^4', '^5'];
+const FREQS   = [146.83, 220.00, 233.08, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00];
+const DURS = [1, 2, 3, 4, 6, 8], BPM = 84, STEP_S = 60 / BPM / 4;
+const FUTURE_STEPS = 32, PAST_STEPS = 32, TOP_PAD = 38, FLASH_S = 0.40;
+const Z_MAX = 12.4, Y_MAX = 6.2, Z_PER_STEP = Z_MAX / FUTURE_STEPS, Y_PER_STEP = Y_MAX / PAST_STEPS, LANE_HALF = 4.55;
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const pick  = (arr) => arr[(Math.random() * arr.length) | 0];
+const snapDur = (s) => DURS.reduce((b, d) => Math.abs(d - s) < Math.abs(b - s) ? d : b, DURS[0]);
+const laneX = (i) => i - 4;
+const locusOfWorldX = (wx) => clamp(Math.round(wx + 4), 0, 8);
+const mixInk = (sig, a) => `rgba(255,${Math.round(lerp(255, 90, clamp(sig, 0, 1)))},${Math.round(lerp(255, 31, clamp(sig, 0, 1)))},${clamp(a, 0, 1).toFixed(3)})`;
+
+// --- TRUE 3D PERSPECTIVE CAMERA & EXACT SCREEN <-> PLANE RAYCASTER ---
+const canvas = document.getElementById('stage'), ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+const tilt = { x: 0, y: 0, tx: 0, ty: 0, dragX: 0, dragY: 0 };
+const cam = { cx: 0, cy: 6.6, cz: 24, rx: 1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0, fx: 0, fy: 0, fz: -1, fl: 1200, vpX: 640, vpY: 416 };
+
+function updateCamera() {
+  const aspectY = clamp(6.6 * (H / Math.max(W * 0.62, 1)), 5.4, 9.6), cz = 24.0;
+  cam.cx = tilt.x + tilt.dragX; cam.cy = clamp(aspectY + tilt.y + tilt.dragY, 3.2, 12.8); cam.cz = cz;
+  cam.vpX = W * 0.5; cam.vpY = Math.round(H * 0.52);
+
+  // Orthonormal look-at basis anchored at NOW Horizon center (0, 0, 0)
+  const d = Math.hypot(cam.cx, cam.cy, cam.cz) || 1;
+  cam.fx = -cam.cx / d; cam.fy = -cam.cy / d; cam.fz = -cam.cz / d;
+  const rl = Math.hypot(-cam.fz, cam.fx) || 1;
+  cam.rx = -cam.fz / rl; cam.ry = 0; cam.rz = cam.fx / rl;
+  cam.ux = cam.ry * cam.fz - cam.rz * cam.fy; cam.uy = cam.rz * cam.fx - cam.rx * cam.fz; cam.uz = cam.rx * cam.fy - cam.ry * cam.fx;
+
+  const d0 = Math.hypot(aspectY, cz), kMax = d0 / Math.max(2, d0 - Z_MAX * (cz / d0));
+  const flW = ((W * 0.455) * d0) / (LANE_HALF * kMax), flH = ((H - cam.vpY - 20) * d0) / (kMax * Z_MAX * (aspectY / d0));
+  const flTop = ((cam.vpY - TOP_PAD - 14) * (d0 - Y_MAX * (aspectY / d0))) / (Y_MAX * (cz / d0));
+  cam.fl = Math.max(240, Math.min(flW, flH, flTop));
+}
+
+function project3D(x, y, z) {
+  const vx = x - cam.cx, vy = y - cam.cy, vz = z - cam.cz, zc = vx * cam.fx + vy * cam.fy + vz * cam.fz;
+  if (zc <= 0.25) return null;
+  const xc = vx * cam.rx + vy * cam.ry + vz * cam.rz, yc = vx * cam.ux + vy * cam.uy + vz * cam.uz, s = cam.fl / zc;
+  return { x: cam.vpX + xc * s, y: cam.vpY - yc * s, s, zc };
+}
+
+function screenRay(sx, sy) {
+  const rx = (sx - cam.vpX) / cam.fl, ry = -(sy - cam.vpY) / cam.fl;
+  return { dx: rx * cam.rx + ry * cam.ux + cam.fx, dy: rx * cam.ry + ry * cam.uy + cam.fy, dz: rx * cam.rz + ry * cam.uz + cam.fz };
+}
+
+function unprojectFloor(sx, sy) { const r = screenRay(sx, sy); if (r.dy >= -1e-5) return null; const t = -cam.cy / r.dy; return t > 0 ? { x: cam.cx + t * r.dx, y: 0, z: cam.cz + t * r.dz } : null; }
+function unprojectWall(sx, sy) { const r = screenRay(sx, sy); if (r.dz >= -1e-5) return null; const t = -cam.cz / r.dz; return t > 0 ? { x: cam.cx + t * r.dx, y: cam.cy + t * r.dy, z: 0 } : null; }
+function resize() { DPR = Math.min(window.devicePixelRatio || 1, 2); W = window.innerWidth; H = window.innerHeight; canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR); updateCamera(); }
+window.addEventListener('resize', resize); resize();
+
+// --- SINGLE CLEAN SYNTHETIC D KURD HANDPAN VOICE + DRY MICRO-CLICKS ---
+let actx = null, masterBus = null, reverbSend = null, noiseBuf = null, lastClickMs = 0;
+
+function ensureAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return actx; }
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  const comp = actx.createDynamicsCompressor();
+  Object.assign(comp.threshold, { value: -10 }); Object.assign(comp.knee, { value: 14 });
+  Object.assign(comp.ratio, { value: 4 }); Object.assign(comp.attack, { value: 0.003 }); Object.assign(comp.release, { value: 0.16 });
+  comp.connect(actx.destination);
+  masterBus = actx.createGain(); masterBus.gain.value = 0.86; masterBus.connect(comp);
+
+  const len = Math.floor(actx.sampleRate * 1.9), ir = actx.createBuffer(2, len, actx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch); let lp = 0;
+    for (let i = 0; i < len; i++) { lp = lp * 0.72 + (Math.random() * 2 - 1) * 0.28; d[i] = lp * Math.pow(1 - i / len, 2.7) * (i < 900 ? i / 900 : 1); }
+  }
+  const conv = actx.createConvolver(); conv.buffer = ir;
+  reverbSend = actx.createGain(); reverbSend.gain.value = 0.34; reverbSend.connect(conv); conv.connect(comp);
+
+  const nLen = Math.floor(actx.sampleRate * 0.04); noiseBuf = actx.createBuffer(1, nLen, actx.sampleRate);
+  for (let i = 0, nd = noiseBuf.getChannelData(0); i < nLen; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (nLen * 0.18));
+  return actx;
+}
+
+function playVoice(locus, vel = 0.75, durSteps = 4, when = null, openHold = false) {
+  const ctxA = ensureAudio(), t0 = when != null ? Math.max(when, ctxA.currentTime) : ctxA.currentTime;
+  const f0 = FREQS[locus], isDing = locus === 0, panVal = (locus / 8 - 0.5) * 0.74;
+  const tau1 = (isDing ? 1.48 : 1.12) * Math.pow(220 / f0, 0.22) * (openHold ? 1.85 : (0.30 + Math.pow(durSteps / 8, 0.78) * 1.45));
+  const vGain = ctxA.createGain(), panner = ctxA.createStereoPanner();
+  vGain.gain.setValueAtTime(vel * (isDing ? 0.56 : 0.44), t0); panner.pan.setValueAtTime(panVal, t0);
+  vGain.connect(panner); panner.connect(masterBus); panner.connect(reverbSend);
+
+  const addPartial = (hz, amp, rise, tau) => {
+    const osc = ctxA.createOscillator(), g = ctxA.createGain();
+    osc.type = 'sine'; osc.frequency.setValueAtTime(hz * (1 + 0.0025 * vel), t0); osc.frequency.exponentialRampToValueAtTime(hz, t0 + 0.045);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(amp, t0 + rise); g.gain.setTargetAtTime(0.0001, t0 + rise, tau);
+    osc.connect(g); g.connect(vGain); osc.start(t0); osc.stop(t0 + Math.min(5.6, rise + tau * 5.2));
+  };
+  addPartial(f0, 0.72, 0.005, tau1); addPartial(f0 + 0.7, 0.28, 0.008, tau1 * 0.94);
+  addPartial(f0 * 2, 0.26 * (0.65 + 0.45 * vel), 0.024, tau1 * 0.48); addPartial(f0 * 3, 0.10 * vel, 0.038, tau1 * 0.24);
+
+  const src = ctxA.createBufferSource(), bp = ctxA.createBiquadFilter(), ng = ctxA.createGain();
+  src.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.setValueAtTime(520 + locus * 110, t0); bp.Q.value = 1.6;
+  ng.gain.setValueAtTime(vel * 0.22, t0); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.022);
+  src.connect(bp); bp.connect(ng); ng.connect(panner); src.start(t0);
+
+  return {
+    shapeTo(d) {
+      if (!actx) return;
+      const now = actx.currentTime; vGain.gain.cancelScheduledValues(now);
+      vGain.gain.setValueAtTime(Math.max(0.0001, vGain.gain.value), now); vGain.gain.setTargetAtTime(0.0001, now, 0.14 + (d / 8) * 0.95);
+    }
+  };
+}
+
+function playClick(pan = 0, hz = 1480, gain = 0.04) {
+  const nowMs = performance.now(); if (nowMs - lastClickMs < 24) return; lastClickMs = nowMs;
+  const ctxA = ensureAudio(), t0 = ctxA.currentTime;
+  const osc = ctxA.createOscillator(), g = ctxA.createGain(), p = ctxA.createStereoPanner();
+  osc.type = 'triangle'; osc.frequency.setValueAtTime(hz, t0); osc.frequency.exponentialRampToValueAtTime(hz * 0.42, t0 + 0.012);
+  g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.015);
+  p.pan.setValueAtTime(clamp(pan, -0.8, 0.8), t0);
+  osc.connect(g); g.connect(p); p.connect(masterBus); osc.start(t0); osc.stop(t0 + 0.018);
+}
+
+// --- QUANTIZED VARIABLE-DURATION GENERATOR & DYNAMIC-WIDTH ATTENTION LOCK ---
+const CELLS_SPARSE  = [[8,8],[6,2,8],[4,4,8],[6,4,6],[8,-4,4],[2,2,4,8],[6,-2,8]];
+const CELLS_GROOVE  = [[3,3,2,4,4],[3,3,2,6,2],[2,2,4,3,3,2],[4,2,2,6,-2],[1,1,2,4,2,6],[6,2,2,2,4],[3,3,2,2,-2,4]];
+const CELLS_KINETIC = [[1,1,2,3,3,2,2,2],[2,1,1,2,2,3,3,2],[3,3,2,1,1,2,4],[1,1,1,1,2,2,3,3,2],[2,2,1,1,2,2,2,4]];
+const CHORDS = [[0,1,4,6,8],[2,4,6,8,1],[3,5,7,1,8],[0,1,4,6,5]]; // i -> bVI -> bVII -> i
+
+const state = {
+  playing: false, playhead: 16, anchorTime: 0, anchorStep: 16, generatedUpTo: 16, nextId: 1,
+  past: [], future: [], shocks: [], brush: [],
+  locusGlow: new Float32Array(9), locusPeak: new Float32Array(9), locusOrange: new Float32Array(9),
+  gravity: 0.42, kinetic: 0.48, motifLock: null, activeHolds: new Map()
+};
+const metricWeight = (s) => s === 0 ? 1.0 : s === 8 ? 0.78 : s % 4 === 0 ? 0.60 : s % 2 === 0 ? 0.36 : 0.18;
+const findAtStep = (arr, s) => arr.find(n => n.step === s) || null;
+
+function choosePitch(step, dur, prev1, prev2, barIdx) {
+  const barInPhrase = ((barIdx % 4) + 4) % 4, barStep = ((step % 16) + 16) % 16;
+  const pool = CHORDS[barInPhrase], gravCenter = lerp(1.6, 6.8, state.gravity);
+  const e16 = findAtStep(state.past, step - 16), e32 = findAtStep(state.past, step - 32);
+  const echoSrc = (e16 && Math.random() < 0.46) ? e16 : (e32 && Math.random() < 0.54) ? e32 : null;
+
+  if (barStep === 0 && (barInPhrase === 0 || barInPhrase === 3)) {
+    return { locus: state.gravity < 0.58 ? 0 : 4, attn: echoSrc ? { srcStep: echoSrc.step, srcLocus: echoSrc.locus, kind: 'phase' } : prev1 ? { srcStep: prev1.step, srcLocus: prev1.locus, kind: 'narmour' } : null };
+  }
+  if (echoSrc && Math.random() < 0.62) {
+    const drift = state.gravity > 0.68 && echoSrc.locus < 7 ? 1 : state.gravity < 0.28 && echoSrc.locus > 0 ? -1 : 0;
+    return { locus: clamp(echoSrc.locus + (Math.random() < 0.45 ? drift : 0), 0, 8), attn: { srcStep: echoSrc.step, srcLocus: echoSrc.locus, kind: 'phase' } };
+  }
+  let pref = Math.round(gravCenter);
+  if (prev1 && prev2) {
+    const leap = prev1.locus - prev2.locus;
+    pref = Math.abs(leap) >= 3 ? clamp(prev1.locus - Math.sign(leap) * (Math.abs(leap) >= 5 ? 2 : 1), 0, 8)
+                               : clamp(prev1.locus + (leap ? Math.sign(leap) : (Math.random() < 0.5 ? 1 : -1)), 0, 8);
+  } else if (prev1) pref = clamp(prev1.locus + (Math.random() < 0.5 ? 1 : -1), 0, 8);
+
+  let bestL = pref, bestSc = -1e9;
+  for (let l = 0; l < 9; l++) {
+    const sc = (pool.includes(l) ? 2.2 : 0) - Math.abs(l - pref) * 0.78 - Math.abs(l - gravCenter) * (0.42 + (dur >= 4 ? 0.25 : 0))
+             - (prev1 && l === prev1.locus ? (dur <= 2 ? 1.8 : 0.9) : 0) + (l === 2 && dur >= 4 && barInPhrase === 1 ? 1.6 : 0)
+             + (l === 0 && barStep === 0 && state.gravity < 0.65 ? 1.5 : 0) + (Math.random() - 0.5) * 1.45;
+    if (sc > bestSc) { bestSc = sc; bestL = l; }
+  }
+  return { locus: bestL, attn: prev1 ? { srcStep: prev1.step, srcLocus: prev1.locus, kind: 'narmour' } : null };
+}
+
+function generateBar(barStartStep) {
+  const barIdx = Math.floor(barStartStep / 16), barInPhrase = ((barIdx % 4) + 4) % 4;
+  if (state.motifLock?.notes.length) {
+    const lock = state.motifLock, len = Math.max(4, lock.len), shift = state.gravity > 0.82 ? 1 : state.gravity < 0.14 ? -1 : 0;
+    for (let off = 0; off < 16; off += len) for (const m of lock.notes) {
+      const s = barStartStep + off + m.rel;
+      if (s < barStartStep || s >= barStartStep + 16 || s <= Math.floor(state.playhead)) continue;
+      state.future.push({
+        id: state.nextId++, step: s, locus: clamp(m.locus + (m.locus === 0 ? 0 : shift), 0, 8),
+        dur: snapDur(Math.min(m.dur, barStartStep + 16 - s)), vel: clamp(m.vel * (0.94 + Math.random() * 0.10), 0.35, 0.96),
+        flash: lock.flash > 0 ? 0.72 : 0, sculpted: false, scheduled: false, attn: { srcStep: m.srcStep, srcLocus: m.srcLocus, kind: 'lock' }
+      });
+    }
+    return;
+  }
+  const bank = state.kinetic < 0.34 ? CELLS_SPARSE : state.kinetic > 0.68 ? CELLS_KINETIC : CELLS_GROOVE;
+  const cell = (barInPhrase === 3 && state.kinetic < 0.72) ? pick([[2,2,4,6,-2],[3,3,2,8],[4,4,6,-2],[6,2,6,-2]]) : pick(bank);
+  const allPrev = [...state.past, ...state.future].filter(n => n.step < barStartStep).sort((a, b) => a.step - b.step);
+  let prev2 = allPrev[allPrev.length - 2] || null, prev1 = allPrev[allPrev.length - 1] || null, cursor = 0;
+
+  for (const raw of cell) {
+    if (cursor >= 16) break;
+    if (raw < 0) { cursor += -raw; continue; }
+    const dur = snapDur(Math.min(raw, 16 - cursor)), step = barStartStep + cursor, { locus, attn } = choosePitch(step, dur, prev1, prev2, barIdx);
+    const vel = clamp(0.50 + metricWeight(cursor) * 0.28 + (dur >= 6 ? 0.10 : dur >= 4 ? 0.05 : -0.04) + (locus === 2 ? 0.07 : 0) + (Math.random() - 0.5) * 0.08, 0.34, 0.96);
+    const note = { id: state.nextId++, step, locus, dur, vel, flash: 0, sculpted: false, scheduled: false, attn };
+    state.future.push(note); prev2 = prev1; prev1 = note; cursor += raw;
+  }
+}
+
+function ensureFutureBuffer() {
+  const target = Math.ceil(state.playhead) + FUTURE_STEPS;
+  while (state.generatedUpTo < target) {
+    const barStart = Math.floor(state.generatedUpTo / 16) * 16, nextStart = barStart < state.generatedUpTo ? barStart + 16 : barStart;
+    if (nextStart > state.generatedUpTo) {
+      let s = state.generatedUpTo, prev1 = state.past.at(-1) || null, prev2 = state.past.at(-2) || null;
+      while (s < nextStart) {
+        const dur = snapDur(Math.min(state.kinetic > 0.68 ? 2 : state.kinetic < 0.35 ? 4 : 3, nextStart - s));
+        const { locus, attn } = choosePitch(s, dur, prev1, prev2, Math.floor(s / 16));
+        const n = { id: state.nextId++, step: s, locus, dur, vel: 0.64, flash: 0, sculpted: false, scheduled: false, attn };
+        state.future.push(n); prev2 = prev1; prev1 = n; s += dur;
+      }
+      state.generatedUpTo = nextStart;
+    } else { generateBar(nextStart); state.generatedUpTo = nextStart + 16; }
+  }
+  state.future.sort((a, b) => a.step - b.step);
+}
+
+function regenerateFuture(offset = 2) { const cut = Math.ceil(state.playhead) + offset; state.future = state.future.filter(n => n.step < cut); state.generatedUpTo = cut; ensureFutureBuffer(); }
+function seedOpeningScore() {
+  const seed = [[0,0,4,0.86],[4,1,2,0.64],[6,2,2,0.72],[8,4,3,0.78],[11,6,3,0.74],[14,5,2,0.60]];
+  state.past = seed.map(([step, locus, dur, vel], i) => ({ id: state.nextId++, step, locus, dur, vel, flash: 0, shimmer: 0, user: false, holding: false, attn: i > 0 ? { srcStep: seed[i - 1][0], srcLocus: seed[i - 1][1], kind: 'narmour' } : null }));
+  state.playhead = state.anchorStep = state.generatedUpTo = 16; state.future = []; ensureFutureBuffer();
+}
+
+// --- 3D FLOOR SHOCKWAVES & LOOKAHEAD SCHEDULER ---
+function spawnShock(locus, vel, durSteps, orange = 0, holding = false) {
+  const r = {
+    locus, dur: durSteps, vel, age: 0, phase: Math.random() * Math.PI * 2, orange, holding,
+    maxAge: 0.42 + Math.pow(durSteps / 8, 0.80) * 2.25,
+    maxR: 1.15 + Math.pow(durSteps / 8, 0.78) * 3.85 * (0.85 + vel * 0.25), rings: durSteps >= 6 ? 3 : durSteps >= 3 ? 2 : 1
+  };
+  state.shocks.push(r); if (state.shocks.length > 26) state.shocks.shift();
+  const e = clamp(0.68 + vel * 0.45, 0, 1.15);
+  state.locusGlow[locus] = Math.max(state.locusGlow[locus], e); state.locusPeak[locus] = Math.max(state.locusPeak[locus], e);
+  if (orange > 0) state.locusOrange[locus] = Math.max(state.locusOrange[locus], orange);
+  return r;
+}
+
+const updatePlayhead = () => { if (state.playing && actx) state.playhead = state.anchorStep + (actx.currentTime - state.anchorTime) / STEP_S; };
+
+setInterval(() => {
+  if (!state.playing || !actx) return;
+  updatePlayhead(); ensureFutureBuffer();
+  const nowS = state.playhead, look = 0.12 / STEP_S;
+  for (const n of state.future) if (!n.scheduled && n.step <= nowS + look) {
+    n.scheduled = true; playVoice(n.locus, n.vel, n.dur, actx.currentTime + Math.max(0.002, (n.step - nowS) * STEP_S), false);
+  }
+  while (state.future.length && state.future[0].step <= nowS) {
+    const n = state.future.shift();
+    if (!n.scheduled) playVoice(n.locus, n.vel, n.dur, actx.currentTime, false);
+    spawnShock(n.locus, n.vel, n.dur, n.sculpted ? 0.88 : 0, false);
+    if (n.attn) { const src = state.past.find(p => p.step === n.attn.srcStep && p.locus === n.attn.srcLocus); if (src) src.shimmer = 1; }
+    state.past.push({ id: n.id, step: n.step, locus: n.locus, dur: n.dur, vel: n.vel, flash: n.sculpted ? 0.72 : 0, shimmer: 0, user: false, holding: false, attn: n.attn });
+    state.kinetic = lerp(state.kinetic, 0.48, 0.008);
+  }
+  if (state.past.length > 180) state.past = state.past.filter(n => n.step >= nowS - 128);
+  if (state.motifLock && state.motifLock.endStep < nowS - 30) {
+    const shift = Math.ceil((nowS - 20 - state.motifLock.endStep) / state.motifLock.len) * state.motifLock.len;
+    if (shift > 0 && state.motifLock.startStep + shift < nowS - 2) {
+      state.motifLock.startStep += shift; state.motifLock.endStep += shift;
+      for (const m of state.motifLock.notes) m.srcStep += shift;
+    }
+  }
+}, 25);
+
+const playBtn = document.getElementById('playBtn'), playLbl = document.getElementById('playLbl'), metaEl = document.getElementById('meta');
+function togglePlay(force = null) {
+  const want = force != null ? force : !state.playing; if (want === state.playing) return;
+  const ctxA = ensureAudio();
+  if (want) { state.playing = true; state.anchorTime = ctxA.currentTime; state.anchorStep = state.playhead; for (const n of state.future) n.scheduled = false; }
+  else { updatePlayhead(); state.playing = false; }
+  playBtn.classList.toggle('on', state.playing); playLbl.textContent = state.playing ? 'PAUSE' : 'PLAY';
+}
+playBtn.addEventListener('click', () => togglePlay());
+
+// --- DIRECT 3D AFFORDANCES (RAYCAST SCULPT · HORIZON STRIKE · 2D PAST MARQUEE) ---
+const g = {
+  mode: null, pid: null, sx: 0, sy: 0, lx: 0, ly: 0, lt: 0, moved: false, speed: 240, hitFuture: null, lastSculptStep: -999,
+  pastXA: 0, pastXB: 0, pastSA: 0, pastSB: 0, scrubStep: 0, lastRatchet: -999, hoverZone: null, hoverNote: null, hoverLocus: -1, hoverFloor: null
+};
+
+function horizonHitTest(sx, sy) {
+  const pL = project3D(-LANE_HALF, 0, 0), pR = project3D(LANE_HALF, 0, 0); if (!pL || !pR) return { zone: null, locus: -1 };
+  const hy = lerp(pL.y, pR.y, clamp((sx - pL.x) / Math.max(1, pR.x - pL.x), 0, 1));
+  if (sx < pL.x - 4 && sx >= pL.x - 74 && Math.abs(sy - pL.y) <= 24) return { zone: 'scrub', locus: -1 };
+  if (Math.abs(sy - hy) <= 23 && sx >= pL.x - 12 && sx <= pR.x + 12) {
+    let best = 0, bestD = 1e9;
+    for (let i = 0; i < 9; i++) { const p = project3D(laneX(i), 0, 0); if (p && Math.abs(sx - p.x) < bestD) { bestD = Math.abs(sx - p.x); best = i; } }
+    return { zone: 'now', locus: best };
+  }
+  return { zone: sy > hy ? 'future' : 'past', locus: -1 };
+}
+
+const findFutureNote3D = (wx, wz) => {
+  const s = state.playhead + wz / Z_PER_STEP;
+  return state.future.find(n => Math.abs(wx - laneX(n.locus)) <= 0.44 && s >= n.step - 0.55 && s <= n.step + n.dur + 0.35) || null;
+};
+
+function applySculpt3D(wx, wz, speedPx) {
+  if (Math.abs(wx) > LANE_HALF + 0.4 || wz < Z_PER_STEP * 0.6 || wz > Z_MAX + Z_PER_STEP) return;
+  const rawStep = Math.round(state.playhead + wz / Z_PER_STEP);
+  if (rawStep < Math.ceil(state.playhead) + 1 || rawStep > Math.floor(state.playhead) + FUTURE_STEPS) return;
+  const locus = locusOfWorldX(wx), kin = clamp((speedPx - 110) / 480, 0, 1);
+  state.gravity = lerp(state.gravity, locus / 8, 0.24); state.kinetic = lerp(state.kinetic, kin, 0.28);
+  const targetDur = kin < 0.20 ? 8 : kin < 0.36 ? 6 : kin < 0.52 ? 4 : kin < 0.70 ? 3 : kin < 0.85 ? 2 : 1;
+  const stride = targetDur >= 6 ? 4 : targetDur >= 3 ? 3 : targetDur;
+  if (Math.abs(rawStep - g.lastSculptStep) < Math.max(1, Math.floor(stride * 0.75))) {
+    const cur = findAtStep(state.future, g.lastSculptStep);
+    if (cur && cur.locus !== locus) { cur.locus = locus; cur.flash = 1; playClick((locus / 8 - 0.5) * 0.7, 980 + locus * 140, 0.032); }
+    return;
+  }
+  g.lastSculptStep = rawStep;
+  const endStep = rawStep + targetDur;
+  state.future = state.future.filter(n => {
+    if (n.step >= rawStep && n.step < endStep) return false;
+    if (n.locus === locus && n.step < rawStep && n.step + n.dur > rawStep) n.dur = snapDur(Math.max(1, rawStep - n.step));
+    return true;
+  });
+  const prev = [...state.past, ...state.future].filter(n => n.step < rawStep).sort((a, b) => b.step - a.step)[0];
+  const vel = clamp(0.56 + metricWeight(((rawStep % 16) + 16) % 16) * 0.24 + (targetDur >= 4 ? 0.08 : 0), 0.42, 0.94);
+  state.future.push({ id: state.nextId++, step: rawStep, locus, dur: targetDur, vel, flash: 1, sculpted: true, scheduled: false, attn: prev ? { srcStep: prev.step, srcLocus: prev.locus, kind: 'narmour' } : null });
+  state.future.sort((a, b) => a.step - b.step);
+  playClick((locus / 8 - 0.5) * 0.75, 840 + locus * 145 - (1 - kin) * 120, 0.038);
+}
+
+function cycleFutureNote(note) {
+  const idx = DURS.indexOf(note.dur);
+  if (idx === -1 || idx === DURS.length - 1) { state.future = state.future.filter(n => n.id !== note.id); playClick((note.locus / 8 - 0.5) * 0.7, 520, 0.035); return; }
+  const nextDur = DURS[idx + 1]; note.dur = nextDur; note.flash = 1; note.sculpted = true;
+  state.future = state.future.filter(n => n.id === note.id || n.locus !== note.locus || n.step < note.step || n.step >= note.step + nextDur);
+  playClick((note.locus / 8 - 0.5) * 0.7, 920 + nextDur * 95, 0.042);
+}
+
+function beginManualStrike(id, locus) {
+  if (state.activeHolds.has(id)) return;
+  const ctxA = ensureAudio(), voice = playVoice(locus, 0.88, 6, ctxA.currentTime, true);
+  const shock = spawnShock(locus, 0.94, 2, 1.0, true), prev = state.past.at(-1) || null;
+  const note = { id: state.nextId++, step: Math.floor(state.playhead), locus, dur: 1, vel: 0.88, flash: 1, shimmer: 0, user: true, holding: true, attn: prev ? { srcStep: prev.step, srcLocus: prev.locus, kind: 'narmour' } : null };
+  state.past.push(note); state.activeHolds.set(id, { note, shock, voice, startMs: performance.now(), locus });
+  state.gravity = lerp(state.gravity, locus / 8, 0.34);
+  if (!state.motifLock) {
+    const cut = Math.ceil(state.playhead) + 3;
+    for (const f of state.future) if (f.step >= cut && !f.sculpted && Math.random() < 0.42) {
+      f.locus = clamp(f.locus + Math.sign(locus - f.locus), 0, 8); f.attn = { srcStep: note.step, srcLocus: locus, kind: 'phase' };
+    }
+  }
+}
+
+function endManualStrike(id) {
+  const h = state.activeHolds.get(id); if (!h) return;
+  const finalDur = snapDur(clamp(Math.max(1, Math.round((performance.now() - h.startMs) / 1000 / STEP_S)), 1, 8));
+  h.note.dur = finalDur; h.note.holding = false; h.shock.holding = false; h.shock.dur = finalDur;
+  h.shock.rings = finalDur >= 6 ? 3 : finalDur >= 3 ? 2 : 1;
+  h.shock.maxAge = Math.max(h.shock.age + 0.35, 0.42 + Math.pow(finalDur / 8, 0.80) * 2.25);
+  h.shock.maxR = 1.15 + Math.pow(finalDur / 8, 0.78) * 3.85;
+  h.voice.shapeTo(finalDur); state.activeHolds.delete(id);
+}
+
+function lockPastMarquee(wxA, wxB, sA, sB) {
+  const wxLo = clamp(Math.min(wxA, wxB), -LANE_HALF, LANE_HALF), wxHi = clamp(Math.max(wxA, wxB), -LANE_HALF, LANE_HALF);
+  const lo = Math.floor(Math.min(sA, sB) / 4) * 4, hi = clamp(Math.ceil(Math.max(sA, sB) / 4) * 4, lo + 4, lo + 32);
+  const padX = Math.max(0.42, (wxHi - wxLo) < 0.4 ? 0.55 : 0.38);
+  let slice = state.past.filter(n => laneX(n.locus) >= wxLo - padX && laneX(n.locus) <= wxHi + padX && n.step >= lo && n.step < hi);
+  if (!slice.length) slice = state.past.filter(n => laneX(n.locus) >= wxLo - padX && laneX(n.locus) <= wxHi + padX && n.step + n.dur > lo && n.step < hi);
+  if (!slice.length) { if (state.motifLock) { state.motifLock = null; regenerateFuture(2); } playClick(-0.4, 600, 0.032); return; }
+  const d = hi - lo, len = d <= 4 ? 4 : d <= 8 ? 8 : d <= 12 ? 12 : d <= 16 ? 16 : 32;
+  const minL = Math.min(...slice.map(n => laneX(n.locus))) - 0.44, maxL = Math.max(...slice.map(n => laneX(n.locus))) + 0.44;
+  state.motifLock = { startStep: lo, endStep: lo + len, len, wxLo: Math.min(wxLo, minL), wxHi: Math.max(wxHi, maxL), flash: 1,
+                      notes: slice.map(n => ({ rel: clamp(n.step - lo, 0, len - 1), locus: n.locus, dur: n.dur, vel: n.vel, srcStep: n.step, srcLocus: n.locus })) };
+  for (const n of slice) n.flash = 1;
+  regenerateFuture(2); playClick(-0.45, 1340, 0.048);
+}
+
+function commitScrub(targetStep) {
+  const s = clamp(Math.round(targetStep), 0, Math.floor(state.playhead));
+  state.playhead = state.anchorStep = state.generatedUpTo = s; if (actx) state.anchorTime = actx.currentTime;
+  state.past = state.past.filter(n => n.step < s); if (state.motifLock && state.motifLock.startStep >= s) state.motifLock = null;
+  state.future = []; state.shocks = []; ensureFutureBuffer(); playClick(-0.6, 1680, 0.05);
+}
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.clientY < 32) return;
+  canvas.setPointerCapture(e.pointerId); ensureAudio();
+  const x = e.clientX, y = e.clientY;
+  Object.assign(g, { pid: e.pointerId, sx: x, sy: y, lx: x, ly: y, lt: performance.now(), moved: false, speed: 240, lastSculptStep: -999 });
+  if (e.button === 2 || e.altKey) { g.mode = 'tilt'; return; }
+  const hit = horizonHitTest(x, y);
+  if (hit.zone === 'scrub') { g.mode = 'scrub'; g.scrubStep = g.lastRatchet = Math.round(state.playhead); playClick(-0.65, 1180, 0.038); }
+  else if (hit.zone === 'now') { g.mode = 'now'; beginManualStrike('ptr-' + e.pointerId, hit.locus); }
+  else if (hit.zone === 'future') {
+    g.mode = 'sculpt'; const fp = unprojectFloor(x, y); g.hitFuture = fp ? findFutureNote3D(fp.x, fp.z) : null;
+    if (fp && fp.z >= 0 && fp.z <= Z_MAX + 1) state.brush.push({ wx: clamp(fp.x, -LANE_HALF, LANE_HALF), step: state.playhead + fp.z / Z_PER_STEP, t: performance.now(), w: 2.2 });
+  } else {
+    g.mode = 'past'; const wp = unprojectWall(x, y);
+    if (wp) { g.pastXA = g.pastXB = clamp(wp.x, -LANE_HALF, LANE_HALF); g.pastSA = g.pastSB = Math.min(state.playhead - 0.5, state.playhead - Math.max(0.1, wp.y) / Y_PER_STEP); }
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  const x = e.clientX, y = e.clientY;
+  if (!g.mode) {
+    tilt.tx = ((x / Math.max(1, W)) - 0.5) * 2.2; tilt.ty = ((y / Math.max(1, H)) - 0.5) * -1.1;
+    const hit = horizonHitTest(x, y); g.hoverZone = hit.zone; g.hoverLocus = hit.locus;
+    const fp = hit.zone === 'future' ? unprojectFloor(x, y) : null;
+    g.hoverFloor = (fp && fp.z > 0.15 && fp.z <= Z_MAX + 0.5 && Math.abs(fp.x) <= LANE_HALF + 0.35) ? fp : null;
+    g.hoverNote = g.hoverFloor ? findFutureNote3D(fp.x, fp.z) : null;
+    canvas.style.cursor = hit.zone === 'scrub' ? 'ns-resize' : (hit.zone === 'now' || g.hoverNote) ? 'pointer' : 'crosshair';
+    return;
+  }
+  if (e.pointerId !== g.pid) return;
+  const now = performance.now(), dt = Math.max(0.008, (now - g.lt) / 1000);
+  if (Math.hypot(x - g.sx, y - g.sy) > 6) g.moved = true;
+  if (g.mode === 'tilt') { tilt.dragX = clamp(tilt.dragX + (x - g.lx) * 0.022, -4.8, 4.8); tilt.dragY = clamp(tilt.dragY - (y - g.ly) * 0.015, -2.4, 2.8); }
+  else if (g.mode === 'scrub') {
+    const wp = unprojectWall(x, y); g.scrubStep = clamp(Math.round(wp ? state.playhead - Math.max(0, wp.y) / Y_PER_STEP : state.playhead), state.past[0]?.step ?? 0, Math.floor(state.playhead));
+    if (g.scrubStep !== g.lastRatchet) { g.lastRatchet = g.scrubStep; playClick(-0.65, 1050 + (state.playhead - g.scrubStep) * 18, 0.036); }
+  } else if (g.mode === 'sculpt' && g.moved) {
+    g.speed = lerp(g.speed, Math.hypot(x - g.lx, y - g.ly) / dt, 0.30); const fp = unprojectFloor(x, y);
+    if (fp && fp.z > 0.25 && fp.z <= Z_MAX + 0.8 && Math.abs(fp.x) <= LANE_HALF + 0.5) {
+      state.brush.push({ wx: clamp(fp.x, -LANE_HALF, LANE_HALF), step: state.playhead + fp.z / Z_PER_STEP, t: now, w: lerp(4.6, 1.1, clamp((g.speed - 110) / 480, 0, 1)) });
+      applySculpt3D(fp.x, fp.z, g.speed);
+    }
+  } else if (g.mode === 'past') {
+    const wp = unprojectWall(x, y); if (wp) { g.pastXB = clamp(wp.x, -LANE_HALF, LANE_HALF); g.pastSB = Math.min(state.playhead - 0.5, state.playhead - Math.max(0.08, wp.y) / Y_PER_STEP); }
+  }
+  g.lx = x; g.ly = y; g.lt = now;
+});
+
+function finishPointer(e) {
+  if (g.pid !== e.pointerId) return;
+  const x = e.clientX, y = e.clientY;
+  if (g.mode === 'now') endManualStrike('ptr-' + e.pointerId);
+  else if (g.mode === 'sculpt' && !g.moved) {
+    if (g.hitFuture) cycleFutureNote(g.hitFuture);
+    else {
+      const fp = unprojectFloor(x, y);
+      if (fp && fp.z > 0.25 && fp.z <= Z_MAX + 0.6 && Math.abs(fp.x) <= LANE_HALF) {
+        const step = Math.round(state.playhead + fp.z / Z_PER_STEP), locus = locusOfWorldX(fp.x);
+        if (step >= Math.ceil(state.playhead) + 1 && step <= Math.floor(state.playhead) + FUTURE_STEPS) {
+          const prev = [...state.past, ...state.future].filter(n => n.step < step).pop() || null;
+          state.future.push({ id: state.nextId++, step, locus, dur: (((step % 4) + 4) % 4) === 0 ? 4 : 2, vel: 0.74, flash: 1, sculpted: true, scheduled: false, attn: prev ? { srcStep: prev.step, srcLocus: prev.locus, kind: 'narmour' } : null });
+          state.future.sort((a, b) => a.step - b.step); state.gravity = lerp(state.gravity, locus / 8, 0.18); playClick((locus / 8 - 0.5) * 0.7, 940 + locus * 130, 0.04);
+        }
+      }
+    }
+  } else if (g.mode === 'past') {
+    if (g.moved) lockPastMarquee(g.pastXA, g.pastXB, g.pastSA, g.pastSB);
+    else {
+      const wp = unprojectWall(x, y), s = wp ? state.playhead - wp.y / Y_PER_STEP : -999;
+      const hitNote = wp ? state.past.find(n => Math.abs(laneX(n.locus) - wp.x) <= 0.55 && s >= n.step - 1.2 && s <= n.step + n.dur + 1.2) : null;
+      if (hitNote) { const b = Math.floor(hitNote.step / 8) * 8; lockPastMarquee(laneX(hitNote.locus) - 0.5, laneX(hitNote.locus) + 0.5, b, b + 8); }
+      else if (state.motifLock) { state.motifLock = null; regenerateFuture(2); playClick(-0.4, 580, 0.034); }
+    }
+  } else if (g.mode === 'scrub' && g.scrubStep < Math.floor(state.playhead)) commitScrub(g.scrubStep);
+  g.mode = g.pid = g.hitFuture = null;
+}
+canvas.addEventListener('pointerup', finishPointer);
+canvas.addEventListener('pointercancel', finishPointer);
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.code === 'Escape' && state.motifLock) { state.motifLock = null; regenerateFuture(2); playClick(-0.4, 580, 0.032); }
+  else if (!e.repeat && e.key >= '1' && e.key <= '9') beginManualStrike('key-' + e.key, Number(e.key) - 1);
+});
+window.addEventListener('keyup', (e) => { if (e.key >= '1' && e.key <= '9') endManualStrike('key-' + e.key); });
+
+// --- 3D GEOMETRY PRIMITIVES & 60FPS HIDPI ARCHITECTURAL RENDERER ---
+let lastFrameMs = performance.now();
+
+function drawLine3D(x0, y0, z0, x1, y1, z1) { const a = project3D(x0, y0, z0), b = project3D(x1, y1, z1); if (a && b) { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); } }
+function drawGradLine3D(x0, y0, z0, x1, y1, z1, c0, c1, lw, mid) {
+  const a = project3D(x0, y0, z0), b = project3D(x1, y1, z1); if (!a || !b) return;
+  const gL = ctx.createLinearGradient(a.x, a.y, b.x, b.y); gL.addColorStop(0, c0); if (mid) gL.addColorStop(mid[0], mid[1]); gL.addColorStop(1, c1);
+  ctx.strokeStyle = gL; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+}
+function drawFloorRing3D(cx, cz, radius, modeN, modAmp, phase, segs = 48, arcStart = 0, arcEnd = Math.PI * 2) {
+  if (radius < 0.04) return;
+  ctx.beginPath(); let started = false;
+  for (let i = 0; i <= segs; i++) {
+    const a = lerp(arcStart, arcEnd, i / segs), r = radius + (modAmp > 0.005 ? Math.sin(modeN * a + phase) * modAmp : 0);
+    const p = project3D(cx + Math.cos(a) * r, 0, cz + Math.sin(a) * r);
+    if (p) { if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y); }
+  }
+  if (started) ctx.stroke();
+}
+
+function drawWallMarquee(wxLo, wxHi, sLo, sHi, sig, label) {
+  const yTop = clamp((state.playhead - sLo) * Y_PER_STEP, 0.05, Y_MAX), yBot = clamp((state.playhead - sHi) * Y_PER_STEP, 0.05, Y_MAX);
+  if (yTop - yBot < 0.08) return;
+  const pTL = project3D(wxLo, yTop, 0), pTR = project3D(wxHi, yTop, 0), pBR = project3D(wxHi, yBot, 0), pBL = project3D(wxLo, yBot, 0);
+  if (!pTL || !pTR || !pBR || !pBL) return;
+  ctx.fillStyle = mixInk(sig, 0.04 + sig * 0.05); ctx.strokeStyle = mixInk(sig, 0.24 + sig * 0.34); ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(pTL.x, pTL.y); ctx.lineTo(pTR.x, pTR.y); ctx.lineTo(pBR.x, pBR.y); ctx.lineTo(pBL.x, pBL.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+  const cX = Math.min(0.42, (wxHi - wxLo) * 0.32), cY = Math.min(0.32, (yTop - yBot) * 0.32);
+  ctx.strokeStyle = mixInk(sig, 0.85); ctx.lineWidth = 1.4;
+  for (const [bx, dx] of [[wxLo, cX], [wxHi, -cX]]) for (const [by, dy] of [[yTop, -cY], [yBot, cY]]) {
+    const p0 = project3D(bx + dx, by, 0), p1 = project3D(bx, by, 0), p2 = project3D(bx, by + dy, 0);
+    if (p0 && p1 && p2) { ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); }
+  }
+  const mid = project3D(wxLo, (yTop + yBot) * 0.5, 0);
+  if (mid) {
+    ctx.fillStyle = '#ff5a1f'; ctx.beginPath(); ctx.arc(mid.x, mid.y, 2.2, 0, Math.PI * 2); ctx.fill();
+    if (label) { ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = mixInk(sig, 0.62); ctx.fillText(label, mid.x - 6, mid.y); }
+  }
+}
+
+function drawFrame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - lastFrameMs) / 1000); lastFrameMs = nowMs;
+  updatePlayhead();
+  tilt.x = lerp(tilt.x, tilt.tx, 1 - Math.exp(-dt * 4.5)); tilt.y = lerp(tilt.y, tilt.ty, 1 - Math.exp(-dt * 4.5));
+  if (g.mode !== 'tilt') { tilt.dragX *= Math.exp(-dt * 3.8); tilt.dragY *= Math.exp(-dt * 3.8); }
+  updateCamera();
+
+  for (const h of state.activeHolds.values()) {
+    const d = snapDur(clamp(Math.max(1, Math.ceil((nowMs - h.startMs) / 1000 / STEP_S)), 1, 8));
+    h.note.dur = h.shock.dur = d; h.note.flash = h.shock.orange = state.locusGlow[h.locus] = state.locusPeak[h.locus] = state.locusOrange[h.locus] = 1;
+    h.shock.rings = d >= 6 ? 3 : d >= 3 ? 2 : 1; h.shock.maxR = 1.15 + Math.pow(d / 8, 0.78) * 3.85;
+    h.shock.maxAge = Math.max(h.shock.age + 0.85, 0.42 + Math.pow(d / 8, 0.80) * 2.25);
+  }
+  for (let i = state.shocks.length - 1; i >= 0; i--) {
+    const r = state.shocks[i]; r.age += dt; r.phase += dt * (2.6 + r.locus * 0.35);
+    if (!r.holding && r.orange > 0) r.orange = Math.max(0, r.orange - dt / FLASH_S);
+    if (!r.holding && r.age >= r.maxAge) state.shocks.splice(i, 1);
+  }
+  for (let i = 0; i < 9; i++) {
+    state.locusGlow[i] *= Math.exp(-dt * 4.2); state.locusPeak[i] = Math.max(state.locusGlow[i], state.locusPeak[i] - dt * 0.55);
+    if (state.locusOrange[i] > 0) state.locusOrange[i] = Math.max(0, state.locusOrange[i] - dt / FLASH_S);
+  }
+  for (const n of state.future) if (n.flash > 0) n.flash = Math.max(0, n.flash - dt / FLASH_S);
+  for (const n of state.past) {
+    if (n.flash > 0 && !n.holding) n.flash = Math.max(0, n.flash - dt / FLASH_S);
+    if (n.shimmer > 0) n.shimmer = Math.max(0, n.shimmer - dt * 1.4);
+    if (n.step <= state.playhead && n.step + n.dur > state.playhead) {
+      state.locusGlow[n.locus] = Math.max(state.locusGlow[n.locus], 0.34 + ((n.step + n.dur - state.playhead) / n.dur) * 0.52);
+      state.locusPeak[n.locus] = Math.max(state.locusPeak[n.locus], state.locusGlow[n.locus]);
+    }
+  }
+  if (state.motifLock?.flash > 0) state.motifLock.flash = Math.max(0, state.motifLock.flash - dt / FLASH_S);
+  while (state.brush.length && nowMs - state.brush[0].t > 440) state.brush.shift();
+
+  metaEl.textContent = `21 · D KURD · ${BPM} BPM · ${Math.floor(state.playhead / 16) + 1}.${(Math.floor(state.playhead / 4) % 4) + 1}`;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+
+  // 1. CONVERGING 3D REVERSE-FUNNEL FLOOR GRID (FUTURE, y = 0, z > 0)
+  for (let i = 0; i < 9; i++) {
+    const wx = laneX(i), hov = g.hoverLocus === i || (g.hoverFloor && locusOfWorldX(g.hoverFloor.x) === i), baseA = hov ? 0.24 : (i === 0 || i === 4) ? 0.13 : 0.075;
+    drawGradLine3D(wx, 0, 0, wx, 0, Z_MAX, mixInk(state.locusOrange[i], baseA + state.locusGlow[i] * 0.14), 'rgba(255,255,255,0)', hov ? 1.15 : 0.9, [0.84, `rgba(255,255,255,${(baseA * 0.85).toFixed(3)})`]);
+  }
+  for (const bx of [-LANE_HALF, LANE_HALF]) drawGradLine3D(bx, 0, 0, bx, 0, Z_MAX, 'rgba(255,255,255,0.22)', 'rgba(255,255,255,0)', 1, [0.85, 'rgba(255,255,255,0.10)']);
+  ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace'; ctx.textBaseline = 'middle';
+  for (let s = Math.ceil(state.playhead), fEnd = Math.floor(state.playhead) + FUTURE_STEPS; s <= fEnd; s++) {
+    const z = (s - state.playhead) * Z_PER_STEP; if (z <= 0.04 || z > Z_MAX) continue;
+    const fade = clamp(1 - Math.pow(z / Z_MAX, 3.2), 0, 1);
+    if (s % 4 === 0) {
+      const isBar = ((s % 16) + 16) % 16 === 0;
+      ctx.strokeStyle = `rgba(255,255,255,${((isBar ? 0.17 : 0.055) * fade).toFixed(3)})`; ctx.lineWidth = isBar ? 1.05 : 0.8;
+      drawLine3D(-LANE_HALF, 0, z, LANE_HALF, 0, z);
+      if (isBar && s >= 0) { const lbl = project3D(-LANE_HALF - 0.25, 0, z); if (lbl) { ctx.fillStyle = `rgba(255,255,255,${(0.26 * fade).toFixed(3)})`; ctx.textAlign = 'right'; ctx.fillText(String(Math.floor(s / 16) + 1), lbl.x, lbl.y); } }
+    } else {
+      ctx.strokeStyle = `rgba(255,255,255,${(0.09 * fade).toFixed(3)})`; ctx.lineWidth = 0.8;
+      drawLine3D(-LANE_HALF, 0, z, -LANE_HALF + 0.14, 0, z); drawLine3D(LANE_HALF - 0.14, 0, z, LANE_HALF, 0, z);
+    }
+  }
+
+  // 2. RISING PAST VERTICAL LIFT-OFF COLUMN GRID (z = 0, y > 0)
+  for (let i = 0; i < 9; i++) {
+    const wx = laneX(i);
+    drawGradLine3D(wx, 0, 0, wx, Y_MAX, 0, mixInk(state.locusOrange[i], 0.075 + state.locusGlow[i] * 0.14), 'rgba(255,255,255,0)', 0.85);
+    if (state.locusGlow[i] > 0.08) drawGradLine3D(wx, 0, 0, wx, state.locusGlow[i] * 1.45, 0, mixInk(state.locusOrange[i], state.locusGlow[i] * 0.65), mixInk(state.locusOrange[i], 0), 1.6);
+  }
+  for (const bx of [-LANE_HALF, LANE_HALF]) drawGradLine3D(bx, 0, 0, bx, Y_MAX, 0, 'rgba(255,255,255,0.16)', 'rgba(255,255,255,0)', 0.9);
+  for (let pEnd = Math.floor(state.playhead), s = Math.max(0, pEnd - PAST_STEPS); s <= pEnd; s++) {
+    if (s % 4 !== 0) continue;
+    const y = (state.playhead - s) * Y_PER_STEP; if (y <= 0.06 || y > Y_MAX) continue;
+    const isBar = ((s % 16) + 16) % 16 === 0, fade = clamp(1 - y / Y_MAX, 0, 1);
+    ctx.strokeStyle = `rgba(255,255,255,${((isBar ? 0.11 : 0.035) * fade).toFixed(3)})`; ctx.lineWidth = 0.85; drawLine3D(-LANE_HALF, y, 0, LANE_HALF, y, 0);
+    if (isBar) { const lbl = project3D(-LANE_HALF - 0.25, y, 0); if (lbl) { ctx.fillStyle = `rgba(255,255,255,${(0.32 * fade).toFixed(3)})`; ctx.textAlign = 'right'; ctx.fillText(String(Math.floor(s / 16) + 1), lbl.x, lbl.y); } }
+  }
+
+  // 3. DYNAMIC-WIDTH 2D PAST MARQUEE & LOCK FRAME (ON z = 0 SKY PLANE)
+  if (state.motifLock) drawWallMarquee(state.motifLock.wxLo, state.motifLock.wxHi, state.motifLock.startStep, state.motifLock.endStep, state.motifLock.flash, `${Math.round(state.motifLock.len / 4)}B`);
+  if (g.mode === 'past' && g.moved) drawWallMarquee(Math.min(g.pastXA, g.pastXB), Math.max(g.pastXA, g.pastXB), Math.min(g.pastSA, g.pastSB), Math.max(g.pastSA, g.pastSB), 0.92, 'LOCK');
+
+  // 4. 3D CURVED BEZIER ATTENTION ARCS (ELEVATED PAST SKY -> CONVERGING FUTURE FLOOR)
+  for (const n of state.future) {
+    if (!n.attn) continue;
+    const zDst = (n.step - state.playhead) * Z_PER_STEP, ySrc = (state.playhead - n.attn.srcStep) * Y_PER_STEP;
+    if (zDst <= 0.05 || zDst > Z_MAX + 0.4 || ySrc <= 0.05 || ySrc > Y_MAX + 1.2) continue;
+    const xSrc = laneX(n.attn.srcLocus), xDst = laneX(n.locus), isLock = n.attn.kind === 'lock', prox = clamp(1 - zDst / Z_MAX, 0, 1);
+    const alpha = isLock ? 0.20 + prox * 0.34 : n.attn.kind === 'phase' ? 0.08 + prox * 0.14 : 0.045 + prox * 0.08;
+    const sig = isLock && state.motifLock ? state.motifLock.flash : n.flash * 0.8, ys = Math.min(Y_MAX, ySrc);
+    const bowX = ((xSrc + xDst) * 0.5 < 0 ? -1 : 1) * (0.45 + Math.abs(xDst - xSrc) * 0.14), loft = 0.75 + Math.min(2.2, (ySrc + zDst * 0.45) * 0.24);
+    const c1x = xSrc + bowX, c1y = ys * 0.64 + loft * 0.35, c1z = zDst * 0.30 + loft * 0.48, c2x = xDst + bowX, c2y = ys * 0.22 + loft * 0.42, c2z = zDst * 0.72 + loft * 0.22;
+    ctx.strokeStyle = mixInk(sig, alpha); ctx.lineWidth = isLock ? 1.15 : 0.78; ctx.beginPath(); let started = false;
+    for (let k = 0; k <= 16; k++) {
+      const t = k / 16, u = 1 - t;
+      const p = project3D(u*u*u*xSrc + 3*u*u*t*c1x + 3*u*t*t*c2x + t*t*t*xDst, u*u*u*ys + 3*u*u*t*c1y + 3*u*t*t*c2y, 3*u*u*t*c1z + 3*u*t*t*c2z + t*t*t*zDst);
+      if (p) { if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y); }
+    }
+    if (started) ctx.stroke();
+  }
+
+  // 5. 3D PERSPECTIVE SHOCKWAVE RINGS ON FLOOR (y = 0) & STANDING-WAVE NODES
+  const fronts = [];
+  for (const r of state.shocks) {
+    const cx = laneX(r.locus), u = clamp(r.age / r.maxAge, 0, 1);
+    const primaryR = 0.18 + (1 - Math.pow(1 - u, 2.15)) * r.maxR, fade = Math.pow(1 - u, 1.35);
+    for (let k = 0; k < r.rings; k++) {
+      const delay = k * 0.14; if (u < delay) continue;
+      const uk = clamp((u - delay) / (1 - delay), 0, 1), rad = 0.18 + (1 - Math.pow(1 - uk, 2.05)) * r.maxR * (1 - k * 0.24);
+      const a = Math.pow(1 - uk, 1.35) * (k === 0 ? 0.68 : k === 1 ? 0.36 : 0.20) * (0.65 + r.vel * 0.35);
+      const mod = r.dur >= 4 ? (1 - uk) * (0.045 + k * 0.025) : 0, ph = r.phase * (k + 1) * (k % 2 ? -1 : 1), mN = k === 0 ? 2 : k === 1 ? 4 : 6;
+      ctx.lineWidth = k === 0 ? (1.3 - uk * 0.5) : 0.85;
+      ctx.strokeStyle = mixInk(r.orange, a); drawFloorRing3D(cx, 0, rad, mN, mod, ph, 32, 0, Math.PI);
+      ctx.strokeStyle = mixInk(r.orange, a * 0.32); drawFloorRing3D(cx, 0, rad, mN, mod, ph, 24, Math.PI, Math.PI * 2);
+    }
+    if (fade > 0.10) fronts.push({ cx, r: primaryR, fade, orange: r.orange });
+  }
+  for (let i = 0; i < fronts.length; i++) for (let j = i + 1; j < fronts.length; j++) {
+    const a = fronts[i], b = fronts[j], dx = b.cx - a.cx, d = Math.abs(dx);
+    if (d < 0.1 || d >= a.r + b.r || d <= Math.abs(a.r - b.r)) continue;
+    const rx = (a.r * a.r - b.r * b.r + d * d) / (2 * d), h2 = a.r * a.r - rx * rx; if (h2 <= 0) continue;
+    const h = Math.sqrt(h2), ix = a.cx + (dx >= 0 ? rx : -rx), alpha = Math.min(a.fade, b.fade) * 0.82, sig = Math.max(a.orange, b.orange), p = project3D(ix, 0, h);
+    if (p && h <= Z_MAX) { ctx.fillStyle = mixInk(sig, alpha); ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = mixInk(sig, alpha * 0.55); ctx.lineWidth = 0.85; drawFloorRing3D(ix, h, 0.16, 0, 0, 0, 18); }
+  }
+
+  // 6. CONVERGING FUTURE 3D HOLLOW WAVE-RIBBONS & DURATION RINGS (y = 0)
+  const drawFloorRibbon = (wx, z0, z1, dur, sig, alpha, hov) => {
+    const c0 = Math.max(0, z0), c1 = Math.min(Z_MAX, z1); if (c1 <= c0 + 0.02) return;
+    const hw = 0.17 + Math.sqrt(dur) * 0.042, hwTail = hw * 0.52;
+    const pFL = project3D(wx - hw, 0, c0), pFR = project3D(wx + hw, 0, c0), pBR = project3D(wx + hwTail, 0, c1), pBL = project3D(wx - hwTail, 0, c1);
+    if (!pFL || !pFR || !pBR || !pBL) return;
+    ctx.fillStyle = mixInk(sig, (hov ? 0.18 : 0.045 + sig * 0.16) * alpha); ctx.strokeStyle = mixInk(sig, alpha * (hov ? 0.94 : 0.62)); ctx.lineWidth = hov ? 1.35 : 0.95;
+    ctx.beginPath(); ctx.moveTo(pFL.x, pFL.y); ctx.lineTo(pFR.x, pFR.y); ctx.lineTo(pBR.x, pBR.y); ctx.lineTo(pBL.x, pBL.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = mixInk(sig, alpha * 0.42); ctx.lineWidth = 0.85; drawLine3D(wx, 0, c0, wx, 0, c1);
+    if (dur >= 3) for (let k = 1, ribs = dur >= 6 ? 3 : 2; k <= ribs; k++) {
+      const u = k / (ribs + 1), zr = lerp(c0, c1, u), hr = lerp(hw, hwTail, u) * 0.82;
+      ctx.strokeStyle = mixInk(sig, alpha * (0.44 - k * 0.08)); drawLine3D(wx - hr, 0, zr, wx + hr, 0, zr);
+    }
+  };
+  for (const n of state.past) if (n.step <= state.playhead && n.step + n.dur > state.playhead) drawFloorRibbon(laneX(n.locus), 0, (n.step + n.dur - state.playhead) * Z_PER_STEP, n.dur, n.flash, 0.92, false);
+  for (const n of state.future) {
+    const z0 = (n.step - state.playhead) * Z_PER_STEP, z1 = (n.step + n.dur - state.playhead) * Z_PER_STEP; if (z0 > Z_MAX + 0.3 || z1 < 0) continue;
+    const wx = laneX(n.locus), prox = clamp(1 - z0 / Z_MAX, 0, 1), hov = g.hoverNote?.id === n.id, alpha = hov ? 0.98 : 0.36 + prox * 0.60;
+    drawFloorRibbon(wx, z0, z1, n.dur, n.flash, alpha, hov);
+    if (z0 >= 0 && z0 <= Z_MAX) {
+      const rad = 0.16 + Math.sqrt(n.dur) * 0.068;
+      if (prox > 0.72) { const pre = (prox - 0.72) / 0.28; ctx.strokeStyle = mixInk(n.flash, pre * 0.34); ctx.lineWidth = 0.8; drawFloorRing3D(wx, z0, rad + (1 - pre) * 0.36, 0, 0, 0, 28); }
+      ctx.strokeStyle = mixInk(n.flash, alpha); ctx.lineWidth = hov || n.flash > 0.1 ? 1.45 : 1.1; drawFloorRing3D(wx, z0, rad, 0, 0, 0, 28);
+      if (n.dur >= 6) { ctx.strokeStyle = mixInk(n.flash, alpha * 0.52); ctx.lineWidth = 0.85; drawFloorRing3D(wx, z0, rad * 0.52, 0, 0, 0, 22); }
+      const pc = project3D(wx, 0, z0); if (pc) { ctx.fillStyle = mixInk(n.flash, alpha * 0.85); ctx.beginPath(); ctx.arc(pc.x, pc.y, 1.6, 0, Math.PI * 2); ctx.fill(); }
+    }
+  }
+
+  // 7. 3D FLOOR HOVER RETICLE & CALLIGRAPHIC #ff5a1f SCULPT TRAIL
+  if (g.hoverFloor && !g.mode) {
+    const hz = (Math.round(state.playhead + g.hoverFloor.z / Z_PER_STEP) - state.playhead) * Z_PER_STEP;
+    if (hz > 0.08 && hz <= Z_MAX) { ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 0.9; drawFloorRing3D(laneX(locusOfWorldX(g.hoverFloor.x)), hz, 0.26, 0, 0, 0, 24); }
+  }
+  if (state.brush.length > 1) {
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 1; i < state.brush.length; i++) {
+      const a = state.brush[i - 1], b = state.brush[i]; if (b.t - a.t > 120) continue;
+      const za = (a.step - state.playhead) * Z_PER_STEP, zb = (b.step - state.playhead) * Z_PER_STEP; if (za < 0 || zb < 0 || za > Z_MAX + 1 || zb > Z_MAX + 1) continue;
+      const pa = project3D(a.wx, 0, za), pb = project3D(b.wx, 0, zb); if (!pa || !pb) continue;
+      const life = clamp(1 - (nowMs - b.t) / 420, 0, 1);
+      ctx.strokeStyle = `rgba(255,90,31,${(life * 0.90).toFixed(3)})`; ctx.lineWidth = b.w * (0.45 + 0.55 * life);
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+    }
+  }
+
+  // 8. RISING PAST VERTICAL LIFT-OFF COLUMNS & ASCENDING WAVE-SPARKS (z = 0, y > 0)
+  const marqActive = g.mode === 'past' && g.moved, mXLo = Math.min(g.pastXA, g.pastXB) - 0.38, mXHi = Math.max(g.pastXA, g.pastXB) + 0.38;
+  const mSLo = Math.min(g.pastSA, g.pastSB) - 0.5, mSHi = Math.max(g.pastSA, g.pastSB) + 0.5;
+  for (const n of state.past) {
+    const yHead = (state.playhead - n.step) * Y_PER_STEP, yTail = Math.max(0, (state.playhead - (n.step + n.dur)) * Y_PER_STEP);
+    if (yTail > Y_MAX || yHead < -0.05) continue;
+    const wx = laneX(n.locus);
+    const inLock = state.motifLock && wx >= state.motifLock.wxLo - 0.05 && wx <= state.motifLock.wxHi + 0.05 && n.step >= state.motifLock.startStep && n.step < state.motifLock.endStep;
+    const inDrag = marqActive && wx >= mXLo && wx <= mXHi && n.step >= mSLo && n.step <= mSHi;
+    const baseA = clamp(1 - (state.playhead - n.step) / (PAST_STEPS * 1.05), 0.16, 0.98);
+    const a = (inLock || inDrag) ? Math.max(0.90, baseA) : clamp(baseA + n.shimmer * 0.35, 0, 1);
+    const sig = inDrag ? 0.95 : Math.max(n.flash, inLock && state.motifLock ? state.motifLock.flash : 0);
+    const yh = clamp(yHead, 0, Y_MAX), yt = clamp(yTail, 0, Y_MAX), pTop = project3D(wx, yh, 0), pBot = project3D(wx, yt, 0);
+
+    if (pTop && pBot && yh > yt + 0.03) {
+      const hwTop = (0.045 + Math.sqrt(n.dur) * 0.024) * pTop.s, hwBot = hwTop * 0.25;
+      const grad = ctx.createLinearGradient(pTop.x, pTop.y, pBot.x, pBot.y); grad.addColorStop(0, mixInk(sig, a * 0.42)); grad.addColorStop(1, mixInk(sig, 0.02));
+      ctx.fillStyle = grad; ctx.beginPath();
+      ctx.moveTo(pTop.x - hwTop, pTop.y); ctx.lineTo(pTop.x + hwTop, pTop.y); ctx.lineTo(pBot.x + hwBot, pBot.y); ctx.lineTo(pBot.x - hwBot, pBot.y); ctx.closePath(); ctx.fill();
+      drawGradLine3D(wx, yh, 0, wx, yt, 0, mixInk(sig, a * 0.86), mixInk(sig, 0.05), n.dur >= 6 ? 1.55 : 1.05);
+      if (n.dur >= 3) for (let k = 1, ticks = n.dur >= 6 ? 3 : 2; k <= ticks; k++) {
+        const pt = project3D(wx, lerp(yh, yt, k / (ticks + 1)), 0); if (!pt) continue;
+        const tw = (1 - k / (ticks + 1.25)) * (3.2 + n.dur * 0.42);
+        ctx.strokeStyle = mixInk(sig, a * (0.50 - k * 0.10)); ctx.lineWidth = 0.85; ctx.beginPath(); ctx.moveTo(pt.x - tw, pt.y); ctx.lineTo(pt.x + tw, pt.y); ctx.stroke();
+      }
+    }
+    if (yHead >= 0 && yHead <= Y_MAX && pTop) {
+      const r0 = 2.1 + Math.sqrt(n.dur) * 0.85 + n.shimmer * 1.4;
+      ctx.fillStyle = mixInk(sig, a); ctx.beginPath(); ctx.arc(pTop.x, pTop.y, r0, 0, Math.PI * 2); ctx.fill();
+      if (n.dur >= 4 || inLock || inDrag || n.shimmer > 0.08) {
+        ctx.strokeStyle = mixInk(sig, a * (inLock || inDrag ? 0.82 : 0.46 + n.shimmer * 0.4)); ctx.lineWidth = 0.9; ctx.beginPath(); ctx.arc(pTop.x, pTop.y, r0 + 3.4 + n.shimmer * 3.2, 0, Math.PI * 2); ctx.stroke();
+      }
+      if (n.dur >= 6) { ctx.strokeStyle = mixInk(sig, a * 0.24); ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(pTop.x, pTop.y, r0 + 6.8, 0, Math.PI * 2); ctx.stroke(); }
+    }
+  }
+
+  // 9. THE NOW HORIZON BAR & 9 CALIBRATED ACOUSTIC LEVEL METERS (z = 0, y = 0)
+  const hL = project3D(-LANE_HALF - 0.28, 0, 0), hR = project3D(LANE_HALF + 0.28, 0, 0);
+  if (hL && hR) { ctx.strokeStyle = 'rgba(255,255,255,0.72)'; ctx.lineWidth = 1.15; ctx.beginPath(); ctx.moveTo(hL.x, hL.y); ctx.lineTo(hR.x, hR.y); ctx.stroke(); }
+  for (let i = 0; i < 9; i++) {
+    const wx = laneX(i), p = project3D(wx, 0, 0); if (!p) continue;
+    const glow = state.locusGlow[i], peak = state.locusPeak[i], sig = state.locusOrange[i], hov = g.hoverLocus === i, isRoot = i === 0 || i === 4;
+    for (let k = 0, segs = 6, lit = clamp(glow, 0, 1) * segs; k < segs; k++) {
+      const py = project3D(wx, 0.12 + k * 0.105, 0); if (!py) continue;
+      const active = lit > k + 0.15, hw = (isRoot ? 5.2 : 4.2) * (1 - k * 0.06);
+      ctx.strokeStyle = active ? mixInk(sig, 0.45 + clamp(lit - k, 0, 1) * 0.55) : `rgba(255,255,255,${hov ? 0.20 : 0.07})`;
+      ctx.lineWidth = active ? 1.35 : 0.8; ctx.beginPath(); ctx.moveTo(py.x - hw, py.y); ctx.lineTo(py.x + hw, py.y); ctx.stroke();
+    }
+    if (peak > 0.12) {
+      const pk = project3D(wx, 0.12 + clamp(peak, 0, 1) * 5.6 * 0.105, 0);
+      if (pk) { ctx.strokeStyle = mixInk(sig, clamp(peak, 0, 0.92)); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(pk.x - 5.5, pk.y); ctx.lineTo(pk.x + 5.5, pk.y); ctx.stroke(); }
+    }
+    const th = (isRoot ? 6 : 4.2) + glow * 3;
+    ctx.strokeStyle = mixInk(sig, hov ? 0.98 : 0.48 + glow * 0.52); ctx.lineWidth = glow > 0.15 || hov ? 1.55 : 1.05;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y - th); ctx.lineTo(p.x, p.y + th); ctx.stroke();
+    if (glow > 0.06 || hov) { ctx.fillStyle = mixInk(sig, clamp(glow + (hov ? 0.45 : 0), 0, 1)); ctx.beginPath(); ctx.arc(p.x, p.y, 2.0 + glow * 2.7, 0, Math.PI * 2); ctx.fill(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.font = '9px ui-monospace, "SF Mono", Menlo, monospace'; ctx.fillStyle = mixInk(sig, hov || glow > 0.18 ? 0.94 : isRoot ? 0.50 : 0.30); ctx.fillText(NOTES[i], p.x, p.y + th + 4);
+    ctx.font = '8px ui-monospace, "SF Mono", Menlo, monospace'; ctx.fillStyle = mixInk(sig, hov || glow > 0.18 ? 0.62 : 0.17); ctx.fillText(DEGREES[i], p.x, p.y + th + 14);
+  }
+  if (hL && hR) {
+    ctx.font = '10px ui-monospace, "SF Mono", Menlo, monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
+    ctx.fillStyle = (g.mode === 'scrub' || g.hoverZone === 'scrub') ? '#ff5a1f' : 'rgba(255,255,255,0.62)';
+    ctx.fillText('NOW ▸', hL.x - 8, hL.y);
+    if (g.mode === 'scrub') {
+      const sy = clamp((state.playhead - g.scrubStep) * Y_PER_STEP, 0, Y_MAX), sL = project3D(-LANE_HALF - 0.25, sy, 0), sR = project3D(LANE_HALF + 0.25, sy, 0);
+      if (sL && sR) { ctx.strokeStyle = '#ff5a1f'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(sL.x, sL.y); ctx.lineTo(sR.x, sR.y); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = '#ff5a1f'; ctx.fillText(`-${Math.round(state.playhead - g.scrubStep)}`, sL.x - 8, sL.y); }
+    }
+    if (W >= 620) {
+      ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      const pTopR = project3D(LANE_HALF + 0.32, Y_MAX * 0.88, 0), pBotR = project3D(LANE_HALF + 0.32, 0, Z_MAX * 0.82);
+      if (pTopR) ctx.fillText('PAST ↑', pTopR.x + 8, pTopR.y);
+      if (pBotR) ctx.fillText('FUTURE ↘', pBotR.x + 8, pBotR.y);
+    }
+  }
+  requestAnimationFrame(drawFrame);
+}
+
+seedOpeningScore();
+requestAnimationFrame(drawFrame);
+</script>
+</body>
+</html>

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>23 — Quantum Collapse &amp; Feynman Musical Notation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff;
+    font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 11px; font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased; user-select: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+  header {
+    position: fixed; top: 10px; left: 16px; right: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    pointer-events: none; z-index: 2;
+  }
+  .hint { color: rgba(255,255,255,0.38); letter-spacing: 0.05em; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hint b { color: rgba(255,255,255,0.74); font-weight: 500; }
+  button {
+    pointer-events: auto; appearance: none; background: #000;
+    color: rgba(255,255,255,0.68); border: 1px solid rgba(255,255,255,0.18);
+    font: inherit; font-size: 10.5px; letter-spacing: 0.1em; height: 24px; padding: 0 10px;
+    border-radius: 2px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color 140ms, color 140ms;
+  }
+  button:hover, button.on { border-color: rgba(255,255,255,0.68); color: #fff; }
+  button .dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.34); }
+  button.on .dot { background: #ff5a1f; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<header>
+  <span class="hint"><b>23</b> · SPACE play · CLICK future to collapse · CLICK past vertex to couple · 1-9 measure NOW</span>
+  <button id="playBtn" type="button"><span class="dot"></span><span id="playLbl">PLAY</span></button>
+</header>
+<script type="module">
+// 23 — Quantum Collapse & Feynman Musical Notation (D Kurd · 84 BPM · 16th-Note Quantized)
+const NOTES = [
+  ['D3','^1',146.83], ['A3','^5',220.00], ['Bb3','^b6',233.08],
+  ['C4','^b7',261.63], ['D4','^1',293.66], ['E4','^2',329.63],
+  ['F4','^b3',349.23], ['G4','^4',392.00], ['A4','^5',440.00],
+].map(([name, deg, hz]) => ({ name, deg, hz }));
+
+const BPM = 84, TATUM = 60 / BPM / 4, LOOKAHEAD = 0.09, STEPS_HALF = 28;
+const METRIC_W = [1.0,.14,.44,.20, .74,.14,.48,.22, .88,.14,.46,.20, .70,.16,.50,.24];
+const CELLS = {
+  calm: [[8], [6,2], [6,-2], [4,4], [4,-4], [-2,6]],
+  flow: [[3,3,2], [4,2,2], [2,2,4], [3,2,3], [2,4,2], [4,-2,2], [6,1,1]],
+  live: [[3,2,1,2], [2,1,1,2,2], [1,1,2,3,1], [2,2,1,2,1], [3,3,1,1]],
+};
+const FIELD_I    = [1.00, .80, .15, .22, .94, .24, .78, .20, .44];
+const FIELD_BVI  = [ .30, .34,1.00, .42, .80, .38, .90, .36, .72];
+const FIELD_BVII = [ .15, .24, .48,1.00, .40, .86, .44, .94, .88];
+const HARM_BONDS = new Set(['0-1','0-4','0-6','1-4','1-5','1-8','2-4','2-6','2-8','3-5','3-7','3-8','4-6','4-8','5-7','6-8']);
+const isHarmonicBond = (a, b) => a !== b && HARM_BONDS.has(a < b ? `${a}-${b}` : `${b}-${a}`);
+
+// Conditional Quantum Entanglement Kernels: Harmonic Resolution & Narmour Gap-Fill
+const ENT_HARM = [
+  [0.52, 1.90, 0.36, 0.46, 2.10, 0.60, 1.74, 0.44, 1.40], // D3  -> i (A3, D4, F4, A4)
+  [1.78, 0.44, 0.50, 0.66, 2.04, 1.38, 1.56, 0.54, 1.66], // A3  -> D3, D4, A4
+  [0.50, 0.44, 0.38, 1.14, 1.92, 0.52, 2.34, 0.66, 1.64], // Bb3 -> bVI (F4, D4, A4)
+  [0.40, 0.60, 0.84, 0.38, 1.30, 1.92, 0.72, 2.20, 1.70], // C4  -> bVII (G4, E4, A4)
+  [1.68, 1.78, 0.44, 0.56, 0.46, 0.86, 2.02, 0.62, 1.84], // D4  -> F4, A4, A3, D3
+  [0.50, 1.48, 0.46, 1.44, 1.82, 0.38, 1.58, 1.64, 1.24], // E4  -> D4, G4, F4
+  [1.46, 1.32, 1.70, 0.92, 2.08, 0.78, 0.42, 0.88, 1.76], // F4  -> D4, A4, Bb3
+  [0.44, 0.76, 0.86, 1.82, 1.24, 1.66, 1.60, 0.38, 1.74], // G4  -> C4, A4, E4
+  [1.38, 1.54, 0.86, 0.82, 1.98, 1.28, 1.80, 0.84, 0.40], // A4  -> D4, F4, A3
+];
+const ENT_GAP = Array.from({ length: 9 }, (_, a) => Array.from({ length: 9 }, (_, b) => {
+  const d = b - a, ad = Math.abs(d);
+  if (a >= 6) return d === -1 ? 2.50 : d === -2 ? 2.15 : d === -3 ? 1.35 : ad === 0 ? 0.28 : 0.50;
+  if (a <= 1) return d ===  1 ? 2.15 : d ===  2 ? 2.02 : b === 4  ? 1.98 : ad === 0 ? 0.30 : 0.56;
+  return ad === 1 ? 2.28 : ad === 2 ? 1.70 : ad === 0 ? 0.28 : 0.54;
+}));
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp  = (a, b, t) => a + (b - a) * t;
+const hash01 = (a, b, c = 0) => {
+  let x = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2147483647)) | 0;
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
+};
+const mixInk = (heat, alpha) => {
+  const h = clamp(heat, 0, 1), a = clamp(alpha, 0, 1);
+  if (h <= 0.005) return `rgba(255,255,255,${a.toFixed(3)})`;
+  return `rgba(255,${Math.round(lerp(255, 90, h))},${Math.round(lerp(255, 31, h))},${clamp(lerp(a, Math.max(a, 0.94), h), 0, 1).toFixed(3)})`;
+};
+const argmax = arr => { let b = 0; for (let i = 1; i < arr.length; i++) if (arr[i] > arr[b]) b = i; return b; };
+
+function normalizeProbs(arr) {
+  let sum = 0; for (let i = 0; i < 9; i++) { arr[i] = Math.max(1e-6, arr[i]); sum += arr[i]; }
+  for (let i = 0; i < 9; i++) arr[i] /= sum; return arr;
+}
+function softmaxFromLogits(logits, entropy) {
+  const tau = lerp(0.11, 2.25, Math.pow(clamp(entropy, 0.05, 1), 1.15));
+  let maxL = -Infinity; for (let i = 0; i < 9; i++) if (logits[i] > maxL) maxL = logits[i];
+  const out = new Float32Array(9);
+  for (let i = 0; i < 9; i++) out[i] = Math.exp((logits[i] - maxL) / tau);
+  return normalizeProbs(out);
+}
+function sampleFromProbs(probs, u = Math.random()) {
+  let acc = 0; for (let i = 0; i < 9; i++) { acc += probs[i]; if (u <= acc) return i; } return 8;
+}
+
+// --- Synthetic D Kurd Web Audio Handpan + Delicate Crystal Collapse Click ---
+let actx = null, dryBus = null, revSend = null, uiBus = null, noiseBuf = null;
+function ensureAudio() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -12; comp.ratio.value = 3.1; comp.release.value = 0.17; comp.connect(actx.destination);
+    const master = actx.createGain(); master.gain.value = 0.86; master.connect(comp);
+    dryBus = actx.createGain(); dryBus.connect(master);
+    uiBus  = actx.createGain(); uiBus.gain.value = 0.24; uiBus.connect(comp);
+    const irLen = Math.floor(actx.sampleRate * 1.9), ir = actx.createBuffer(2, irLen, actx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch); let lp = 0;
+      for (let i = 0; i < irLen; i++) { lp = lp * 0.62 + (Math.random() * 2 - 1) * 0.38; d[i] = lp * Math.pow(1 - i / irLen, 3.0) * 0.50; }
+    }
+    const conv = actx.createConvolver(); conv.buffer = ir;
+    revSend = actx.createGain(); revSend.gain.value = 0.29; revSend.connect(conv); conv.connect(master);
+    noiseBuf = actx.createBuffer(1, Math.floor(actx.sampleRate * 0.10), actx.sampleRate);
+    const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  }
+  if (actx.state === 'suspended') actx.resume();
+}
+function playHandpan(idx, when, vel = 0.8, durSteps = 3) {
+  ensureAudio(); const note = NOTES[idx]; if (!note) return;
+  const t0 = Math.max(actx.currentTime + 0.002, when), f0 = note.hz, isDing = idx === 0;
+  const tau = clamp(0.22 + durSteps * 0.28, 0.32, 2.55) * (isDing ? 1.18 : 1.0), v = clamp(vel, 0.15, 1.0);
+  const out = actx.createGain(); out.gain.setValueAtTime(1, t0);
+  const pan = actx.createStereoPanner(); pan.pan.setValueAtTime((idx - 4) * 0.11, t0);
+  out.connect(pan); pan.connect(dryBus); pan.connect(revSend);
+  const fg = actx.createGain();
+  fg.gain.setValueAtTime(0.0001, t0); fg.gain.linearRampToValueAtTime(0.30 * v, t0 + 0.005); fg.gain.exponentialRampToValueAtTime(0.0001, t0 + tau); fg.connect(out);
+  for (const [df, w] of [[0, 0.72], [0.7, 0.28]]) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.setValueAtTime(f0 * (1 + 0.0022 * v) + df, t0); o.frequency.exponentialRampToValueAtTime(f0 + df, t0 + 0.04);
+    g.gain.value = w; o.connect(g); g.connect(fg); o.start(t0); o.stop(t0 + tau + 0.05);
+  }
+  const bloom = 0.56 + 0.44 * clamp(durSteps / 5, 0, 1);
+  for (const [ratio, del, lvl, mul] of [[2.001, 0.032, 0.19, 0.68], [2.998, 0.052, 0.068, 0.44]]) {
+    const o = actx.createOscillator(), g = actx.createGain(); o.frequency.setValueAtTime(f0 * ratio, t0);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(lvl * v * bloom, t0 + del); g.gain.exponentialRampToValueAtTime(0.0001, t0 + tau * mul);
+    o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + tau * mul + 0.05);
+  }
+  const ns = actx.createBufferSource(), bp = actx.createBiquadFilter(), ng = actx.createGain();
+  ns.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.setValueAtTime(clamp(f0 * 3.0, 560, 1750), t0); bp.Q.value = 2.0;
+  ng.gain.setValueAtTime(0.0001, t0); ng.gain.linearRampToValueAtTime(0.14 * v, t0 + 0.002); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.024);
+  ns.connect(bp); bp.connect(ng); ng.connect(out); ns.start(t0); ns.stop(t0 + 0.032);
+  if (isDing) {
+    const bo = actx.createOscillator(), bg = actx.createGain();
+    bo.frequency.setValueAtTime(98, t0); bo.frequency.exponentialRampToValueAtTime(74, t0 + 0.09);
+    bg.gain.setValueAtTime(0.0001, t0); bg.gain.linearRampToValueAtTime(0.18 * v, t0 + 0.007); bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.21);
+    bo.connect(bg); bg.connect(out); bo.start(t0); bo.stop(t0 + 0.24);
+  }
+}
+function playCollapseClick(pitchIdx = 4, when = 0, strength = 0.65, crystalline = true) {
+  if (!actx) ensureAudio(); if (actx.state !== 'running') return;
+  const t0 = Math.max(actx.currentTime + 0.001, when || 0), pan = actx.createStereoPanner();
+  pan.pan.setValueAtTime((pitchIdx - 4) * 0.12, t0); pan.connect(uiBus);
+  const src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.setValueAtTime(2900 + pitchIdx * 190, t0); bp.Q.value = 6.2;
+  g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.16 * strength, t0 + 0.0008); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.011);
+  src.connect(bp); bp.connect(g); g.connect(pan); src.start(t0); src.stop(t0 + 0.016);
+  if (crystalline) {
+    const o = actx.createOscillator(), og = actx.createGain(); o.frequency.setValueAtTime(NOTES[clamp(pitchIdx, 0, 8)].hz * 4.0, t0);
+    og.gain.setValueAtTime(0.0001, t0); og.gain.linearRampToValueAtTime(0.065 * strength, t0 + 0.0015); og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.055);
+    o.connect(og); og.connect(pan); o.start(t0); o.stop(t0 + 0.065);
+  }
+}
+
+// --- Quantum State, Entanglement Graph & Past Feynman Vertices ---
+const state = {
+  hamiltonian: 0.0, entropy: 0.44, padHotPerf: -9999,
+  playing: false, playheadStep: 28.0, anchorStep: 28.0, anchorAudioTime: 0,
+  nextId: 1, lastGenBar: 1,
+  pastVertices: [], futureSlots: [], entanglements: [],
+  collapseFlashes: [], rowRipples: [], photonPulses: [],
+  lociGlow: new Float32Array(9), lociHeat: new Float32Array(9),
+  forcedBias: { pitch: -1, perf: -9999 },
+};
+const getCurrentStep = () =>
+  (!state.playing || !actx) ? state.playheadStep : state.anchorStep + Math.max(0, (actx.currentTime - state.anchorAudioTime) / TATUM);
+const getSlotById = id => state.futureSlots.find(s => s.id === id) || null;
+
+function pickHalfCell(barIdx, halfIdx) {
+  const h = state.hamiltonian, e = state.entropy, cad = halfIdx === 1 && (barIdx & 1) === 1, pool = [];
+  const wCalm = clamp(0.85 - h * 0.45 - (e - 0.45) * 0.45 + (cad ? 0.35 : 0), 0.12, 1.4);
+  const wFlow = clamp(1.15 - Math.abs(h) * 0.35, 0.35, 1.3);
+  const wLive = clamp(0.45 + Math.max(0, h) * 0.65 + (e - 0.35) * 0.40 - (cad ? 0.25 : 0), 0.06, 1.3);
+  for (const c of CELLS.calm) pool.push([c, wCalm]);
+  for (const c of CELLS.flow) pool.push([c, wFlow]);
+  for (const c of CELLS.live) pool.push([c, wLive]);
+  let r = hash01(barIdx * 19 + halfIdx * 7, 2309, 71) * pool.reduce((s, x) => s + x[1], 0);
+  for (const [cell, w] of pool) { r -= w; if (r <= 0) return cell; }
+  return CELLS.flow[0];
+}
+
+function generateFutureBar(barIdx) {
+  const barStart = barIdx * 16, barSlots = [];
+  for (let half = 0; half < 2; half++) {
+    let cursor = barStart + half * 8;
+    for (const seg of pickHalfCell(barIdx, half)) {
+      const dur = Math.abs(seg);
+      if (seg > 0) {
+        const pos = ((cursor % 16) + 16) % 16;
+        const vel = clamp(0.46 + METRIC_W[pos] * 0.36 + (dur >= 4 ? 0.10 : dur === 1 ? -0.10 : 0), 0.30, 0.96);
+        const slot = {
+          id: state.nextId++, step: cursor, dur, vel,
+          probs: new Float32Array(9), baseLogits: new Float32Array(9), lastSuperProbs: null,
+          collapsed: false, eigenPitch: -1, scheduled: false, scheduledPitch: -1,
+          collapsePerf: -9999, shiftHeat: 0, couplingIds: [],
+          phaseSeed: hash01(cursor, barIdx, 13) * Math.PI * 2,
+          entangledFrom: new Map(),
+        };
+        barSlots.push(slot); state.futureSlots.push(slot);
+      }
+      cursor += dur;
+    }
+  }
+  const used = new Set();
+  for (let i = 0; i < barSlots.length - 1; i++) {
+    const a = barSlots[i], posA = ((a.step % 16) + 16) % 16;
+    if ((posA === 0 || posA === 8) && !used.has(a.id)) {
+      const b = barSlots.find((s, j) => j > i && s.step - a.step >= 2 && s.step - a.step <= 6 && !used.has(s.id));
+      if (b) { state.entanglements.push({ aId: a.id, bId: b.id, type: 'harmonic', strength: 0.94, pulsePerf: -9999 }); used.add(a.id); used.add(b.id); continue; }
+    }
+    const next = barSlots[i + 1];
+    if (!used.has(a.id) && !used.has(next.id) && next.step - a.step <= 4) {
+      state.entanglements.push({ aId: a.id, bId: next.id, type: 'gapfill', strength: 0.86, pulsePerf: -9999 });
+      used.add(a.id); used.add(next.id);
+    }
+  }
+  if (barSlots.length >= 2 && !state.entanglements.some(e => e.aId === barSlots[0].id || e.bId === barSlots[0].id)) {
+    state.entanglements.push({ aId: barSlots[0].id, bId: barSlots[1].id, type: 'harmonic', strength: 0.90, pulsePerf: -9999 });
+  }
+}
+
+function computeBaseLogits(slot, refPitch, refInt, pinnedPast, recentSalient) {
+  const pos = ((slot.step % 16) + 16) % 16, barIdx = Math.floor(slot.step / 16);
+  const H = state.hamiltonian, t01 = (H + 1) * 0.5, odd = (barIdx & 1) === 1;
+  const wI    = clamp(1.05 - t01 * (odd ? 1.05 : 0.78), 0.08, 1.05);
+  const wBVI  = clamp(Math.sin(t01 * Math.PI) * 0.86 + (odd ? 0.30 : 0.16) * t01, 0.08, 1.05);
+  const wBVII = clamp(Math.pow(t01, 1.32) * (odd ? 1.12 : 0.72), 0.05, 1.12);
+  const center = clamp(0.28 + t01 * 0.50, 0.12, 0.86), logits = slot.baseLogits;
+  slot.couplingIds = [];
+
+  for (let i = 0; i < 9; i++) {
+    let sc = (FIELD_I[i] * wI + FIELD_BVI[i] * wBVI + FIELD_BVII[i] * wBVII) * (0.64 + 0.72 * (1 - Math.abs(i / 8 - center)));
+    if (pos === 0 && slot.dur >= 4) {
+      if (H <= 0.18 && (i === 0 || i === 4)) sc *= 1.85 - H * 0.7;
+      if (H >  0.22 && (i === 2 || i === 3 || i === 5)) sc *= 1.55;
+    }
+    if (slot.dur === 1 && i >= 2 && i <= 7) sc *= 1.25;
+    if (slot.dur >= 6 && (i === 0 || i === 1 || i === 4 || i === 6 || i === 8)) sc *= 1.24;
+    if (refPitch >= 0) {
+      const d = i - refPitch, ad = Math.abs(d);
+      sc *= ad === 0 ? (pos === 0 ? 0.68 : 0.42) : ad <= 2 ? 1.48 : ad <= 4 ? 0.96 : 0.56;
+      if (Math.abs(refInt) >= 3 && Math.sign(d) === -Math.sign(refInt) && ad > 0 && ad <= 2) sc *= 1.72;
+      if (H < -0.15 && d < 0) sc *= 1 + (-H) * 0.38;
+      if (H >  0.15 && d > 0) sc *= 1 + H * 0.38;
+    }
+    sc *= 0.86 + 0.28 * hash01(slot.step * 7 + i, barIdx, 313);
+    logits[i] = Math.log(Math.max(1e-4, sc));
+  }
+  for (const pv of pinnedPast) {
+    const match = (((pv.step % 16) + 16) % 16) === pos, boost = match ? 1.50 : 0.88;
+    logits[pv.pitch] += boost;
+    for (let i = 0; i < 9; i++) if (isHarmonicBond(pv.pitch, i)) logits[i] += boost * 0.28;
+    if (match || pos === 0 || pos === 8) slot.couplingIds.push(pv.id);
+  }
+  for (const sv of recentSalient) {
+    if ((((sv.step % 16) + 16) % 16) === pos) { logits[sv.pitch] += sv.isUser ? 0.72 : 0.34; slot.couplingIds.push(sv.id); }
+  }
+  const fbAge = (performance.now() - state.forcedBias.perf) * 0.001;
+  if (state.forcedBias.pitch >= 0 && fbAge < 3.5) {
+    const w = (1 - fbAge / 3.5) * 0.82;
+    for (let i = 0; i < 9; i++) logits[i] += Math.log(ENT_HARM[state.forcedBias.pitch][i]) * w;
+  }
+}
+
+function computeSlotDistribution(slot, overrideCond = null) {
+  if (slot.collapsed && slot.eigenPitch >= 0) { slot.probs.fill(0); slot.probs[slot.eigenPitch] = 1; return slot.probs; }
+  const logits = new Float32Array(slot.baseLogits);
+  const applyCond = (c, mult) => {
+    const mat = c.type === 'harmonic' ? ENT_HARM : ENT_GAP;
+    for (let i = 0; i < 9; i++) logits[i] += Math.log(c.reverse ? mat[i][c.pitch] : mat[c.pitch][i]) * c.strength * mult;
+  };
+  for (const cond of slot.entangledFrom.values()) applyCond(cond, 1.40);
+  if (overrideCond) applyCond(overrideCond, 1.50);
+  const p = softmaxFromLogits(logits, state.entropy);
+  if (!overrideCond) slot.probs.set(p);
+  return p;
+}
+
+function recomputeWaveFunctions(highlightShift = false) {
+  const pinnedPast = state.pastVertices.filter(v => v.pinned);
+  const recentSalient = state.pastVertices.slice(-6).filter(v => !v.pinned && (v.isUser || (((v.step % 16) + 16) % 16) === 0)).slice(-2);
+  let refPitch = state.pastVertices.length ? state.pastVertices[state.pastVertices.length - 1].pitch : 0;
+  let refInt = state.pastVertices.length >= 2 ? state.pastVertices[state.pastVertices.length - 1].pitch - state.pastVertices[state.pastVertices.length - 2].pitch : 0;
+  for (const slot of state.futureSlots) {
+    const prevPeak = argmax(slot.probs);
+    computeBaseLogits(slot, refPitch, refInt, pinnedPast, recentSalient);
+    computeSlotDistribution(slot);
+    if (highlightShift && !slot.collapsed && argmax(slot.probs) !== prevPeak) slot.shiftHeat = Math.max(slot.shiftHeat, 0.72);
+    const nextRef = slot.collapsed ? slot.eigenPitch : argmax(slot.probs);
+    refInt = nextRef - refPitch; refPitch = nextRef;
+  }
+}
+
+function propagateEntanglement(sourceId, collapsedPitch, sourceStep, nowPerf) {
+  for (const ent of state.entanglements) {
+    const isA = ent.aId === sourceId, isB = ent.bId === sourceId;
+    if (!isA && !isB) continue;
+    const target = getSlotById(isA ? ent.bId : ent.aId);
+    if (!target || target.collapsed) continue;
+    target.entangledFrom.set(sourceId, { pitch: collapsedPitch, type: ent.type, strength: ent.strength, reverse: !isA });
+    computeSlotDistribution(target);
+    target.shiftHeat = 1.0; ent.pulsePerf = nowPerf;
+    state.photonPulses.push({ fromStep: sourceStep, fromPitch: collapsedPitch, toSlotId: target.id, toPitch: argmax(target.probs), type: ent.type, bornPerf: nowPerf, lifeMs: 620 });
+    if (state.photonPulses.length > 18) state.photonPulses.shift();
+  }
+}
+
+function preMeasureSlot(slot, pitchIdx) {
+  ensureAudio(); const now = performance.now();
+  if (slot.collapsed && slot.eigenPitch === pitchIdx) {
+    slot.collapsed = false; slot.eigenPitch = -1; slot.collapsePerf = -9999;
+    for (const s of state.futureSlots) s.entangledFrom.delete(slot.id);
+    recomputeWaveFunctions(true); return playCollapseClick(pitchIdx, 0, 0.55, false);
+  }
+  const preProbs = slot.collapsed && slot.lastSuperProbs ? new Float32Array(slot.lastSuperProbs) : new Float32Array(slot.probs);
+  if (!slot.collapsed) slot.lastSuperProbs = new Float32Array(slot.probs);
+  slot.collapsed = true; slot.eigenPitch = pitchIdx; slot.collapsePerf = now;
+  slot.probs.fill(0); slot.probs[pitchIdx] = 1;
+  state.rowRipples.push({ step: slot.step, pitch: pitchIdx, preProbs, bornPerf: now, lifeMs: 560 });
+  if (state.rowRipples.length > 16) state.rowRipples.shift();
+  playCollapseClick(pitchIdx, 0, 0.92, true); propagateEntanglement(slot.id, pitchIdx, slot.step, now); recomputeWaveFunctions(false);
+}
+function ensureFutureHorizon(curStep) {
+  const needBar = Math.floor((curStep + STEPS_HALF + 10) / 16); let added = false;
+  while (state.lastGenBar < needBar) { generateFutureBar(++state.lastGenBar); added = true; }
+  if (added) recomputeWaveFunctions(false);
+}
+function computeHarmonicBonds(vertex) {
+  const bonds = [];
+  for (let i = state.pastVertices.length - 1; i >= 0; i--) {
+    const o = state.pastVertices[i], dt = vertex.step - o.step;
+    if (o.id === vertex.id || dt <= 0) continue;
+    if (dt > 12) break;
+    if (isHarmonicBond(vertex.pitch, o.pitch)) { bonds.push(o.id); if (bonds.length >= 2) break; }
+  }
+  vertex.harmonicBonds = bonds;
+}
+function seedInitialTimeline() {
+  const seed = [[0,6,0,0.86],[6,2,4,0.64],[8,4,6,0.74],[12,4,4,0.68],[16,3,2,0.80],[19,3,6,0.72],[22,2,4,0.62],[24,4,1,0.76]];
+  state.pastVertices = [];
+  for (const [step, dur, pitch, vel] of seed) {
+    const v = { id: state.nextId++, step, dur, pitch, vel, isUser: false, pinned: false, preCollapsed: false, collapsePerf: -9999, harmonicBonds: [] };
+    computeHarmonicBonds(v); state.pastVertices.push(v);
+  }
+  state.playheadStep = state.anchorStep = 28.0; state.lastGenBar = 1; state.futureSlots = []; state.entanglements = [];
+  ensureFutureHorizon(state.playheadStep);
+  state.futureSlots = state.futureSlots.filter(s => s.step >= state.playheadStep);
+  recomputeWaveFunctions(false);
+}
+
+// --- Lookahead Scheduler, NOW Observer Collapse & Direct Forced Measurement ---
+let schedTimer = null;
+function schedulerTick() {
+  if (!state.playing || !actx) return;
+  const lookStep = state.anchorStep + (actx.currentTime + LOOKAHEAD - state.anchorAudioTime) / TATUM;
+  for (const slot of state.futureSlots) {
+    if (slot.scheduled || slot.step > lookStep) continue;
+    slot.scheduled = true; slot.preProbsSnap = new Float32Array(slot.probs);
+    slot.scheduledPitch = slot.collapsed ? slot.eigenPitch : sampleFromProbs(slot.probs);
+    const when = state.anchorAudioTime + (slot.step - state.anchorStep) * TATUM;
+    playHandpan(slot.scheduledPitch, when, slot.vel, slot.dur);
+    playCollapseClick(slot.scheduledPitch, when, slot.collapsed ? 0.36 : 0.24, false);
+  }
+  ensureFutureHorizon(getCurrentStep());
+}
+function observeCrossingSlots(curStep, nowPerf) {
+  while (state.futureSlots.length && state.futureSlots[0].step <= curStep) {
+    const slot = state.futureSlots.shift();
+    if (slot.absorbed) continue;
+    const pitch = slot.scheduledPitch >= 0 ? slot.scheduledPitch : (slot.collapsed ? slot.eigenPitch : sampleFromProbs(slot.probs));
+    const preProbs = slot.preProbsSnap || new Float32Array(slot.probs);
+    const v = { id: slot.id, step: slot.step, dur: slot.dur, pitch, vel: slot.vel, isUser: false, pinned: false, preCollapsed: slot.collapsed, collapsePerf: nowPerf, harmonicBonds: [] };
+    computeHarmonicBonds(v); state.pastVertices.push(v);
+    state.lociGlow[pitch] = clamp(Math.max(state.lociGlow[pitch] * 0.4, 0.55 + slot.vel * 0.45), 0, 1);
+    if (slot.collapsed) state.lociHeat[pitch] = 1.0;
+    state.collapseFlashes.push({ pitch, preProbs, bornPerf: nowPerf, lifeMs: 560, vel: slot.vel, dur: slot.dur, hot: slot.collapsed });
+    if (state.collapseFlashes.length > 18) state.collapseFlashes.shift();
+    propagateEntanglement(slot.id, pitch, slot.step, nowPerf);
+  }
+  if (state.pastVertices.length > 120) state.pastVertices = state.pastVertices.filter(v => v.pinned || curStep - v.step < 64);
+  if (state.entanglements.length > 96) {
+    const live = new Set(state.futureSlots.map(s => s.id));
+    state.entanglements = state.entanglements.filter(e => live.has(e.aId) || live.has(e.bId));
+  }
+}
+function forceMeasureNow(pitchIdx) {
+  ensureAudio();
+  const now = performance.now(), cur = getCurrentStep(), dur = state.entropy < 0.35 ? 6 : (state.entropy < 0.72 ? 3 : 2);
+  playHandpan(pitchIdx, actx.currentTime, 0.90, dur); playCollapseClick(pitchIdx, 0, 0.55, true);
+  state.lociGlow[pitchIdx] = 1.0; state.lociHeat[pitchIdx] = 1.0; state.forcedBias = { pitch: pitchIdx, perf: now };
+  let preProbs = new Float32Array(9).fill(1 / 9);
+  const imminent = state.futureSlots.find(s => !s.scheduled && s.step - cur <= 1.35);
+  if (imminent) {
+    preProbs = new Float32Array(imminent.probs); imminent.collapsed = true; imminent.eigenPitch = pitchIdx;
+    if (imminent.step - cur <= 0.55) { imminent.scheduled = true; imminent.absorbed = true; }
+    propagateEntanglement(imminent.id, pitchIdx, cur, now);
+  } else {
+    const near = state.futureSlots.find(s => !s.collapsed);
+    if (near) { near.shiftHeat = Math.max(near.shiftHeat, 0.82); state.photonPulses.push({ fromStep: cur, fromPitch: pitchIdx, toSlotId: near.id, toPitch: argmax(near.probs), type: 'harmonic', bornPerf: now, lifeMs: 520 }); }
+  }
+  state.collapseFlashes.push({ pitch: pitchIdx, preProbs, bornPerf: now, lifeMs: 620, vel: 0.92, dur, hot: true });
+  const v = { id: state.nextId++, step: cur, dur, pitch: pitchIdx, vel: 0.92, isUser: true, pinned: false, preCollapsed: true, collapsePerf: now, harmonicBonds: [] };
+  computeHarmonicBonds(v); state.pastVertices.push(v); recomputeWaveFunctions(true);
+}
+const playBtn = document.getElementById('playBtn'), playLbl = document.getElementById('playLbl');
+function togglePlay() {
+  ensureAudio();
+  if (!state.playing) {
+    state.anchorStep = state.playheadStep; state.anchorAudioTime = actx.currentTime + 0.025;
+    for (const s of state.futureSlots) { s.scheduled = false; s.scheduledPitch = -1; s.absorbed = false; }
+    state.playing = true; ensureFutureHorizon(state.playheadStep); schedulerTick(); schedTimer = setInterval(schedulerTick, 22);
+  } else { state.playheadStep = getCurrentStep(); state.playing = false; clearInterval(schedTimer); schedTimer = null; }
+  playBtn.classList.toggle('on', state.playing); playLbl.textContent = state.playing ? 'PAUSE' : 'PLAY';
+}
+playBtn.addEventListener('click', togglePlay);
+
+// --- Geometry, Hit-Testing & Pointer / Keyboard Interaction ---
+const canvas = document.getElementById('stage'), ctx = canvas.getContext('2d');
+let W = 0, H = 0;
+const geo = { nowY: 0, padTop: 46, padBot: 34, pxPerStep: 11, gap: 56, locusX: new Float32Array(9), fieldL: 0, fieldR: 0, padX: 0, padY: 0, padSize: 66 };
+function layout() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  geo.nowY = Math.round(H * 0.5);
+  geo.pxPerStep = Math.max(130, Math.min(geo.nowY - geo.padTop - 8, H - geo.nowY - geo.padBot - 8)) / STEPS_HALF;
+  geo.gap = clamp(Math.min((W - 140) / 8, 72), 28, 72);
+  const x0 = Math.round(W * 0.5 - geo.gap * 4);
+  for (let i = 0; i < 9; i++) geo.locusX[i] = x0 + i * geo.gap;
+  geo.fieldL = geo.locusX[0]; geo.fieldR = geo.locusX[8];
+  geo.padSize = clamp(Math.min(72, W * 0.085), 54, 72);
+  geo.padX = W - geo.padSize * 0.5 - 24; geo.padY = H - geo.padSize * 0.5 - 38;
+}
+window.addEventListener('resize', layout); layout();
+
+const stepToY = (s, cur) => geo.nowY + (s - cur) * geo.pxPerStep;
+const vertexY = (v, cur) => v.pinned ? Math.max(geo.padTop + 10, stepToY(v.step, cur)) : stepToY(v.step, cur);
+const hover = { kind: null, slotId: -1, pitch: -1, pastId: -1 };
+const drag  = { mode: null, startX: 0, startY: 0, startH: 0, startS: 0, moved: false, downSlot: null, downPitch: -1, detent: '', padClickT: 0 };
+const hitTestPad = (mx, my) => Math.abs(mx - geo.padX) <= geo.padSize * 0.5 + 10 && Math.abs(my - geo.padY) <= geo.padSize * 0.5 + 10;
+const nearestLocus = mx => (mx < geo.fieldL - geo.gap * 0.55 || mx > geo.fieldR + geo.gap * 0.55) ? -1 : clamp(Math.round((mx - geo.fieldL) / geo.gap), 0, 8);
+function hitTestPastVertex(mx, my, cur) {
+  if (my >= geo.nowY - 12) return null;
+  let best = null, bestD = 18;
+  for (let i = state.pastVertices.length - 1; i >= 0; i--) {
+    const v = state.pastVertices[i], vy = vertexY(v, cur);
+    if (vy < geo.padTop - 6 || vy > geo.nowY - 6) continue;
+    const d = Math.hypot(mx - geo.locusX[v.pitch], my - vy); if (d < bestD) { bestD = d; best = v; }
+  }
+  return best;
+}
+function hitTestFutureNode(mx, my, cur) {
+  if (my <= geo.nowY + 14 || my > H - geo.padBot + 10) return null;
+  let bestSlot = null, bestPitch = -1, bestD = Math.min(24, geo.gap * 0.48);
+  for (const s of state.futureSlots) {
+    const sy = stepToY(s.step, cur); if (sy < geo.nowY + 12 || sy > H - geo.padBot + 6 || Math.abs(my - sy) > 20) continue;
+    for (let i = 0; i < 9; i++) { const d = Math.hypot(mx - geo.locusX[i], my - sy); if (d < bestD) { bestD = d; bestSlot = s; bestPitch = i; } }
+  }
+  return bestSlot ? { slot: bestSlot, pitch: bestPitch } : null;
+}
+function setHamiltonianEntropy(h, s, fromPad = false) {
+  state.hamiltonian = clamp(Math.abs(h) < 0.03 ? 0 : h, -1, 1);
+  state.entropy = clamp(s, 0.12, 1.0); state.padHotPerf = performance.now();
+  const key = `${Math.round(state.hamiltonian * 6)}:${Math.round(state.entropy * 6)}`;
+  if (key !== drag.detent) { drag.detent = key; playCollapseClick(Math.round((state.hamiltonian + 1) * 4), 0, fromPad ? 0.34 : 0.24, false); }
+  recomputeWaveFunctions(true);
+}
+canvas.addEventListener('pointerdown', (e) => {
+  const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top, cur = getCurrentStep(), now = performance.now();
+  canvas.setPointerCapture(e.pointerId);
+  if (hitTestPad(mx, my)) {
+    ensureAudio();
+    if (now - drag.padClickT < 320) { drag.padClickT = 0; return setHamiltonianEntropy(0, 0.44, true); }
+    drag.padClickT = now; drag.mode = 'pad'; drag.detent = ''; const hs = geo.padSize * 0.5;
+    return setHamiltonianEntropy((mx - geo.padX) / hs, lerp(0.12, 1.0, (my - (geo.padY - hs)) / geo.padSize), true);
+  }
+  const pv = hitTestPastVertex(mx, my, cur);
+  if (pv) { ensureAudio(); pv.pinned = !pv.pinned; playCollapseClick(pv.pitch, 0, 0.78, pv.pinned); return recomputeWaveFunctions(true); }
+  const fn = hitTestFutureNode(mx, my, cur);
+  if (fn) return Object.assign(drag, { mode: 'future', startX: mx, startY: my, moved: false, startH: state.hamiltonian, startS: state.entropy, downSlot: fn.slot, downPitch: fn.pitch, detent: '' });
+  const lIdx = nearestLocus(mx);
+  if (lIdx >= 0 && Math.abs(my - geo.nowY) <= 34) { drag.mode = 'now'; drag.downPitch = lIdx; forceMeasureNow(lIdx); }
+  else if (my > geo.nowY + 34 && mx >= geo.fieldL - 30 && mx <= geo.fieldR + 30) Object.assign(drag, { mode: 'steer', startX: mx, startY: my, moved: true, startH: state.hamiltonian, startS: state.entropy, detent: '' });
+});
+canvas.addEventListener('pointermove', (e) => {
+  const rect = canvas.getBoundingClientRect(), mx = e.clientX - rect.left, my = e.clientY - rect.top, cur = getCurrentStep();
+  if (drag.mode === 'pad') { const hs = geo.padSize * 0.5; return setHamiltonianEntropy((mx - geo.padX) / hs, lerp(0.12, 1.0, (my - (geo.padY - hs)) / geo.padSize), true); }
+  if (drag.mode === 'future' || drag.mode === 'steer') {
+    const dx = mx - drag.startX, dy = my - drag.startY;
+    if (drag.moved || Math.hypot(dx, dy) > 9) { drag.moved = true; setHamiltonianEntropy(drag.startH + dx / 180, drag.startS + dy / 220, false); }
+    return;
+  }
+  if (drag.mode === 'now') { const lIdx = nearestLocus(mx); if (lIdx >= 0 && lIdx !== drag.downPitch && Math.abs(my - geo.nowY) <= 44) { drag.downPitch = lIdx; forceMeasureNow(lIdx); } return; }
+  Object.assign(hover, { kind: null, slotId: -1, pitch: -1, pastId: -1 });
+  if (hitTestPad(mx, my)) { hover.kind = 'pad'; canvas.style.cursor = 'grab'; return; }
+  const pv = hitTestPastVertex(mx, my, cur); if (pv) { hover.kind = 'past'; hover.pastId = pv.id; canvas.style.cursor = 'pointer'; return; }
+  const fn = hitTestFutureNode(mx, my, cur); if (fn) { hover.kind = 'future'; hover.slotId = fn.slot.id; hover.pitch = fn.pitch; canvas.style.cursor = 'pointer'; return; }
+  const lIdx = nearestLocus(mx); if (lIdx >= 0 && Math.abs(my - geo.nowY) <= 30) { hover.kind = 'now'; hover.pitch = lIdx; canvas.style.cursor = 'pointer'; return; }
+  canvas.style.cursor = 'default';
+});
+function endPointer() {
+  if (drag.mode === 'future' && !drag.moved && drag.downSlot && !drag.downSlot.scheduled) preMeasureSlot(drag.downSlot, drag.downPitch);
+  Object.assign(drag, { mode: null, downSlot: null, downPitch: -1, moved: false });
+}
+canvas.addEventListener('pointerup', endPointer); canvas.addEventListener('pointercancel', endPointer);
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); return togglePlay(); }
+  if (e.key === 'Escape') {
+    for (const v of state.pastVertices) v.pinned = false;
+    for (const s of state.futureSlots) { if (!s.scheduled) { s.collapsed = false; s.eigenPitch = -1; } s.entangledFrom.clear(); }
+    recomputeWaveFunctions(true); return playCollapseClick(4, 0, 0.65, false);
+  }
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); ensureAudio(); return setHamiltonianEntropy(state.hamiltonian - 0.14, state.entropy, true); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); ensureAudio(); return setHamiltonianEntropy(state.hamiltonian + 0.14, state.entropy, true); }
+  if (e.key === 'ArrowUp')    { e.preventDefault(); ensureAudio(); return setHamiltonianEntropy(state.hamiltonian, state.entropy - 0.10, true); }
+  if (e.key === 'ArrowDown')  { e.preventDefault(); ensureAudio(); return setHamiltonianEntropy(state.hamiltonian, state.entropy + 0.10, true); }
+  if (!e.repeat && e.key >= '1' && e.key <= '9') forceMeasureNow(Number(e.key) - 1);
+});
+
+// --- Feynman & Quantum Rendering Primitives ---
+const edgeFade = y => Math.min(clamp((y - geo.padTop) / 34, 0, 1), clamp((H - geo.padBot - y) / 34, 0, 1));
+const strokeLine = (x1, y1, x2, y2, col, lw = 1) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+const strokeCirc = (x, y, r, col, lw = 1) => { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); };
+const fillCirc   = (x, y, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+const drawText   = (txt, x, y, al, bl, col, sz = 9) => { ctx.font = `${sz}px ui-monospace, monospace`; ctx.textAlign = al; ctx.textBaseline = bl; ctx.fillStyle = col; ctx.fillText(txt, x, y); };
+
+function drawPhotonWave(x1, y1, x2, y2, amp, wavelength, phase, bow, col, lw = 1) {
+  const dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy); if (dist < 6) return null;
+  const cx = (x1 + x2) * 0.5 + (-dy / dist) * bow, cy = (y1 + y2) * 0.5 + (dx / dist) * bow;
+  const segs = clamp(Math.round(dist / 2.6), 14, 72), cycles = Math.max(2, dist / wavelength);
+  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath();
+  for (let k = 0; k <= segs; k++) {
+    const t = k / segs, omt = 1 - t;
+    const bx = omt * omt * x1 + 2 * omt * t * cx + t * t * x2, by = omt * omt * y1 + 2 * omt * t * cy + t * t * y2;
+    const tx = 2 * omt * (cx - x1) + 2 * t * (x2 - cx), ty = 2 * omt * (cy - y1) + 2 * t * (y2 - cy), tl = Math.hypot(tx, ty) || 1;
+    const w = Math.sin(t * cycles * Math.PI * 2 + phase) * amp * Math.pow(Math.sin(t * Math.PI), 0.55);
+    const px = bx + (-ty / tl) * w, py = by + (tx / tl) * w;
+    k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  ctx.stroke();
+  return { mx: 0.25 * x1 + 0.5 * cx + 0.25 * x2, my: 0.25 * y1 + 0.5 * cy + 0.25 * y2 };
+}
+function drawFermionLine(x1, y1, x2, y2, col, lw, isLeap) {
+  const dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy); if (dist < 10) return;
+  const ux = dx / dist, uy = dy / dist, mx = (x1 + x2) * 0.5, my = (y1 + y2) * 0.5, sz = isLeap ? 4.6 : 3.8;
+  strokeLine(x1 + ux * 5.5, y1 + uy * 5.5, x2 - ux * 5.5, y2 - uy * 5.5, col, lw);
+  const chevron = (ox, oy) => {
+    ctx.strokeStyle = col; ctx.lineWidth = lw + 0.15; ctx.beginPath();
+    ctx.moveTo(ox - ux * sz - uy * sz * 0.72, oy - uy * sz + ux * sz * 0.72);
+    ctx.lineTo(ox + ux * sz * 0.6, oy + uy * sz * 0.6);
+    ctx.lineTo(ox - ux * sz + uy * sz * 0.72, oy - uy * sz - ux * sz * 0.72); ctx.stroke();
+  };
+  chevron(mx, my); if (isLeap && dist > 38) chevron(mx - ux * 5.5, my - uy * 5.5);
+}
+function drawMetricSpacetime(cur) {
+  const xL = geo.fieldL - 26, xR = geo.fieldR + 26;
+  for (let g = Math.floor(cur) - STEPS_HALF - 2; g <= Math.ceil(cur) + STEPS_HALF + 2; g++) {
+    if ((g & 3) !== 0) continue;
+    const y = Math.round(stepToY(g, cur)) + 0.5; if (y < geo.padTop || y > H - geo.padBot) continue;
+    const f = edgeFade(y);
+    if (((g % 16) + 16) % 16 === 0) {
+      strokeLine(xL, y, xR, y, `rgba(255,255,255,${(0.10 * f).toFixed(3)})`);
+      drawText(`| ${String(Math.max(1, Math.floor(g / 16) + 1)).padStart(2, '0')}`, xL - 7, y, 'right', 'middle', `rgba(255,255,255,${(0.28 * f).toFixed(3)})`);
+    } else {
+      const c = `rgba(255,255,255,${(0.14 * f).toFixed(3)})`;
+      strokeLine(xL, y, xL + 4, y, c); strokeLine(xR - 4, y, xR, y, c);
+    }
+  }
+  for (let i = 0; i < 9; i++) {
+    const x = geo.locusX[i], gl = state.lociGlow[i], ht = state.lociHeat[i], hov = hover.pitch === i;
+    drawText(NOTES[i].name, x, geo.padTop - 8, 'center', 'bottom', mixInk(ht, 0.28 + gl * 0.72 + (hov ? 0.30 : 0)), 10);
+    drawText(NOTES[i].deg,  x, H - geo.padBot + 8, 'center', 'top', mixInk(ht * 0.6, 0.22 + gl * 0.45 + (hov ? 0.25 : 0)), 9);
+  }
+  drawText('PAST · FEYNMAN', xR + 8, geo.nowY - 8, 'left', 'bottom', 'rgba(255,255,255,0.22)', 8.5);
+  drawText('FUTURE · |ψ⟩',  xR + 8, geo.nowY + 8, 'left', 'top',    'rgba(255,255,255,0.22)', 8.5);
+}
+function drawPastFeynman(cur, nowPerf) {
+  const tSec = nowPerf * 0.001, byId = new Map(), visible = [];
+  for (const v of state.pastVertices) {
+    const y = vertexY(v, cur); if ((y < geo.padTop - 4 && !v.pinned) || y > geo.nowY + 4) continue;
+    const item = { v, x: geo.locusX[v.pitch], y, f: v.pinned ? 1 : edgeFade(y) }; byId.set(v.id, item); visible.push(item);
+  }
+  const drawSelfLoop = (src, fx, fy, ff, isHot) => {
+    const bow = (src.v.pitch <= 4 ? -1 : 1) * clamp(34 + (fy - src.y) * 0.22, 34, 92);
+    ctx.save(); ctx.setLineDash([4, 4]); ctx.lineDashOffset = -tSec * (isHot ? 24 : 12);
+    ctx.strokeStyle = isHot ? `rgba(255,90,31,${(0.62 * ff).toFixed(3)})` : `rgba(255,255,255,${(0.14 * Math.min(src.f, ff)).toFixed(3)})`;
+    ctx.lineWidth = isHot ? 1.15 : 0.75; ctx.beginPath(); ctx.moveTo(src.x, src.y);
+    ctx.bezierCurveTo(src.x + bow, lerp(src.y, fy, 0.30), fx + bow * 0.75, lerp(src.y, fy, 0.72), fx, fy); ctx.stroke(); ctx.restore();
+  };
+  // 1. Dashed Self-Energy Memory Loops (- - -) across NOW into coupled Future slots
+  for (const slot of state.futureSlots) {
+    const fy = stepToY(slot.step, cur); if (fy < geo.nowY + 6 || fy > H - geo.padBot) continue;
+    const fx = geo.locusX[slot.collapsed ? slot.eigenPitch : argmax(slot.probs)], ff = edgeFade(fy);
+    for (const pid of slot.couplingIds) { const src = byId.get(pid); if (src) drawSelfLoop(src, fx, fy, ff, src.v.pinned); }
+    if (hover.kind === 'past' && !slot.couplingIds.includes(hover.pastId)) {
+      const hv = byId.get(hover.pastId);
+      if (hv && ((((hv.v.step % 16) + 16) % 16) === (((slot.step % 16) + 16) % 16))) drawSelfLoop(hv, geo.locusX[hv.v.pitch], fy, ff * 0.65, true);
+    }
+  }
+  // 2. Wavy Harmonic Photon Exchange (~~~~) between resonant Past vertices
+  for (const { v, x, y, f } of visible) {
+    for (const bid of v.harmonicBonds) {
+      const o = byId.get(bid); if (!o) continue;
+      drawPhotonWave(o.x, o.y, x, y, 2.8, 12, tSec * 2.2 + v.id, (o.x >= x ? 1 : -1) * clamp(10 + Math.abs(y - o.y) * 0.14, 10, 26), `rgba(255,255,255,${(0.24 * Math.min(f, o.f)).toFixed(3)})`, 0.8);
+    }
+  }
+  // 3. Solid Directed Fermion Propagators (→) connecting consecutive collapsed events
+  const chrono = visible.filter(it => it.y > geo.padTop + 12 || !it.v.pinned).sort((a, b) => a.v.step - b.v.step);
+  for (let i = 1; i < chrono.length; i++) {
+    const prev = chrono[i - 1], curr = chrono[i]; if (curr.v.step - prev.v.step > 12) continue;
+    const isLeap = Math.abs(curr.v.pitch - prev.v.pitch) >= 3, fresh = clamp(1 - (nowPerf - curr.v.collapsePerf) / 520, 0, 1);
+    drawFermionLine(prev.x, prev.y, curr.x, curr.y, mixInk(curr.v.preCollapsed ? fresh * 0.9 : 0, (0.34 + fresh * 0.32) * Math.min(prev.f, curr.f)), isLeap ? 1.2 : 0.95, isLeap);
+  }
+  // 4. Feynman Vertices (●) with Quantized Duration Arc & Wing Ticks
+  for (const { v, x, y, f } of visible) {
+    const fresh = clamp(1 - (nowPerf - v.collapsePerf) / 560, 0, 1), hov = hover.kind === 'past' && hover.pastId === v.id;
+    const heat = v.pinned ? 1 : ((v.preCollapsed || v.isUser) ? fresh : 0), r = (v.pitch === 0 ? 3.5 : 2.7) + v.vel * 1.15, wing = 4.5 + v.dur * 1.35;
+    strokeLine(x - wing, y, x - r - 1.5, y, mixInk(heat, (0.36 + fresh * 0.35) * f), 0.85);
+    strokeLine(x + r + 1.5, y, x + wing, y, mixInk(heat, (0.36 + fresh * 0.35) * f), 0.85);
+    if (v.dur >= 4) { strokeLine(x - wing, y - 2.2, x - wing, y + 2.2, mixInk(heat, 0.38 * f), 0.8); strokeLine(x + wing, y - 2.2, x + wing, y + 2.2, mixInk(heat, 0.38 * f), 0.8); }
+    ctx.strokeStyle = mixInk(heat, (0.58 + fresh * 0.34) * f); ctx.lineWidth = v.pinned ? 1.35 : 1.05;
+    ctx.beginPath(); ctx.arc(x, y, r + 3.6, -Math.PI * 0.5, -Math.PI * 0.5 + (v.dur / 8) * Math.PI * 2); ctx.stroke();
+    fillCirc(x, y, r, mixInk(heat, 0.96 * f));
+    if (v.isUser) strokeCirc(x, y, r + 6.4, mixInk(heat, 0.48 * f), 0.8);
+    if (v.pinned || hov) {
+      strokeCirc(x, y, r + 7.2, v.pinned ? '#ff5a1f' : 'rgba(255,255,255,0.68)', v.pinned ? 1.3 : 0.95);
+      if (v.pinned) drawText('g', x + r + 9.5, y - 4, 'left', 'middle', '#ff5a1f', 8.5);
+    }
+  }
+}
+
+function computeHoverPreviewMap() {
+  const preview = new Map();
+  if (hover.kind !== 'future' || hover.slotId < 0 || hover.pitch < 0) return preview;
+  for (const ent of state.entanglements) {
+    const isA = ent.aId === hover.slotId, isB = ent.bId === hover.slotId;
+    if (!isA && !isB) continue;
+    const partner = getSlotById(isA ? ent.bId : ent.aId);
+    if (!partner || partner.collapsed) continue;
+    preview.set(partner.id, computeSlotDistribution(partner, { pitch: hover.pitch, type: ent.type, strength: ent.strength, reverse: isB }));
+  }
+  return preview;
+}
+
+function drawFutureQuantum(cur, nowPerf, dt) {
+  const tSec = nowPerf * 0.001, previewMap = computeHoverPreviewMap();
+  // 1. Wavy Entanglement Boson/Photon Propagators (~~~~)
+  for (const ent of state.entanglements) {
+    const sa = getSlotById(ent.aId), sb = getSlotById(ent.bId); if (!sa || !sb) continue;
+    const ya = stepToY(sa.step, cur), yb = stepToY(sb.step, cur);
+    if (yb < geo.nowY + 4 || ya > H - geo.padBot) continue;
+    const isHov = hover.kind === 'future' && (hover.slotId === sa.id || hover.slotId === sb.id);
+    const pa = isHov && hover.slotId === sa.id ? hover.pitch : (previewMap.has(sa.id) ? argmax(previewMap.get(sa.id)) : (sa.collapsed ? sa.eigenPitch : argmax(sa.probs)));
+    const pb = isHov && hover.slotId === sb.id ? hover.pitch : (previewMap.has(sb.id) ? argmax(previewMap.get(sb.id)) : (sb.collapsed ? sb.eigenPitch : argmax(sb.probs)));
+    const pulse = clamp(1 - (nowPerf - ent.pulsePerf) / 680, 0, 1), heat = isHov ? 1.0 : pulse;
+    const f = Math.min(edgeFade(ya), edgeFade(yb)), alpha = (isHov ? 0.88 : (ent.type === 'harmonic' ? 0.24 : 0.19) + pulse * 0.65) * f;
+    const bow = (ent.type === 'harmonic' ? 18 : -13) * ((pa + pb) < 8 ? -1 : 1);
+    const mid = drawPhotonWave(geo.locusX[pa], ya, geo.locusX[pb], yb, isHov ? 4.2 : 3.0 + pulse * 1.4, ent.type === 'harmonic' ? 14 : 10, -tSec * (isHov ? 8.5 : 3.2) + ent.aId, bow, mixInk(heat, alpha), isHov ? 1.35 : 0.9 + pulse * 0.5);
+    if (isHov && mid) {
+      ctx.font = '8px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ff5a1f'; ctx.fillText(ent.type === 'harmonic' ? 'γ·HARM' : 'γ·GAP', mid.mx + (bow >= 0 ? 18 : -18), mid.my);
+    }
+  }
+  // Traveling entanglement boson pulses (including cross-NOW spooky action!)
+  for (let i = state.photonPulses.length - 1; i >= 0; i--) {
+    const pp = state.photonPulses[i], u = (nowPerf - pp.bornPerf) / pp.lifeMs;
+    if (u >= 1) { state.photonPulses.splice(i, 1); continue; }
+    const target = getSlotById(pp.toSlotId); if (!target) continue;
+    const x1 = geo.locusX[pp.fromPitch], y1 = Math.max(geo.padTop, stepToY(pp.fromStep, cur));
+    const x2 = geo.locusX[pp.toPitch], y2 = stepToY(target.step, cur); if (y2 > H - geo.padBot) continue;
+    const bow = (pp.type === 'harmonic' ? 18 : -13) * ((pp.fromPitch + pp.toPitch) < 8 ? -1 : 1);
+    drawPhotonWave(x1, y1, x2, y2, 4.4 * (1 - u * 0.4), 13, -tSec * 12, bow, `rgba(255,90,31,${((1 - u) * 0.88).toFixed(3)})`, 1.4);
+    fillCirc(lerp(x1, x2, u), lerp(y1, y2, u), 3.6 * (1 - u * 0.45), `rgba(255,90,31,${(1 - u).toFixed(3)})`);
+  }
+  // Destructive-interference horizontal ripples on pre-measured rows
+  for (let i = state.rowRipples.length - 1; i >= 0; i--) {
+    const rp = state.rowRipples[i], u = (nowPerf - rp.bornPerf) / rp.lifeMs;
+    if (u >= 1) { state.rowRipples.splice(i, 1); continue; }
+    const ry = stepToY(rp.step, cur); if (ry < geo.nowY || ry > H - geo.padBot) continue;
+    const e = Math.pow(1 - u, 1.7);
+    strokeLine(geo.fieldL - 12, ry, geo.fieldR + 12, ry, `rgba(255,90,31,${(0.42 * e).toFixed(3)})`, 1.0);
+    strokeCirc(geo.locusX[rp.pitch], ry, 5 + u * 28, `rgba(255,90,31,${(0.72 * e).toFixed(3)})`, 1.1);
+    for (let k = 0; k < 9; k++) {
+      if (k === rp.pitch || rp.preProbs[k] < 0.03) continue;
+      strokeCirc(geo.locusX[k], ry, (1 - u) * (3 + rp.preProbs[k] * 14), `rgba(255,255,255,${(0.45 * e * Math.min(1, rp.preProbs[k] * 3.5)).toFixed(3)})`, 0.8);
+    }
+  }
+  // 2. Superposition Probability Rows (ALL 9 pitches simultaneously)
+  for (const slot of state.futureSlots) {
+    slot.shiftHeat = Math.max(0, slot.shiftHeat - dt * 1.9);
+    const y = stepToY(slot.step, cur); if (y < geo.nowY + 4 || y > H - geo.padBot) continue;
+    const f = edgeFade(y), isPreview = previewMap.has(slot.id), probs = isPreview ? previewMap.get(slot.id) : slot.probs;
+    const rowHeat = isPreview ? 0.92 : slot.shiftHeat;
+    strokeLine(geo.fieldL - 10, y, geo.fieldR + 10, y, mixInk(rowHeat * 0.6, (slot.collapsed ? 0.08 : 0.055) * f), 0.75);
+    strokeLine(geo.fieldL - 15 - slot.dur * 1.4, y, geo.fieldL - 14, y, mixInk(slot.collapsed ? 1 : rowHeat, 0.34 * f), 1.3);
+
+    if (slot.collapsed && slot.eigenPitch >= 0) {
+      const ex = geo.locusX[slot.eigenPitch], fresh = clamp(1 - (nowPerf - slot.collapsePerf) / 560, 0, 1), r = 3.4 + slot.vel * 1.1;
+      for (let i = 0; i < 9; i++) if (i !== slot.eigenPitch) strokeLine(geo.locusX[i] - 1.6, y - 1.6, geo.locusX[i] + 1.6, y + 1.6, `rgba(255,255,255,${(0.08 * f).toFixed(3)})`, 0.7);
+      ctx.strokeStyle = mixInk(1, (0.75 + fresh * 0.25) * f); ctx.lineWidth = 1.25;
+      ctx.beginPath(); ctx.arc(ex, y, r + 4.0, -Math.PI * 0.5, -Math.PI * 0.5 + (slot.dur / 8) * Math.PI * 2); ctx.stroke();
+      fillCirc(ex, y, r, mixInk(0.85, 0.98 * f)); strokeCirc(ex, y, r + 7.2, `rgba(255,90,31,${(0.45 * f).toFixed(3)})`, 0.9);
+      continue;
+    }
+    for (let i = 0; i < 9; i++) {
+      const p = probs[i], x = geo.locusX[i], isHov = hover.kind === 'future' && hover.slotId === slot.id && hover.pitch === i;
+      const delta = isPreview ? p - slot.probs[i] : 0;
+      const nodeHeat = isHov ? 1.0 : (isPreview && delta > 0.025 ? clamp(delta * 5.2, 0.35, 1.0) : rowHeat * clamp(p * 3.2, 0, 1));
+      const pPow = Math.pow(p, 0.58), osc = Math.sin(tSec * (3.0 + i * 0.42) + slot.phaseSeed + i * 1.3);
+      const rCore = 0.95 + pPow * 4.4 + (isHov ? 1.2 : 0), rRing = rCore + 2.2 + pPow * 8.2 + osc * (0.7 + pPow * 1.4);
+      strokeCirc(x, y, rRing, mixInk(nodeHeat, clamp((0.08 + pPow * 0.62 + (isHov ? 0.35 : 0)) * f, 0.03, 0.98)), isHov ? 1.45 : 0.65 + pPow * 0.65);
+      if (p > 0.15 || isHov) strokeCirc(x, y, rRing + 3.6 - osc * 0.9, mixInk(nodeHeat, (0.08 + p * 0.36) * f), 0.65);
+      fillCirc(x, y, rCore, mixInk(nodeHeat, clamp((0.14 + Math.pow(p, 0.65) * 0.88) * f, 0.06, 0.98)));
+      if (isHov) {
+        ctx.font = '9.5px ui-monospace, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillStyle = '#ff5a1f'; ctx.fillText(`|${NOTES[i].name}⟩ ${Math.round(p * 100)}%`, x, y - rRing - 6);
+      }
+    }
+  }
+}
+
+function drawNowObserver(dt, nowPerf) {
+  const y = geo.nowY, xL = geo.fieldL - 26, xR = geo.fieldR + 26;
+  for (let i = 0; i < 9; i++) { state.lociGlow[i] = Math.max(0, state.lociGlow[i] * Math.exp(-dt * 2.8)); state.lociHeat[i] = Math.max(0, state.lociHeat[i] - dt * 2.2); }
+  for (let i = state.collapseFlashes.length - 1; i >= 0; i--) {
+    const cf = state.collapseFlashes[i], u = (nowPerf - cf.bornPerf) / cf.lifeMs;
+    if (u >= 1) { state.collapseFlashes.splice(i, 1); continue; }
+    const e = Math.pow(1 - u, 1.75), bx = geo.locusX[cf.pitch], h = cf.hot ? e : e * 0.55;
+    strokeLine(xL, y, xR, y, mixInk(h, 0.34 * e), 1.0 + e * 0.8);
+    const rad = 5 + Math.pow(u, 0.68) * (24 + cf.dur * 9.5) * (0.72 + cf.vel * 0.38);
+    strokeCirc(bx, y, rad, mixInk(h, 0.72 * e), 0.8 + e * 1.0);
+    if (rad > 14) strokeCirc(bx, y, rad * 0.56, mixInk(h * 0.7, 0.34 * e), 0.7);
+    for (let k = 0; k < 9; k++) {
+      const pk = cf.preProbs[k] || 0; if (k === cf.pitch || pk < 0.025) continue;
+      const gx = geo.locusX[k], drift = (gx < bx ? -1 : 1) * u * 12;
+      strokeCirc(gx + drift, y, Math.max(0.8, (2.2 + pk * 11) * (1 - u)), `rgba(255,255,255,${(0.46 * e * Math.min(1, pk * 3.4)).toFixed(3)})`, 0.75);
+      strokeLine(gx - 3 * e, y - 5 * u, gx + 3 * e, y + 5 * u, `rgba(255,255,255,${(0.24 * e * pk * 3).toFixed(3)})`, 0.7);
+    }
+  }
+  strokeLine(xL, y + 0.5, xR, y + 0.5, 'rgba(255,255,255,0.44)', 1.0);
+  strokeLine(xL, y - 8, xL, y + 8, 'rgba(255,255,255,0.52)', 1.1);
+  strokeLine(xR, y - 8, xR, y + 8, 'rgba(255,255,255,0.52)', 1.1);
+  ctx.font = '10px ui-monospace, monospace'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.68)'; ctx.fillText('⟨ψ|', xL - 7, y + 0.5);
+  ctx.textAlign = 'left';  ctx.fillStyle = 'rgba(255,255,255,0.48)'; ctx.fillText('NOW', xR + 8, y + 0.5);
+  for (let i = 0; i < 9; i++) {
+    const x = geo.locusX[i], gl = state.lociGlow[i], ht = state.lociHeat[i], hov = hover.kind === 'now' && hover.pitch === i;
+    strokeLine(x + 0.5, y - 6, x + 0.5, y + 6, mixInk(ht, 0.30 + gl * 0.70 + (hov ? 0.38 : 0)));
+    if (i === 0 || gl > 0.08 || hov) strokeCirc(x, y, (i === 0 ? 6.5 : 5.2) + gl * 3.4, mixInk(ht, (i === 0 ? 0.28 : 0) + gl * 0.72 + (hov ? 0.45 : 0)), 0.95);
+    fillCirc(x, y, (i === 0 ? 2.5 : 2.0) + gl * 2.2 + (hov ? 0.8 : 0), mixInk(ht, 0.58 + gl * 0.42));
+  }
+}
+
+function drawCornerPad(nowPerf) {
+  const cx = geo.padX, cy = geo.padY, s = geo.padSize, hs = s * 0.5;
+  const act = drag.mode === 'pad' || drag.mode === 'steer' || (drag.mode === 'future' && drag.moved);
+  const heat = act ? 1 : clamp(1 - (nowPerf - state.padHotPerf) / 560, 0, 1), hov = hover.kind === 'pad';
+  ctx.strokeStyle = mixInk(heat, act ? 0.58 : (hov ? 0.38 : 0.18)); ctx.lineWidth = 1;
+  ctx.strokeRect(cx - hs + 0.5, cy - hs + 0.5, s, s);
+  strokeLine(cx - hs, cy + 0.5, cx + hs, cy + 0.5, 'rgba(255,255,255,0.10)');
+  strokeLine(cx + 0.5, cy - hs, cx + 0.5, cy + hs, 'rgba(255,255,255,0.10)');
+  const kx = cx + state.hamiltonian * hs, ky = (cy - hs) + ((state.entropy - 0.12) / 0.88) * s;
+  strokeLine(cx, cy, kx, ky, mixInk(heat, act ? 0.85 : 0.40), 1.0);
+  fillCirc(kx, ky, act ? 4.2 : 3.2, mixInk(heat, act || hov ? 1.0 : 0.86));
+  if (act || hov) strokeCirc(kx, ky, 7.5, mixInk(heat, 0.45), 0.9);
+  ctx.font = '8.5px ui-monospace, monospace'; ctx.fillStyle = mixInk(heat * 0.7, 0.38);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText('SHARP', cx, cy - hs - 5);
+  ctx.textBaseline = 'top'; ctx.fillText('CLOUD', cx, cy + hs + 5);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText('i', cx - hs - 6, cy);
+  ctx.textAlign = 'left';  ctx.fillText('bVII', cx + hs + 5, cy);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = mixInk(heat * 0.8, 0.42);
+  ctx.fillText(`H ${state.hamiltonian >= 0 ? '+' : ''}${state.hamiltonian.toFixed(1)} · S ${Math.round(state.entropy * 100)}%`, cx, cy + hs + 17);
+}
+
+// --- 60 FPS Main Loop ---
+seedInitialTimeline();
+let lastTs = performance.now();
+(function frame(nowPerf) {
+  const dt = Math.min(0.05, (nowPerf - lastTs) / 1000); lastTs = nowPerf;
+  const cur = getCurrentStep();
+  if (state.playing) { observeCrossingSlots(cur, nowPerf); ensureFutureHorizon(cur); }
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  drawMetricSpacetime(cur);
+  drawPastFeynman(cur, nowPerf);
+  drawFutureQuantum(cur, nowPerf, dt);
+  drawNowObserver(dt, nowPerf);
+  drawCornerPad(nowPerf);
+  requestAnimationFrame(frame);
+})(lastTs);
+</script>
+</body>
+</html>

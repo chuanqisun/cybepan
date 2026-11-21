@@ -1,0 +1,16 @@
+- Time machine, what if changing future impact the past, which in turn impact the future? The equilibrium is the final effect.
+- #19, should allow shift to multi-select and direct placement of notes in the future. The lense distortion from #20 is worth a try for #19
+- The #21 needs tuning. Do use parallex effect shift. Keep it stable. The front plane should not have perspective distortion. So you can't use traditional camera/view technique. You might have use pseudo 3D effect.
+  - Select multi-marquee box select
+  - The attention line from vertical wall to front plane is amazing keep that idea!
+- We need to explore a new layer that let's DJ draw the beat. Let's open a new line of inquiry that lets DJ control the emotional curve: the build up, the climax, the silence, the bass drop.
+  - Carefully study DJ theory and EMD techniques. To understand how the narrative works
+  - Design the sound effects to accompany the handpan sound with EMD sound.
+  - Design the interaction that allow the DJ to directly control the build up, and the precise moments along the way. Avoid DAW low level controls, expose the high level control but still maintain the direct connection between the DJ <-> Music <-> Emotional experience
+- Use media pipe to explore a computer vision based bi-manual control for #22
+- The feynman notation in #23 is two complex. Simplify down the the bare minimum. Also the grid should auto snap user's input to make it easier. Right now the click target zone is way to hard to hit.
+- #24 keep the monochromatic UI, when selecting a group, you should move a group. Allow shift select for multiple groups. editing past should not make sound.
+- Open a new line of inquiry, how can we use visualization to help the music immediately understand the future (reading the score is too slow)
+  - Do research to find out what information communicate the quality of the music and how to visualize that
+  - The goal is to establish realtime feedback loop so when user is making adjustment, there is direct visual feedback to help me make decisions
+  - Find "eigen vectors" for visuializing decision effects, avoid giving user a wall of scopes/numbers/meters that is still impossible to grok.
